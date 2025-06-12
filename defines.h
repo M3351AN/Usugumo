@@ -10,7 +10,14 @@ typedef ULONG_PTR QWORD;
 #define HID 0xCAFE3
 #define DLL_BASE 0xCAFE4
 
-static const UINT64 kMask = 0xFFFFFFFFFFF000;
+#define MOUSEEVENTF_MOVE 0x0001
+#define MOUSEEVENTF_LEFTDOWN 0x0002
+#define MOUSEEVENTF_LEFTUP 0x0004
+#define MOUSEEVENTF_RIGHTDOWN 0x0008
+#define MOUSEEVENTF_RIGHTUP 0x0010
+#define MOUSEEVENTF_MIDDLEDOWN 0x0020
+#define MOUSEEVENTF_MIDDLEUP 0x0040
+#define MOUSEEVENTF_ABSOLUTE 0x8000
 
 static const ULONG kIoctlCallDriver =
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x775, METHOD_BUFFERED, FILE_SPECIAL_ACCESS);
@@ -67,6 +74,34 @@ typedef struct _LDR_DATA_TABLE_ENTRY {
   LIST_ENTRY HashLinks;
   ULONG TimeDateStamp;
 } LDR_DATA_TABLE_ENTRY, *PLDR_DATA_TABLE_ENTRY;
+
+#pragma warning(disable : 4201)
+typedef struct _MOUSE_INPUT_DATA {
+  USHORT UnitId;
+  USHORT Flags;
+  union {
+    ULONG Buttons;
+    struct {
+      USHORT ButtonFlags;
+      USHORT ButtonData;
+    };
+  };
+  ULONG RawButtons;
+  LONG LastX;
+  LONG LastY;
+  ULONG ExtraInformation;
+} MOUSE_INPUT_DATA, *PMOUSE_INPUT_DATA;
+
+typedef VOID (*MouseClassServiceCallbackFn)(PDEVICE_OBJECT DeviceObject,
+                                            PMOUSE_INPUT_DATA InputDataStart,
+                                            PMOUSE_INPUT_DATA InputDataEnd,
+                                            PULONG InputDataConsumed);
+
+typedef struct _MOUSE_OBJECT {
+  PDEVICE_OBJECT mouse_device;
+  MouseClassServiceCallbackFn service_callback;
+  BOOL use_mouse;
+} MOUSE_OBJECT, *PMOUSE_OBJECT;
 
 #pragma pack(push, 1)
 typedef struct _FixedStr64 {

@@ -33,3 +33,7 @@ This project is licensed under [**TOSSRCU**](LICENSE).
 	• Sublicense: Cannot grant sublicenses for original/modified material
 
 ```
+
+## Credits
+
+- [ekknod/MouseClassServiceCallbackMeme](https://github.com/ekknod/MouseClassServiceCallbackMeme/)
