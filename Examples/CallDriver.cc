@@ -21,8 +21,8 @@ constexpr ULONG ioctl_call_driver =
 class _driver {
  private:
   HANDLE _driver_handle;
-  int _processid;
-  int _cur_processid;
+  UINT64 _processid;
+  UINT64 _cur_processid;
   ULONG64 _dlladdress;
   std::mutex ioctl_mutex_;
 // request codes
@@ -31,7 +31,6 @@ class _driver {
 #define HID 0xCAFE3
 #define DLL_BASE 0xCAFE4
 
-static constexpr uint64_t mask = 0xFFFFFFFFFFF000;
 #pragma pack(push, 1)
   typedef struct _FixedStr64 {
     uint64_t blocks[4];
@@ -116,7 +115,7 @@ static constexpr uint64_t mask = 0xFFFFFFFFFFF000;
   }
 
  public:
-  auto initdriver(int processid) -> void {
+  auto initdriver(UINT64 processid) -> void {
     _driver_handle = CreateFileA("\\\\.\\Usugum0", GENERIC_READ, 0, nullptr,
                                  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
                                  nullptr);  // get a handle to our driver
