@@ -1,5 +1,5 @@
 # Usugumo
-A Windows kernel-mode driver that proxies RPM/WPM operations, handling user-mode process requests via ioctl
+A Windows kernel-mode driver that proxies RPM/WPM/mouse_event operations, handling user-mode process requests via ioctl
 ---
 
 ## Features
