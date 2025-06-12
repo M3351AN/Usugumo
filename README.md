@@ -5,14 +5,14 @@ A Windows kernel-mode driver that proxies RPM/WPM operations, handling user-mode
 ## Features
 
 - Handling user-mode process requests via ioctl
-- Implement RPM/WPM without OpenProcess in kernel-mode 
-
+- Kernel-mode RPM/WPM
+- Kernel-mode mouse input
+  
 ## KnownIssues
 
 - Currently only works on x64 processes(?)
 - Current implementation does not take into account CR3 encryption, kernel-mode memory protection, etc., and is only used as a PoC
-- Kernel-mode mouse input method is not yet implemented
-  
+
 ## License
 
 This project is licensed under [**TOSSRCU**](LICENSE).
