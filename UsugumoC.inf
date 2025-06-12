@@ -1,0 +1,62 @@
+;
+; UsugumoC.inf
+;
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = UsugumoC ; TODO: specify appropriate Class
+ClassGuid   = {8cd360e0-1b8c-cf3d-8f6c-5fde97e2b9fc}
+Provider    = %ManufacturerName%
+CatalogFile = UsugumoC.cat
+DriverVer   = 1
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+UsugumoC.sys = 1,,
+
+;*****************************************
+; Install Section
+;*****************************************
+
+[Manufacturer]
+%ManufacturerName% = Standard,NT$ARCH$.10.0...16299 ; %13% support introduced in build 16299
+
+[Standard.NT$ARCH$.10.0...16299]
+%UsugumoC.DeviceDesc% = UsugumoC_Device, Root\UsugumoC ; TODO: edit hw-id
+
+[UsugumoC_Device.NT]
+CopyFiles = File_Copy
+
+[File_Copy]
+UsugumoC.sys
+
+;-------------- Service installation
+[UsugumoC_Device.NT.Services]
+AddService = UsugumoC,%SPSVCINST_ASSOCSERVICE%, UsugumoC_Service_Inst
+
+; -------------- UsugumoC driver install sections
+[UsugumoC_Service_Inst]
+DisplayName    = %UsugumoC.SVCDESC%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %13%\UsugumoC.sys
+
+[UsugumoC_Device.NT.Wdf]
+KmdfService = UsugumoC, UsugumoC_wdfsect
+
+[UsugumoC_wdfsect]
+KmdfLibraryVersion = $KMDFVERSION$
+
+[Strings]
+SPSVCINST_ASSOCSERVICE = 0x00000002
+ManufacturerName = "EURL tkm Mecha"
+DiskName = "UsugumoC Installation Disk"
+UsugumoC.DeviceDesc = "UsugumoC Device"
+UsugumoC.SVCDESC = "UsugumoC Service"
