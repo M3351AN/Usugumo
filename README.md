@@ -5,7 +5,7 @@ A Windows kernel-mode driver that proxies RPM/WPM operations, handling user-mode
 ## Features
 
 - Handling user-mode process requests via ioctl
-- Implement RPM/WPM without OpenProcess in kernel-mode 
+- Kernel-mode RPM/WPM
 - Kernel-mode mouse input
   
 ## KnownIssues
