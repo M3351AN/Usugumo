@@ -1,5 +1,7 @@
 # Usugumo
+
 A Windows kernel-mode driver that proxies RPM/WPM/mouse_event operations, handling user-mode process requests via ioctl
+
 ---
 
 ## Features
@@ -15,7 +17,7 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event operations, handli
 
 ## License
 
-This project is licensed under [**TOSSRCU**](LICENSE).
+This project is licensed under [**TOSSUCU**](LICENSE).
 ```diff
 + You are free to:
 	• Use: Utilize the software for any purpose not explicitly restricted
