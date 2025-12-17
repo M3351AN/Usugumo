@@ -12,7 +12,7 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event operations, handli
   
 ## KnownIssues
 
-- Currently only works on x64 processes(?)
+- Currently only works on x64 windows
 - Current implementation does not take into account CR3 encryption, kernel-mode memory protection, etc., and is only used as a PoC
 
 ## License
