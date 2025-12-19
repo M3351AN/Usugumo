@@ -27,7 +27,12 @@ ObReferenceObjectByName(__in PUNICODE_STRING ObjectName, __in ULONG Attributes,
                         __in POBJECT_TYPE ObjectType,
                         __in KPROCESSOR_MODE AccessMode,
                         __inout_opt PVOID ParseContext, __out PVOID* Object);
-
+NTSYSAPI
+NTSTATUS
+NTAPI
+ZwProtectVirtualMemory(IN HANDLE ProcessHandle, IN OUT PVOID* BaseAddress,
+                       IN OUT PSIZE_T RegionSize, IN ULONG NewProtect,
+                       OUT PULONG OldProtect);
 
 VOID MouseClassServiceCallback(PDEVICE_OBJECT DeviceObject,
                                PMOUSE_INPUT_DATA InputDataStart,

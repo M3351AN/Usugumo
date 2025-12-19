@@ -8,7 +8,7 @@ Class       = UsugumoC ; TODO: specify appropriate Class
 ClassGuid   = {8cd360e0-1b8c-cf3d-8f6c-5fde97e2b9fc}
 Provider    = %ManufacturerName%
 CatalogFile = UsugumoC.cat
-DriverVer   = 1
+DriverVer   = 0
 PnpLockdown = 1
 
 [DestinationDirs]

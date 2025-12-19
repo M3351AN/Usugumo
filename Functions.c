@@ -36,18 +36,18 @@ inline wchar_t* ConvertToPCWSTR(const char* ascii_str) {
   return w_str;
 }
 inline NTSTATUS KernelReadProcessMemory(PEPROCESS process, PVOID address,
-                           PEPROCESS callprocess,
-                       PVOID buffer, SIZE_T size, SIZE_T* read) {
+                                        PEPROCESS callprocess, PVOID buffer,
+                                        SIZE_T size, SIZE_T* read) {
   if (!process || !address || !buffer || !read) return STATUS_INVALID_PARAMETER;
 
   SIZE_T bytes_copied = 0;
   NTSTATUS status =
-      MmCopyVirtualMemory(process,      // 源进程
-                          address,      // 源地址
-                          callprocess,  // 目标进程（当前进程上下文）
-                          buffer,       // 目标缓冲区
-                          size,         // 要复制的字节数
-                          KernelMode,   // 访问模式
+      MmCopyVirtualMemory(process,       // 源进程
+                          address,       // 源地址
+                          callprocess,   // 目标进程（当前进程上下文）
+                          buffer,        // 目标缓冲区
+                          size,          // 要复制的字节数
+                          KernelMode,    // 访问模式
                           &bytes_copied  // 实际复制的字节数
       );
 
@@ -55,25 +55,58 @@ inline NTSTATUS KernelReadProcessMemory(PEPROCESS process, PVOID address,
   return status;
 }
 inline NTSTATUS KernelWriteProcessMemory(PEPROCESS process, PVOID address,
-                            PEPROCESS callprocess,
-                        PVOID buffer, SIZE_T size, SIZE_T* written) {
+                                         PEPROCESS callprocess, PVOID buffer,
+                                         SIZE_T size, SIZE_T* written) {
   if (!process || !address || !buffer || !written)
     return STATUS_INVALID_PARAMETER;
 
   SIZE_T bytesCopied = 0;
-  NTSTATUS status =
-      MmCopyVirtualMemory(callprocess,  // 源进程（当前进程上下文）
-                          buffer,       // 源缓冲区
-                          process,      // 目标进程
-                          address,      // 目标地址
-                          size,         // 要复制的字节数
-                          KernelMode,   // 访问模式
-                          &bytesCopied  // 实际复制的字节数
-      );
+  NTSTATUS status = STATUS_SUCCESS;
+
+  KAPC_STATE apcState;
+  ULONG oldProtect = 0;
+  PVOID tempAddress = address;
+  SIZE_T tempSize = size;
+
+  KeStackAttachProcess(process, &apcState);
+
+  __try {
+    status = ZwProtectVirtualMemory(
+        NtCurrentProcess(),  // 当前进程（现在是目标进程）
+        &tempAddress,        // 要修改的地址
+        &tempSize,           // 大小
+        PAGE_READWRITE,      // 可读写
+        &oldProtect          // 保存旧保护
+    );
+
+    if (!NT_SUCCESS(status)) {
+      __leave;
+    }
+
+    status = MmCopyVirtualMemory(callprocess,  // 源进程（当前进程上下文）
+                                 buffer,       // 源缓冲区
+                                 process,      // 目标进程
+                                 address,      // 目标地址
+                                 size,         // 要复制的字节数
+                                 KernelMode,   // 访问模式
+                                 &bytesCopied  // 实际复制的字节数
+    );
+
+    // 恢复原始保护
+    if (oldProtect != PAGE_READWRITE) {
+      ULONG tempProtect;
+      ZwProtectVirtualMemory(NtCurrentProcess(), &tempAddress, &tempSize,
+                             oldProtect, &tempProtect);
+    }
+
+  } __finally {
+    KeUnstackDetachProcess(&apcState);
+  }
 
   *written = bytesCopied;
   return status;
 }
+
 BOOL ReadVM(Requests* in) {
   PEPROCESS source_process = NULL;
   PEPROCESS dist_process = NULL;
@@ -90,8 +123,8 @@ BOOL ReadVM(Requests* in) {
   size_t memsize = 0;
 
   if (!NT_SUCCESS(KernelReadProcessMemory(source_process, (void*)in->src_addr,
-                                           dist_process, (void*)in->dst_addr,
-                                           in->size, &memsize)))
+                                          dist_process, (void*)in->dst_addr,
+                                          in->size, &memsize)))
     return FALSE;
 
   ObDereferenceObject(source_process);
@@ -99,7 +132,7 @@ BOOL ReadVM(Requests* in) {
   return TRUE;
 }
 UINT64 GetModuleBasex64(PEPROCESS proc, UNICODE_STRING module_name,
-                         BOOL get_size) {
+                        BOOL get_size) {
   PPEB pPeb = (PPEB)PsGetProcessPeb(
       proc);  // get Process PEB, function is unexported and undoc
 
@@ -141,7 +174,7 @@ UINT64 GetModuleBasex64(PEPROCESS proc, UNICODE_STRING module_name,
 
   return 0;  // failed
 }
-BOOL WriteVM(Requests* in){
+BOOL WriteVM(Requests* in) {
   PEPROCESS source_process = NULL;
   PEPROCESS dist_process = NULL;
   if (in->src_pid == 0) return STATUS_UNSUCCESSFUL;
@@ -157,8 +190,8 @@ BOOL WriteVM(Requests* in){
   size_t memsize = 0;
 
   if (!NT_SUCCESS(KernelWriteProcessMemory(source_process, (void*)in->src_addr,
-                                            dist_process, (void*)in->dst_addr,
-                                            in->size, &memsize)))
+                                           dist_process, (void*)in->dst_addr,
+                                           in->size, &memsize)))
     return FALSE;
 
   ObDereferenceObject(source_process);
@@ -178,8 +211,7 @@ UINT64 GetDllAddress(Requests* in) {
   wchar_t* wStr = ConvertToPCWSTR(decoded);
   RtlInitUnicodeString(&moduleName, wStr);
   ExFreePoolWithTag(wStr, 'pcwT');
-  ULONG64 base_address =
-      GetModuleBasex64(source_process, moduleName, FALSE);
+  ULONG64 base_address = GetModuleBasex64(source_process, moduleName, FALSE);
   return base_address;
 }
 
@@ -302,7 +334,7 @@ inline void MouseMove(long x, long y, unsigned short button_flags) {
 }
 
 void KernelMouseEvent(DWORD dwFlags, DWORD dx, DWORD dy, DWORD dwData,
-                        ULONG_PTR dwExtraInfo) {
+                      ULONG_PTR dwExtraInfo) {
   UNREFERENCED_PARAMETER(dwFlags);
   UNREFERENCED_PARAMETER(dx);
   UNREFERENCED_PARAMETER(dy);
@@ -313,12 +345,13 @@ void KernelMouseEvent(DWORD dwFlags, DWORD dx, DWORD dy, DWORD dwData,
   unsigned short button_flags = 0;
 
   if (dwFlags & MOUSEEVENTF_MOVE) {
-     /* we cant fetch screen resolution from kernel
-    if (dwFlags & MOUSEEVENTF_ABSOLUTE) {
-      x = (long)dx;
-      y = (long)dy;
-    }
-    else */{
+    /* we cant fetch screen resolution from kernel
+   if (dwFlags & MOUSEEVENTF_ABSOLUTE) {
+     x = (long)dx;
+     y = (long)dy;
+   }
+   else */
+    {
       x = (long)(short)LOWORD(dx);
       y = (long)(short)LOWORD(dy);
     }
