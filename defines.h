@@ -1,4 +1,7 @@
+// Copyright (c) 2026 渟雲. All rights reserved.
 #pragma once
+#ifndef _DEFINES_H_
+#define _DEFINES_H_
 #include <windef.h>
 typedef int BOOL;
 typedef ULONG_PTR QWORD;
@@ -135,3 +138,5 @@ typedef struct _Requests {
   SIZE_T dll_name_length;
 } Requests;
 #pragma pack(pop)
+
+#endif

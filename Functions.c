@@ -1,4 +1,5 @@
-#include "Functions.h"
+// Copyright (c) 2026 æ¸Ÿé›². All rights reserved.
+#include "./Functions.h"
 
 inline void DecodeFixedStr64(const FixedStr64* fs, char* output,
                              size_t origLen) {
@@ -41,13 +42,13 @@ inline NTSTATUS KernelReadProcessMemory(PEPROCESS process, PVOID address,
 
   SIZE_T bytes_copied = 0;
   NTSTATUS status =
-      MmCopyVirtualMemory(process,      // Ô´½ø³Ì
-                          address,      // Ô´µØÖ·
-                          callprocess,  // Ä¿±ê½ø³Ì£¨µ±Ç°½ø³ÌÉÏÏÂÎÄ£©
-                          buffer,       // Ä¿±ê»º³åÇø
-                          size,         // Òª¸´ÖÆµÄ×Ö½ÚÊı
-                          KernelMode,   // ·ÃÎÊÄ£Ê½
-                          &bytes_copied  // Êµ¼Ê¸´ÖÆµÄ×Ö½ÚÊı
+      MmCopyVirtualMemory(process,      // æºè¿›ç¨‹
+                          address,      // æºåœ°å€
+                          callprocess,  // ç›®æ ‡è¿›ç¨‹ï¼ˆå½“å‰è¿›ç¨‹ä¸Šä¸‹æ–‡ï¼‰
+                          buffer,       // ç›®æ ‡ç¼“å†²åŒº
+                          size,         // è¦å¤åˆ¶çš„å­—èŠ‚æ•°
+                          KernelMode,   // è®¿é—®æ¨¡å¼
+                          &bytes_copied  // å®é™…å¤åˆ¶çš„å­—èŠ‚æ•°
       );
 
   *read = bytes_copied;
@@ -61,13 +62,13 @@ inline NTSTATUS KernelWriteProcessMemory(PEPROCESS process, PVOID address,
 
   SIZE_T bytesCopied = 0;
   NTSTATUS status =
-      MmCopyVirtualMemory(callprocess,  // Ô´½ø³Ì£¨µ±Ç°½ø³ÌÉÏÏÂÎÄ£©
-                          buffer,       // Ô´»º³åÇø
-                          process,      // Ä¿±ê½ø³Ì
-                          address,      // Ä¿±êµØÖ·
-                          size,         // Òª¸´ÖÆµÄ×Ö½ÚÊı
-                          KernelMode,   // ·ÃÎÊÄ£Ê½
-                          &bytesCopied  // Êµ¼Ê¸´ÖÆµÄ×Ö½ÚÊı
+      MmCopyVirtualMemory(callprocess,  // æºè¿›ç¨‹ï¼ˆå½“å‰è¿›ç¨‹ä¸Šä¸‹æ–‡ï¼‰
+                          buffer,       // æºç¼“å†²åŒº
+                          process,      // ç›®æ ‡è¿›ç¨‹
+                          address,      // ç›®æ ‡åœ°å€
+                          size,         // è¦å¤åˆ¶çš„å­—èŠ‚æ•°
+                          KernelMode,   // è®¿é—®æ¨¡å¼
+                          &bytesCopied  // å®é™…å¤åˆ¶çš„å­—èŠ‚æ•°
       );
 
   *written = bytesCopied;

@@ -1,6 +1,10 @@
+// Copyright (c) 2026 渟雲. All rights reserved.
 #pragma once
-#include "imports.h"
-#include "defines.h"
+#ifndef _FUNCTIONS_H_
+#define _FUNCTIONS_H_
+
+#include "./imports.h"
+#include "./defines.h"
 BOOL ReadVM(Requests* in);
 
 BOOL WriteVM(Requests* in);
@@ -11,3 +15,5 @@ void KernelMouseEvent(DWORD dwFlags, DWORD dx, DWORD dy, DWORD dwData,
                         ULONG_PTR dwExtraInfo);
 
 BOOL RequestHandler(Requests* pstruct);
+
+#endif

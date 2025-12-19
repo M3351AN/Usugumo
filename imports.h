@@ -1,6 +1,9 @@
+// Copyright (c) 2026 渟雲. All rights reserved.
 #pragma once
+#ifndef _IMPORTS_H_
+#define _IMPORTS_H_
 #include <ntifs.h>
-#include "defines.h"
+#include "./defines.h"
 
 NTKERNELAPI NTSTATUS
 IoCreateDriver(_In_ PUNICODE_STRING DriverName,
@@ -30,3 +33,4 @@ VOID MouseClassServiceCallback(PDEVICE_OBJECT DeviceObject,
                                PMOUSE_INPUT_DATA InputDataStart,
                                PMOUSE_INPUT_DATA InputDataEnd,
                                PULONG InputDataConsumed);
+#endif
