@@ -1,7 +1,7 @@
 // Copyright (c) 2026 渟雲. All rights reserved.
-#include "./imports.h"
-#include "./defines.h"
 #include "./Dispatches.h"
+#include "./defines.h"
+#include "./imports.h"
 VOID DriverUnload(_In_ struct _DRIVER_OBJECT* DriverObject) {
   UNREFERENCED_PARAMETER(DriverObject);
   if (DriverObject->DeviceObject) {
@@ -12,20 +12,23 @@ VOID DriverUnload(_In_ struct _DRIVER_OBJECT* DriverObject) {
   }
 }
 
-
-
 NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
-                  _In_ PUNICODE_STRING RegistryPath) {
+                    _In_ PUNICODE_STRING RegistryPath) {
   UNREFERENCED_PARAMETER(DriverObject);
   UNREFERENCED_PARAMETER(RegistryPath);
 
- UNICODE_STRING device_name, symbolic_link_name;
- PDEVICE_OBJECT device_object;
+  UNICODE_STRING device_name, symbolic_link_name;
+  PDEVICE_OBJECT device_object;
 
   RtlInitUnicodeString(&device_name, L"\\Device\\Usugum0");  // die lit
-  NTSTATUS status =
-      IoCreateDevice(DriverObject, 0, &device_name, FILE_DEVICE_UNKNOWN,
-                     FILE_DEVICE_SECURE_OPEN, FALSE, &device_object);
+
+  UNICODE_STRING sddl_string;
+
+  RtlInitUnicodeString(&sddl_string, SDDL_STRING);
+
+  NTSTATUS status = IoCreateDeviceSecure(
+      DriverObject, 0, &device_name, FILE_DEVICE_UNKNOWN,
+      FILE_DEVICE_SECURE_OPEN, FALSE, &sddl_string, NULL, &device_object);
   if (status != STATUS_SUCCESS) return status;
 
   RtlInitUnicodeString(&symbolic_link_name, L"\\DosDevices\\Usugum0");

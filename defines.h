@@ -7,6 +7,7 @@ typedef int BOOL;
 typedef ULONG_PTR QWORD;
 
 #define RAISE_IRQL(a, b) *(b) = KfRaiseIrql(a)
+#define SDDL_STRING L"D:P(A;;GA;;;WD)"
 
 #define DRIVER_READVM 0xCAFE1
 #define DRIVER_WRITEVM 0xCAFE2
