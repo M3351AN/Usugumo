@@ -15,6 +15,7 @@ inline void DecodeFixedStr64(const FixedStr64* fs, char* output,
   }
   output[origLen] = '\0';
 }
+
 inline wchar_t* ConvertToPCWSTR(const char* ascii_str) {
   SIZE_T len = 0;
 
@@ -35,6 +36,7 @@ inline wchar_t* ConvertToPCWSTR(const char* ascii_str) {
 
   return w_str;
 }
+
 inline NTSTATUS KernelReadProcessMemory(PEPROCESS process, PVOID address,
                                         PEPROCESS callprocess, PVOID buffer,
                                         SIZE_T size, SIZE_T* read) {
@@ -54,6 +56,7 @@ inline NTSTATUS KernelReadProcessMemory(PEPROCESS process, PVOID address,
   *read = bytes_copied;
   return status;
 }
+
 inline NTSTATUS KernelWriteProcessMemory(PEPROCESS process, PVOID address,
                                          PEPROCESS callprocess, PVOID buffer,
                                          SIZE_T size, SIZE_T* written) {
@@ -131,6 +134,7 @@ BOOL ReadVM(Requests* in) {
 
   return TRUE;
 }
+
 UINT64 GetModuleBasex64(PEPROCESS proc, UNICODE_STRING module_name,
                         BOOL get_size) {
   PPEB pPeb = (PPEB)PsGetProcessPeb(
@@ -174,6 +178,7 @@ UINT64 GetModuleBasex64(PEPROCESS proc, UNICODE_STRING module_name,
 
   return 0;  // failed
 }
+
 BOOL WriteVM(Requests* in) {
   PEPROCESS source_process = NULL;
   PEPROCESS dist_process = NULL;
@@ -198,6 +203,7 @@ BOOL WriteVM(Requests* in) {
 
   return TRUE;
 }
+
 UINT64 GetDllAddress(Requests* in) {
   PEPROCESS source_process = NULL;
   if (in->src_pid == 0) return 0;
@@ -207,12 +213,35 @@ UINT64 GetDllAddress(Requests* in) {
   UNICODE_STRING moduleName;
 
   char decoded[33] = {0};
-  DecodeFixedStr64(&in->dll_name, decoded, in->dll_name_length);
+  DecodeFixedStr64(&in->module_name, decoded, in->name_length);
   wchar_t* wStr = ConvertToPCWSTR(decoded);
   RtlInitUnicodeString(&moduleName, wStr);
   ExFreePoolWithTag(wStr, 'pcwT');
   ULONG64 base_address = GetModuleBasex64(source_process, moduleName, FALSE);
   return base_address;
+}
+
+UINT64 GetDllSize(Requests* in) {
+  PEPROCESS source_process = NULL;
+  if (in->src_pid == 0) return 0;
+
+  NTSTATUS status =
+      PsLookupProcessByProcessId((HANDLE)in->src_pid, &source_process);
+  if (status != STATUS_SUCCESS) return 0;
+
+  UNICODE_STRING moduleName;
+  char decoded[33] = {0};
+
+  DecodeFixedStr64(&in->module_name, decoded, in->name_length);
+  wchar_t* wStr = ConvertToPCWSTR(decoded);
+  RtlInitUnicodeString(&moduleName, wStr);
+
+  ULONG64 module_size = GetModuleBasex64(source_process, moduleName, TRUE);
+
+  ExFreePoolWithTag(wStr, 'pcwT');
+  ObDereferenceObject(source_process);
+
+  return module_size;
 }
 
 MOUSE_OBJECT gMouseObject;
@@ -377,8 +406,13 @@ BOOL RequestHandler(Requests* pstruct) {
   switch (pstruct->request_key) {
     case DLL_BASE: {
       ULONG64 base = GetDllAddress(pstruct);
-      pstruct->dll_base = base;
-      return pstruct->dll_base != 0;
+      pstruct->return_value = base;
+      return pstruct->return_value != 0;
+    }
+    case DLL_SIZE: {
+      ULONG64 size = GetDllSize(pstruct);
+      pstruct->return_value = size;
+      return size != 0;
     }
     case DRIVER_READVM: {
       return ReadVM(pstruct);

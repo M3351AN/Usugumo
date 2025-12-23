@@ -13,6 +13,8 @@ typedef ULONG_PTR QWORD;
 #define DRIVER_WRITEVM 0xCAFE2
 #define HID 0xCAFE3
 #define DLL_BASE 0xCAFE4
+#define DLL_SIZE 0xCAFE5
+#define PROCESS_PID 0xCAFE6
 
 #define MOUSEEVENTF_MOVE 0x0001
 #define MOUSEEVENTF_LEFTDOWN 0x0002
@@ -132,11 +134,11 @@ typedef struct _Requests {
   ULONG_PTR dwExtraInfo;
 
   // return value
-  UINT64 dll_base;
+  UINT64 return_value;
 
-  // dllbase request
-  FixedStr64 dll_name;
-  SIZE_T dll_name_length;
+  // base/pid request
+  FixedStr64 module_name;
+  SIZE_T name_length;
 } Requests;
 #pragma pack(pop)
 

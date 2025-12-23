@@ -11,6 +11,8 @@ BOOL WriteVM(Requests* in);
 
 UINT64 GetDllAddress(Requests* in);
 
+UINT64 GetDllSize(Requests* in);
+
 void KernelMouseEvent(DWORD dwFlags, DWORD dx, DWORD dy, DWORD dwData,
                         ULONG_PTR dwExtraInfo);
 
