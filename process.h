@@ -11,4 +11,6 @@ UINT64 GetDllAddress(Requests*);
 
 UINT64 GetDllSize(Requests*);
 
+UINT64 GetProcessIdByName(Requests*);
+
 #endif

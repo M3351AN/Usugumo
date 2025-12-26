@@ -208,3 +208,81 @@ UINT64 GetDllSize(Requests* in) {
 
   return module_size;
 }
+
+UINT64 GetProcessIdByName(Requests* in) {
+  if (!in || in->name_length == 0) return 0;
+
+  char targetName[65] = {0};
+  DecodeFixedStr64(&in->name_str, targetName, in->name_length);
+
+  PEPROCESS startProcess = NULL;
+  if (!NT_SUCCESS(PsLookupProcessByProcessId((HANDLE)4, &startProcess))) {
+    return 0;
+  }
+
+  PEPROCESS currentProcess = startProcess;
+  UINT64 foundPid = 0;
+
+  do {
+    HANDLE pid = PsGetProcessId(currentProcess);
+
+    PCHAR imageName =
+        (PCHAR)((ULONG_PTR)currentProcess + IMAGE_FILE_NAME_OFFSET);
+
+    BOOLEAN match = TRUE;
+    for (int i = 0; targetName[i] != '\0'; i++) {
+      char c1 = targetName[i];
+      char c2 = imageName[i];
+
+      if (c2 == '\0') {
+        match = FALSE;
+        break;
+      }
+
+      if (c1 >= 'A' && c1 <= 'Z') c1 += 32;
+      if (c2 >= 'A' && c2 <= 'Z') c2 += 32;
+
+      if (c1 != c2) {
+        match = FALSE;
+        break;
+      }
+    }
+
+    if (match && strlen(imageName) == strlen(targetName)) {
+      foundPid = (UINT64)pid;
+      break;
+    }
+
+    PLIST_ENTRY listEntry =
+        (PLIST_ENTRY)((ULONG_PTR)currentProcess + ACTIVE_PROCESS_LINKS_OFFSET);
+
+    if (!listEntry->Flink) {
+      break;
+    }
+
+    ULONG_PTR nextProcessAddr =
+        (ULONG_PTR)listEntry->Flink - ACTIVE_PROCESS_LINKS_OFFSET;
+    PEPROCESS nextProcess = (PEPROCESS)nextProcessAddr;
+
+    if (nextProcess != startProcess) {
+      ObReferenceObject(nextProcess);
+    }
+
+    if (currentProcess != startProcess) {
+      ObDereferenceObject(currentProcess);
+    }
+
+    currentProcess = nextProcess;
+
+  } while (currentProcess && currentProcess != startProcess);
+
+  if (currentProcess) {
+    ObDereferenceObject(currentProcess);
+  }
+
+  if (startProcess && startProcess != currentProcess) {
+    ObDereferenceObject(startProcess);
+  }
+
+  return foundPid;
+}

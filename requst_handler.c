@@ -29,6 +29,10 @@ BOOLEAN RequestHandler(Requests* pstruct) {
       pstruct->return_value = GetDllSize(pstruct);
       break;
     }
+    case USUGUMO_PID: {
+      pstruct->return_value = GetProcessIdByName(pstruct);
+      break;
+    }
     default: {
       pstruct->return_value = FALSE;
       break;
