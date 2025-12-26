@@ -4,7 +4,6 @@
 #define _DEFINES_H_
 #include <windef.h>
 
-#define IMAGE_FILE_NAME_OFFSET 0x5a8
 #define ACTIVE_PROCESS_LINKS_OFFSET 0x448
 
 typedef int BOOL;
