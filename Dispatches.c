@@ -1,7 +1,6 @@
 // Copyright (c) 2026 渟雲. All rights reserved.
-#include "./Dispatches.h"
-#include "./Functions.h"
-#include "./defines.h"
+#include "./common.h"
+
 NTSTATUS DefaultDispatch(PDEVICE_OBJECT device_obj, PIRP irp){
   UNREFERENCED_PARAMETER(device_obj);
   UNREFERENCED_PARAMETER(irp);

@@ -1,7 +1,6 @@
 // Copyright (c) 2026 渟雲. All rights reserved.
-#include "./Dispatches.h"
-#include "./defines.h"
-#include "./imports.h"
+#include "./common.h"
+
 VOID DriverUnload(_In_ struct _DRIVER_OBJECT* DriverObject) {
   UNREFERENCED_PARAMETER(DriverObject);
   if (DriverObject->DeviceObject) {

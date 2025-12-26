@@ -110,15 +110,22 @@
     <FilesToPackage Include="$(TargetPath)" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Dispatches.c" />
-    <ClCompile Include="Functions.c" />
+    <ClCompile Include="dispatches.c" />
+    <ClCompile Include="process.c" />
+    <ClCompile Include="helpers.c" />
+    <ClCompile Include="mouse_operation.c" />
+    <ClCompile Include="requst_handler.c" />
     <ClCompile Include="Usugumo.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="common.h" />
     <ClInclude Include="defines.h" />
-    <ClInclude Include="Dispatches.h" />
-    <ClInclude Include="Functions.h" />
+    <ClInclude Include="dispatches.h" />
+    <ClInclude Include="process.h" />
+    <ClInclude Include="helpers.h" />
     <ClInclude Include="imports.h" />
+    <ClInclude Include="mouse_operation.h" />
+    <ClInclude Include="request_handler.h" />
   </ItemGroup>
   <ItemGroup>
     <MASM Include="mouse.asm" />

@@ -27,10 +27,19 @@
     <ClCompile Include="Usugumo.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Dispatches.c">
+    <ClCompile Include="dispatches.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Functions.c">
+    <ClCompile Include="process.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="requst_handler.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mouse_operation.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="helpers.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -41,10 +50,22 @@
     <ClInclude Include="imports.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Dispatches.h">
+    <ClInclude Include="dispatches.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Functions.h">
+    <ClInclude Include="process.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="common.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="request_handler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mouse_operation.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="helpers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
