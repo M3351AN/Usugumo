@@ -1,108 +1,114 @@
 // Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
 
-NTSTATUS KernelReadProcessMemory(PEPROCESS process, PVOID address,
-                                 PEPROCESS callprocess, PVOID buffer,
-                                 SIZE_T size, SIZE_T* read) {
-  if (!process || !address || !buffer || !read) return STATUS_INVALID_PARAMETER;
-  SIZE_T bytesCopied = 0;
-  NTSTATUS status = MmCopyVirtualMemory(process, address, callprocess, buffer,
-                                        size, KernelMode, &bytesCopied);
-  *read = bytesCopied;
-  return status;
-}
-
-NTSTATUS KernelWriteProcessMemory(PEPROCESS process, PVOID address,
-                                  PEPROCESS callprocess, PVOID buffer,
-                                  SIZE_T size, SIZE_T* written) {
-  if (!process || !address || !buffer || !written)
+NTSTATUS MmCopyProtectVirtualMemory(PEPROCESS fromProcess, PVOID fromAddress,
+                                    PEPROCESS toProcess, PVOID toAddress,
+                                    SIZE_T bufferSize,
+                                    KPROCESSOR_MODE previousMode,
+                                    PSIZE_T bytesCopied) {
+  if (!fromProcess || !fromAddress || !toProcess || !toAddress ||
+      !bytesCopied || bufferSize == 0) {
     return STATUS_INVALID_PARAMETER;
-  SIZE_T bytesCopied = 0;
+  }
+
   NTSTATUS status = STATUS_SUCCESS;
   KAPC_STATE apcState = {0};
   ULONG oldProtect = 0;
-  PVOID tempAddress = address;
-  SIZE_T tempSize = size;
+  PVOID alignedAddress = NULL;
+  SIZE_T alignedSize = 0;
   BOOLEAN protectionChanged = FALSE;
 
-  if (PsGetProcessExitStatus(process) != STATUS_PENDING)
+  if (PsGetProcessExitStatus(fromProcess) != STATUS_PENDING) {
     return STATUS_PROCESS_IS_TERMINATING;
+  }
 
-  KeStackAttachProcess(process, &apcState);
+  if (PsGetProcessExitStatus(toProcess) != STATUS_PENDING) {
+    return STATUS_PROCESS_IS_TERMINATING;
+  }
 
-  status = ZwProtectVirtualMemory(ZwCurrentProcess(), &tempAddress, &tempSize,
-                                  PAGE_READWRITE, &oldProtect);
-  if (NT_SUCCESS(status)) protectionChanged = TRUE;
+  KeStackAttachProcess(toProcess, &apcState);
 
-  status = MmCopyVirtualMemory(callprocess, buffer, process, address, size,
-                               KernelMode, &bytesCopied);
+  alignedAddress = (PVOID)((ULONG_PTR)toAddress & ~(PAGE_SIZE - 1));
+  alignedSize =
+      ((ULONG_PTR)toAddress + bufferSize + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+  alignedSize = alignedSize - (ULONG_PTR)alignedAddress;
 
-  if (protectionChanged && oldProtect != PAGE_READWRITE) {
+  status = ZwProtectVirtualMemory(ZwCurrentProcess(), &alignedAddress,
+                                  &alignedSize, PAGE_READWRITE, &oldProtect);
+
+  if (NT_SUCCESS(status)) {
+    protectionChanged = TRUE;
+  }
+
+  status = MmCopyVirtualMemory(fromProcess, fromAddress, toProcess, toAddress,
+                               bufferSize, previousMode, bytesCopied);
+
+  if (protectionChanged) {
     ULONG tempProtect;
-    ZwProtectVirtualMemory(ZwCurrentProcess(), &tempAddress, &tempSize,
+    ZwProtectVirtualMemory(ZwCurrentProcess(), &alignedAddress, &alignedSize,
                            oldProtect, &tempProtect);
   }
 
   KeUnstackDetachProcess(&apcState);
-  *written = bytesCopied;
   return status;
 }
 
 BOOLEAN ReadVM(Requests* in) {
-  PEPROCESS source_process = NULL;
-  PEPROCESS dist_process = NULL;
-  if (in->src_pid == 0 || in->dst_pid == 0) return FALSE;
+  PEPROCESS from_process = NULL;
+  PEPROCESS to_process = NULL;
+  if (in->request_pid == 0 || in->target_pid == 0) return FALSE;
 
   NTSTATUS status =
-      PsLookupProcessByProcessId((HANDLE)in->src_pid, &source_process);
+      PsLookupProcessByProcessId((HANDLE)in->request_pid, &to_process);
   if (!NT_SUCCESS(status)) {
-    if (source_process) ObDereferenceObject(source_process);
+    if (to_process) ObDereferenceObject(to_process);
     return FALSE;
   }
 
-  status = PsLookupProcessByProcessId((HANDLE)in->dst_pid, &dist_process);
+  status = PsLookupProcessByProcessId((HANDLE)in->target_pid, &from_process);
   if (!NT_SUCCESS(status)) {
-    ObDereferenceObject(source_process);
-    if (dist_process) ObDereferenceObject(dist_process);
+    ObDereferenceObject(to_process);
+    if (from_process) ObDereferenceObject(from_process);
     return FALSE;
   }
 
   SIZE_T memsize = 0;
   status =
-      KernelReadProcessMemory(source_process, (void*)in->src_addr, dist_process,
-                              (void*)in->dst_addr, in->mem_size, &memsize);
+      MmCopyVirtualMemory(from_process, (void*)in->target_addr, to_process,
+                               (void*)in->request_addr, in->mem_size,
+                               KernelMode, &memsize);
 
-  ObDereferenceObject(source_process);
-  ObDereferenceObject(dist_process);
+  ObDereferenceObject(from_process);
+  ObDereferenceObject(to_process);
   return NT_SUCCESS(status);
 }
 
 BOOLEAN WriteVM(Requests* in) {
-  PEPROCESS source_process = NULL;
-  PEPROCESS dist_process = NULL;
-  if (in->src_pid == 0 || in->dst_pid == 0) return FALSE;
+  PEPROCESS from_process = NULL;
+  PEPROCESS to_process = NULL;
+  if (in->request_pid == 0 || in->target_pid == 0) return FALSE;
 
   NTSTATUS status =
-      PsLookupProcessByProcessId((HANDLE)in->src_pid, &source_process);
+      PsLookupProcessByProcessId((HANDLE)in->request_pid, &from_process);
   if (!NT_SUCCESS(status)) {
-    if (source_process) ObDereferenceObject(source_process);
+    if (from_process) ObDereferenceObject(from_process);
     return FALSE;
   }
 
-  status = PsLookupProcessByProcessId((HANDLE)in->dst_pid, &dist_process);
+  status = PsLookupProcessByProcessId((HANDLE)in->target_pid, &to_process);
   if (!NT_SUCCESS(status)) {
-    ObDereferenceObject(source_process);
-    if (dist_process) ObDereferenceObject(dist_process);
+    ObDereferenceObject(from_process);
+    if (to_process) ObDereferenceObject(to_process);
     return FALSE;
   }
 
   SIZE_T memsize = 0;
-  status = KernelWriteProcessMemory(source_process, (void*)in->src_addr,
-                                    dist_process, (void*)in->dst_addr,
-                                    in->mem_size, &memsize);
+  status = MmCopyProtectVirtualMemory(from_process, (void*)in->request_addr, to_process,
+                               (void*)in->target_addr, in->mem_size,
+                               KernelMode, &memsize);
 
-  ObDereferenceObject(source_process);
-  ObDereferenceObject(dist_process);
+  ObDereferenceObject(from_process);
+  ObDereferenceObject(to_process);
   return NT_SUCCESS(status);
 }
 
@@ -139,11 +145,11 @@ UINT64 GetModuleBasex64(PEPROCESS proc, UNICODE_STRING module_name,
 }
 
 UINT64 GetDllAddress(Requests* in) {
-  if (in->src_pid == 0) return 0;
+  if (in->target_pid == 0) return 0;
 
   PEPROCESS source_process = NULL;
   NTSTATUS status =
-      PsLookupProcessByProcessId((HANDLE)in->src_pid, &source_process);
+      PsLookupProcessByProcessId((HANDLE)in->target_pid, &source_process);
   if (!NT_SUCCESS(status)) return 0;
 
   char decoded[65] = {0};
@@ -164,11 +170,11 @@ UINT64 GetDllAddress(Requests* in) {
 }
 
 UINT64 GetDllSize(Requests* in) {
-  if (in->src_pid == 0) return 0;
+  if (in->target_pid == 0) return 0;
 
   PEPROCESS source_process = NULL;
   NTSTATUS status =
-      PsLookupProcessByProcessId((HANDLE)in->src_pid, &source_process);
+      PsLookupProcessByProcessId((HANDLE)in->target_pid, &source_process);
   if (!NT_SUCCESS(status)) return 0;
 
   char decoded[65] = {0};

@@ -34,10 +34,10 @@ typedef struct _Requests {
   unsigned __int64 return_value;
 
   // memory read/write
-  unsigned __int64 src_pid;
-  unsigned __int64 src_addr;
-  unsigned __int64 dst_pid;
-  unsigned __int64 dst_addr;
+  unsigned __int64 request_pid;
+  unsigned __int64 request_addr;
+  unsigned __int64 target_pid;
+  unsigned __int64 target_addr;
   unsigned __int64 mem_size;
 
   // mouse_event
