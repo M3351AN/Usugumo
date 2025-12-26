@@ -73,6 +73,7 @@
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <DisableSpecificWarnings>4819;4748;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <CompileAs>CompileAsC</CompileAs>
     </ClCompile>
     <Link>
       <LargeAddressAware>true</LargeAddressAware>
@@ -95,6 +96,7 @@
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <DisableSpecificWarnings>4819;4603;4627;4986;4987;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <CompileAs>CompileAsC</CompileAs>
     </ClCompile>
     <Link>
       <LargeAddressAware>true</LargeAddressAware>
@@ -126,6 +128,7 @@
     <ClInclude Include="imports.h" />
     <ClInclude Include="mouse_operation.h" />
     <ClInclude Include="request_handler.h" />
+    <ClInclude Include="usugumo_request_define.h" />
   </ItemGroup>
   <ItemGroup>
     <MASM Include="mouse.asm" />

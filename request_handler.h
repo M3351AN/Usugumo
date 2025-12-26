@@ -3,6 +3,6 @@
 #ifndef _REQUEST_HANDLER_H_
 #define _REQUEST_HANDLER_H_
 
-BOOLEAN RequestHandler(Requests* pstruct);
+BOOLEAN RequestHandler(Requests*);
 
 #endif

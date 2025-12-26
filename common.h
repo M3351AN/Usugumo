@@ -7,11 +7,15 @@
 
 #include <windef.h>
 
+#include "./usugumo_request_define.h"
 #include "./defines.h"
+
 #include "./dispatches.h"
-#include "./process.h"
-#include "./imports.h"
-#include "./request_handler.h"
-#include "./mouse_operation.h"
 #include "./helpers.h"
+#include "./imports.h"
+#include "./mouse_operation.h"
+#include "./process.h"
+#include "./request_handler.h"
+
+
 #endif
