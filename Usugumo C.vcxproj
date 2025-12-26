@@ -74,11 +74,13 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <DisableSpecificWarnings>4819;4748;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <CompileAs>CompileAsC</CompileAs>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <LargeAddressAware>true</LargeAddressAware>
       <RandomizedBaseAddress>true</RandomizedBaseAddress>
       <AdditionalDependencies>Wdmsec.lib;%(AdditionalDependencies);$(KernelBufferOverflowLib);$(DDK_LIB_PATH)ntoskrnl.lib;$(DDK_LIB_PATH)hal.lib;$(DDK_LIB_PATH)wmilib.lib;$(KMDF_LIB_PATH)$(KMDF_VER_PATH)\WdfLdr.lib;$(KMDF_LIB_PATH)$(KMDF_VER_PATH)\WdfDriverEntry.lib</AdditionalDependencies>
+      <GenerateMapFile>true</GenerateMapFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -97,12 +99,14 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <DisableSpecificWarnings>4819;4603;4627;4986;4987;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <CompileAs>CompileAsC</CompileAs>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <LargeAddressAware>true</LargeAddressAware>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <RandomizedBaseAddress>true</RandomizedBaseAddress>
       <AdditionalDependencies>Wdmsec.lib;%(AdditionalDependencies);$(KernelBufferOverflowLib);$(DDK_LIB_PATH)ntoskrnl.lib;$(DDK_LIB_PATH)hal.lib;$(DDK_LIB_PATH)wmilib.lib;$(KMDF_LIB_PATH)$(KMDF_VER_PATH)\WdfLdr.lib;$(KMDF_LIB_PATH)$(KMDF_VER_PATH)\WdfDriverEntry.lib</AdditionalDependencies>
+      <GenerateMapFile>true</GenerateMapFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

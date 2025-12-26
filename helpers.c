@@ -4,7 +4,7 @@
 
 VOID DecodeFixedStr64(const FixedStr64* fs, char* output, SIZE_T origLen) {
   size_t idx = 0;
-  for (size_t block = 0; block < 4; block++) {
+  for (size_t block = 0; block < 8; block++) {
     for (int i = 0; i < 8; i++) {
       if (idx >= origLen) {
         break;

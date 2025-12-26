@@ -6,18 +6,19 @@ inline NTSTATUS KernelReadProcessMemory(PEPROCESS process, PVOID address,
                                         SIZE_T size, SIZE_T* read) {
   if (!process || !address || !buffer || !read) return STATUS_INVALID_PARAMETER;
 
-  SIZE_T bytes_copied = 0;
-  NTSTATUS status =
-      MmCopyVirtualMemory(process,       // 源进程
-                          address,       // 源地址
-                          callprocess,   // 目标进程（当前进程上下文）
-                          buffer,        // 目标缓冲区
-                          size,          // 要复制的字节数
-                          KernelMode,    // 访问模式
-                          &bytes_copied  // 实际复制的字节数
-      );
+  SIZE_T bytesCopied = 0;
+  NTSTATUS status = STATUS_SUCCESS;
 
-  *read = bytes_copied;
+  status = MmCopyVirtualMemory(process,      // 源进程
+                               address,      // 源地址
+                               callprocess,  // 目标进程（当前进程上下文）
+                               buffer,       // 目标缓冲区
+                               size,         // 要复制的字节数
+                               KernelMode,   // 访问模式
+                               &bytesCopied  // 实际复制的字节数
+  );
+
+  *read = bytesCopied;
   return status;
 }
 
@@ -59,7 +60,6 @@ inline NTSTATUS KernelWriteProcessMemory(PEPROCESS process, PVOID address,
                                  &bytesCopied  // 实际复制的字节数
     );
 
-    // 恢复原始保护
     if (oldProtect != PAGE_READWRITE) {
       ULONG tempProtect;
       ZwProtectVirtualMemory(NtCurrentProcess(), &tempAddress, &tempSize,
@@ -83,19 +83,44 @@ BOOLEAN ReadVM(Requests* in) {
       PsLookupProcessByProcessId((HANDLE)in->src_pid, &source_process);
   if (status != STATUS_SUCCESS) return FALSE;
 
-  NTSTATUS status1 =
+  status =
       PsLookupProcessByProcessId((HANDLE)in->dst_pid, &dist_process);
-  if (status1 != STATUS_SUCCESS) return FALSE;
+  if (status != STATUS_SUCCESS) return FALSE;
 
   size_t memsize = 0;
 
   if (!NT_SUCCESS(KernelReadProcessMemory(source_process, (void*)in->src_addr,
                                           dist_process, (void*)in->dst_addr,
-                                          in->size, &memsize)))
+                                          in->mem_size, &memsize)))
     return FALSE;
 
   ObDereferenceObject(source_process);
+  ObDereferenceObject(dist_process);
+  return TRUE;
+}
 
+BOOLEAN WriteVM(Requests* in) {
+  PEPROCESS source_process = NULL;
+  PEPROCESS dist_process = NULL;
+  if (in->src_pid == 0) return FALSE;
+  if (in->dst_pid == 0) return FALSE;
+  NTSTATUS status =
+      PsLookupProcessByProcessId((HANDLE)in->src_pid, &source_process);
+  if (status != STATUS_SUCCESS) return FALSE;
+
+  status =
+      PsLookupProcessByProcessId((HANDLE)in->dst_pid, &dist_process);
+  if (status != STATUS_SUCCESS) return FALSE;
+
+  size_t memsize = 0;
+
+  if (!NT_SUCCESS(KernelWriteProcessMemory(source_process, (void*)in->src_addr,
+                                           dist_process, (void*)in->dst_addr,
+                                           in->mem_size, &memsize)))
+    return FALSE;
+
+  ObDereferenceObject(source_process);
+  ObDereferenceObject(dist_process);
   return TRUE;
 }
 
@@ -143,31 +168,6 @@ UINT64 GetModuleBasex64(PEPROCESS proc, UNICODE_STRING module_name,
   return 0;  // failed
 }
 
-BOOLEAN WriteVM(Requests* in) {
-  PEPROCESS source_process = NULL;
-  PEPROCESS dist_process = NULL;
-  if (in->src_pid == 0) return FALSE;
-  if (in->dst_pid == 0) return FALSE;
-  NTSTATUS status =
-      PsLookupProcessByProcessId((HANDLE)in->src_pid, &source_process);
-  if (status != STATUS_SUCCESS) return FALSE;
-
-  NTSTATUS status1 =
-      PsLookupProcessByProcessId((HANDLE)in->dst_pid, &dist_process);
-  if (status1 != STATUS_SUCCESS) return FALSE;
-
-  size_t memsize = 0;
-
-  if (!NT_SUCCESS(KernelWriteProcessMemory(source_process, (void*)in->src_addr,
-                                           dist_process, (void*)in->dst_addr,
-                                           in->size, &memsize)))
-    return FALSE;
-
-  ObDereferenceObject(source_process);
-
-  return TRUE;
-}
-
 UINT64 GetDllAddress(Requests* in) {
   PEPROCESS source_process = NULL;
   if (in->src_pid == 0) return 0;
@@ -176,12 +176,13 @@ UINT64 GetDllAddress(Requests* in) {
   if (status != STATUS_SUCCESS) return 0;
   UNICODE_STRING moduleName;
 
-  char decoded[33] = {0};
-  DecodeFixedStr64(&in->module_name, decoded, in->name_length);
+  char decoded[65] = {0};
+  DecodeFixedStr64(&in->name_str, decoded, in->name_length);
   PWSTR wStr = ConvertToPWSTR(decoded);
   RtlInitUnicodeString(&moduleName, wStr);
-  ExFreePoolWithTag(wStr, 'pcwT');
   ULONG64 base_address = GetModuleBasex64(source_process, moduleName, FALSE);
+  ExFreePoolWithTag(wStr, 'pcwT');
+  ObDereferenceObject(source_process); 
   return base_address;
 }
 
@@ -194,9 +195,9 @@ UINT64 GetDllSize(Requests* in) {
   if (status != STATUS_SUCCESS) return 0;
 
   UNICODE_STRING moduleName;
-  char decoded[33] = {0};
+  char decoded[65] = {0};
 
-  DecodeFixedStr64(&in->module_name, decoded, in->name_length);
+  DecodeFixedStr64(&in->name_str, decoded, in->name_length);
   PWSTR wStr = ConvertToPWSTR(decoded);
   RtlInitUnicodeString(&moduleName, wStr);
 

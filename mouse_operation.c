@@ -118,7 +118,7 @@ inline void MouseMove(long x, long y, unsigned short button_flags) {
   KeLowerIrql(irql);
 }
 
-void KernelMouseEvent(DWORD dwFlags, DWORD dx, DWORD dy, DWORD dwData,
+VOID KernelMouseEvent(DWORD dwFlags, DWORD dx, DWORD dy, DWORD dwData,
                       ULONG_PTR dwExtraInfo) {
   UNREFERENCED_PARAMETER(dwFlags);
   UNREFERENCED_PARAMETER(dx);

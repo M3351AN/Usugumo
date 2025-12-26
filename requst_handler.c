@@ -3,26 +3,35 @@
 
 BOOLEAN RequestHandler(Requests* pstruct) {
   switch (pstruct->request_key) {
-    case DLL_BASE: {
-      ULONG64 base = GetDllAddress(pstruct);
-      pstruct->return_value = base;
-      return pstruct->return_value != 0;
+    case USUGUMO_PROBE: {
+      pstruct->return_value = TRUE;
+      break;
     }
-    case DLL_SIZE: {
-      ULONG64 size = GetDllSize(pstruct);
-      pstruct->return_value = size;
-      return size != 0;
+    case USUGUMO_READ: {
+      pstruct->return_value = ReadVM(pstruct);
+      break;
     }
-    case DRIVER_READVM: {
-      return ReadVM(pstruct);
+    case USUGUMO_WRITE: {
+      pstruct->return_value = WriteVM(pstruct);
+      break;
     }
-    case DRIVER_WRITEVM: {
-      return WriteVM(pstruct);
-    }
-    case HID: {
+    case USUGUMO_MOUSE: {
       KernelMouseEvent(pstruct->dwFlags, pstruct->dx, pstruct->dy,
                        pstruct->dwData, pstruct->dwExtraInfo);
-      return TRUE;
+      pstruct->return_value = TRUE;
+      break;
+    }
+    case USUGUMO_MODULE_BASE: {
+      pstruct->return_value = GetDllAddress(pstruct);
+      break;
+    }
+    case USUGUMO_MODULE_SIZE: {
+      pstruct->return_value = GetDllSize(pstruct);
+      break;
+    }
+    default: {
+      pstruct->return_value = FALSE;
+      break;
     }
   }
 

@@ -5,47 +5,53 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#ifndef CTL_CODE
+#include <winioctl.h>
+#endif  // !CTL_CODE
 
-#define DRIVER_READVM 0xCAFE1
-#define DRIVER_WRITEVM 0xCAFE2
-#define HID 0xCAFE3
-#define DLL_BASE 0xCAFE4
-#define DLL_SIZE 0xCAFE5
-#define PROCESS_PID 0xCAFE6
+#define USUGUMO_PROBE 0xCAFE0
+#define USUGUMO_READ 0xCAFE1
+#define USUGUMO_WRITE 0xCAFE2
+#define USUGUMO_MOUSE 0xCAFE3
+#define USUGUMO_MODULE_BASE 0xCAFE4
+#define USUGUMO_MODULE_SIZE 0xCAFE5
+#define USUGUMO_PID 0xCAFE6
 
-static const ULONG kIoctlCallDriver =
-    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x775, METHOD_BUFFERED, FILE_SPECIAL_ACCESS);
+static const unsigned long kIoctlCallDriver =
+    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x721, METHOD_BUFFERED, FILE_SPECIAL_ACCESS);
 
 #pragma pack(push, 1)
 typedef struct _FixedStr64 {
-  UINT64 blocks[4];
+  unsigned __int64 blocks[8];
 } FixedStr64;
 #pragma pack(pop)
 #pragma pack(push, 1)
 typedef struct _Requests {
   // function requests
-  int request_key;
-
-  // memory read/write
-  UINT64 src_pid;
-  UINT64 src_addr;
-  UINT64 dst_pid;
-  UINT64 dst_addr;
-  size_t size;
-
-  // mouse_event
-  DWORD dwFlags;
-  DWORD dx;
-  DWORD dy;
-  DWORD dwData;
-  ULONG_PTR dwExtraInfo;
+  unsigned __int64 request_key;
 
   // return value
-  UINT64 return_value;
+  unsigned __int64 return_value;
+
+  // memory read/write
+  unsigned __int64 src_pid;
+  unsigned __int64 src_addr;
+  unsigned __int64 dst_pid;
+  unsigned __int64 dst_addr;
+  unsigned __int64 mem_size;
+
+  // mouse_event
+  unsigned long dwFlags;
+  unsigned long dx;
+  unsigned long dy;
+  unsigned long dwData;
+  unsigned __int64 dwExtraInfo;
+  unsigned __int64 screen_width;
+  unsigned __int64 screen_height;
 
   // base/pid request
-  FixedStr64 module_name;
-  SIZE_T name_length;
+  unsigned __int64 name_length;
+  FixedStr64 name_str;
 } Requests;
 #pragma pack(pop)
 

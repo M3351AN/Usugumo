@@ -44,6 +44,7 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
   ClearFlag(device_object->Flags, DO_DEVICE_INITIALIZING);
   return status;
 }
+
 NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject,
                      _In_ PUNICODE_STRING RegistryPath) {
   UNREFERENCED_PARAMETER(DriverObject);
