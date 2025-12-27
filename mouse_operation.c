@@ -118,42 +118,43 @@ inline void MouseMove(long x, long y, unsigned short button_flags) {
   KeLowerIrql(irql);
 }
 
-VOID KernelMouseEvent(DWORD dwFlags, DWORD dx, DWORD dy, DWORD dwData,
-                      ULONG_PTR dwExtraInfo) {
-  UNREFERENCED_PARAMETER(dwFlags);
-  UNREFERENCED_PARAMETER(dx);
-  UNREFERENCED_PARAMETER(dy);
-  UNREFERENCED_PARAMETER(dwData);
-  UNREFERENCED_PARAMETER(dwExtraInfo);
+VOID KernelMouseEvent(Requests* request) {
+  if (!request) return;
+
+  DWORD dwFlags = request->dwFlags;
+  DWORD dx = (DWORD)request->dx;
+  DWORD dy = (DWORD)request->dy;
 
   long x = 0, y = 0;
   unsigned short button_flags = 0;
 
   if (dwFlags & MOUSEEVENTF_MOVE) {
-    /* we cant fetch screen resolution from kernel
-   if (dwFlags & MOUSEEVENTF_ABSOLUTE) {
-     x = (long)dx;
-     y = (long)dy;
-   }
-   else */
-    {
+    if (dwFlags & MOUSEEVENTF_ABSOLUTE) {
+      if (request->screen_width <= 0 || request->screen_height <= 0) {
+        return;
+      }
+
+      LONG relX = (LONG)dx - (LONG)request->cursor_x;
+      LONG relY = (LONG)dy - (LONG)request->cursor_y;
+
+      x = (long)relX;
+      y = (long)relY;
+    } else {
       x = (long)(short)LOWORD(dx);
       y = (long)(short)LOWORD(dy);
     }
   }
 
-  if (dwFlags & MOUSEEVENTF_LEFTDOWN)
-    button_flags |= 0x0001;  // MOUSE_LEFT_BUTTON_DOWN
-  if (dwFlags & MOUSEEVENTF_LEFTUP)
-    button_flags |= 0x0002;  // MOUSE_LEFT_BUTTON_UP
-  if (dwFlags & MOUSEEVENTF_RIGHTDOWN)
-    button_flags |= 0x0004;  // MOUSE_RIGHT_BUTTON_DOWN
-  if (dwFlags & MOUSEEVENTF_RIGHTUP)
-    button_flags |= 0x0008;  // MOUSE_RIGHT_BUTTON_UP
-  if (dwFlags & MOUSEEVENTF_MIDDLEDOWN)
-    button_flags |= 0x0010;  // MOUSE_MIDDLE_BUTTON_DOWN
-  if (dwFlags & MOUSEEVENTF_MIDDLEUP)
-    button_flags |= 0x0020;  // MOUSE_MIDDLE_BUTTON_UP
+  if (dwFlags & MOUSEEVENTF_LEFTDOWN) button_flags |= 0x0001;
+  if (dwFlags & MOUSEEVENTF_LEFTUP) button_flags |= 0x0002;
+  if (dwFlags & MOUSEEVENTF_RIGHTDOWN) button_flags |= 0x0004;
+  if (dwFlags & MOUSEEVENTF_RIGHTUP) button_flags |= 0x0008;
+  if (dwFlags & MOUSEEVENTF_MIDDLEDOWN) button_flags |= 0x0010;
+  if (dwFlags & MOUSEEVENTF_MIDDLEUP) button_flags |= 0x0020;
+  if (dwFlags & MOUSEEVENTF_XDOWN) button_flags |= 0x0040;
+  if (dwFlags & MOUSEEVENTF_XUP) button_flags |= 0x0080;
 
   MouseMove(x, y, button_flags);
+
+  request->return_value = TRUE;
 }

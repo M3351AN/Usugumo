@@ -16,8 +16,7 @@ BOOLEAN RequestHandler(Requests* pstruct) {
       break;
     }
     case USUGUMO_MOUSE: {
-      KernelMouseEvent(pstruct->dwFlags, pstruct->dx, pstruct->dy,
-                       pstruct->dwData, pstruct->dwExtraInfo);
+      KernelMouseEvent(pstruct);
       pstruct->return_value = TRUE;
       break;
     }

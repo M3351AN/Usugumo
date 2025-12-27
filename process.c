@@ -17,6 +17,9 @@ NTSTATUS MmCopyProtectVirtualMemory(PEPROCESS fromProcess, PVOID fromAddress,
   PVOID alignedAddress = NULL;
   SIZE_T alignedSize = 0;
   BOOLEAN protectionChanged = FALSE;
+  BOOLEAN attached = FALSE;
+
+  *bytesCopied = 0;
 
   if (PsGetProcessExitStatus(fromProcess) != STATUS_PENDING) {
     return STATUS_PROCESS_IS_TERMINATING;
@@ -26,30 +29,39 @@ NTSTATUS MmCopyProtectVirtualMemory(PEPROCESS fromProcess, PVOID fromAddress,
     return STATUS_PROCESS_IS_TERMINATING;
   }
 
-  KeStackAttachProcess(toProcess, &apcState);
+  __try {
+    KeStackAttachProcess(toProcess, &apcState);
+    attached = TRUE;
 
-  alignedAddress = (PVOID)((ULONG_PTR)toAddress & ~(PAGE_SIZE - 1));
-  alignedSize =
-      ((ULONG_PTR)toAddress + bufferSize + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-  alignedSize = alignedSize - (ULONG_PTR)alignedAddress;
+    alignedAddress = (PVOID)((ULONG_PTR)toAddress & ~(PAGE_SIZE - 1));
+    alignedSize =
+        ((ULONG_PTR)toAddress + bufferSize + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    alignedSize = alignedSize - (ULONG_PTR)alignedAddress;
 
-  status = ZwProtectVirtualMemory(ZwCurrentProcess(), &alignedAddress,
-                                  &alignedSize, PAGE_READWRITE, &oldProtect);
-
-  if (NT_SUCCESS(status)) {
+    status = ZwProtectVirtualMemory(NtCurrentProcess(), &alignedAddress,
+                                    &alignedSize, PAGE_READWRITE, &oldProtect);
+    if (!NT_SUCCESS(status)) {
+      __leave;
+    }
     protectionChanged = TRUE;
-  }
 
-  status = MmCopyVirtualMemory(fromProcess, fromAddress, toProcess, toAddress,
-                               bufferSize, previousMode, bytesCopied);
+    status = MmCopyVirtualMemory(fromProcess, fromAddress, toProcess, toAddress,
+                                 bufferSize, previousMode, bytesCopied);
+
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    status = STATUS_ACCESS_VIOLATION;
+  }
 
   if (protectionChanged) {
     ULONG tempProtect;
-    ZwProtectVirtualMemory(ZwCurrentProcess(), &alignedAddress, &alignedSize,
+    ZwProtectVirtualMemory(NtCurrentProcess(), &alignedAddress, &alignedSize,
                            oldProtect, &tempProtect);
   }
 
-  KeUnstackDetachProcess(&apcState);
+  if (attached) {
+    KeUnstackDetachProcess(&apcState);
+  }
+
   return status;
 }
 
@@ -61,22 +73,23 @@ BOOLEAN ReadVM(Requests* in) {
   NTSTATUS status =
       PsLookupProcessByProcessId((HANDLE)in->request_pid, &to_process);
   if (!NT_SUCCESS(status)) {
-    if (to_process) ObDereferenceObject(to_process);
     return FALSE;
   }
 
   status = PsLookupProcessByProcessId((HANDLE)in->target_pid, &from_process);
   if (!NT_SUCCESS(status)) {
     ObDereferenceObject(to_process);
-    if (from_process) ObDereferenceObject(from_process);
     return FALSE;
   }
 
   SIZE_T memsize = 0;
-  status =
-      MmCopyVirtualMemory(from_process, (void*)in->target_addr, to_process,
-                               (void*)in->request_addr, in->mem_size,
-                               KernelMode, &memsize);
+  __try {
+    status = MmCopyVirtualMemory(from_process, (void*)in->target_addr,
+                                 to_process, (void*)in->request_addr,
+                                 in->mem_size, KernelMode, &memsize);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    status = STATUS_ACCESS_VIOLATION;
+  }
 
   ObDereferenceObject(from_process);
   ObDereferenceObject(to_process);
@@ -91,21 +104,23 @@ BOOLEAN WriteVM(Requests* in) {
   NTSTATUS status =
       PsLookupProcessByProcessId((HANDLE)in->request_pid, &from_process);
   if (!NT_SUCCESS(status)) {
-    if (from_process) ObDereferenceObject(from_process);
     return FALSE;
   }
 
   status = PsLookupProcessByProcessId((HANDLE)in->target_pid, &to_process);
   if (!NT_SUCCESS(status)) {
     ObDereferenceObject(from_process);
-    if (to_process) ObDereferenceObject(to_process);
     return FALSE;
   }
 
   SIZE_T memsize = 0;
-  status = MmCopyProtectVirtualMemory(from_process, (void*)in->request_addr, to_process,
-                               (void*)in->target_addr, in->mem_size,
-                               KernelMode, &memsize);
+  __try {
+    status = MmCopyProtectVirtualMemory(from_process, (void*)in->request_addr,
+                                        to_process, (void*)in->target_addr,
+                                        in->mem_size, KernelMode, &memsize);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    status = STATUS_ACCESS_VIOLATION;
+  }
 
   ObDereferenceObject(from_process);
   ObDereferenceObject(to_process);
@@ -114,6 +129,8 @@ BOOLEAN WriteVM(Requests* in) {
 
 UINT64 GetModuleBasex64(PEPROCESS proc, UNICODE_STRING module_name,
                         BOOL get_size) {
+  if (!proc) return 0;
+
   PPEB pPeb = (PPEB)PsGetProcessPeb(proc);
   if (!pPeb) return 0;
 
@@ -126,22 +143,27 @@ UINT64 GetModuleBasex64(PEPROCESS proc, UNICODE_STRING module_name,
     return 0;
   }
 
-  for (PLIST_ENTRY list = (PLIST_ENTRY)pLdr->InLoadOrderModuleList.Flink;
-       list != &pLdr->InLoadOrderModuleList; list = (PLIST_ENTRY)list->Flink) {
-    PLDR_DATA_TABLE_ENTRY pEntry =
-        CONTAINING_RECORD(list, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+  UINT64 result = 0;
+  __try {
+    for (PLIST_ENTRY list = (PLIST_ENTRY)pLdr->InLoadOrderModuleList.Flink;
+         list != &pLdr->InLoadOrderModuleList;
+         list = (PLIST_ENTRY)list->Flink) {
+      PLDR_DATA_TABLE_ENTRY pEntry =
+          CONTAINING_RECORD(list, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
 
-    if (RtlCompareUnicodeString(&pEntry->BaseDllName, &module_name, TRUE) ==
-        0) {
-      UINT64 result =
-          get_size ? (UINT64)pEntry->SizeOfImage : (UINT64)pEntry->DllBase;
-      KeUnstackDetachProcess(&state);
-      return result;
+      if (RtlCompareUnicodeString(&pEntry->BaseDllName, &module_name, TRUE) ==
+          0) {
+        result =
+            get_size ? (UINT64)pEntry->SizeOfImage : (UINT64)pEntry->DllBase;
+        break;
+      }
     }
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    result = 0;
   }
 
   KeUnstackDetachProcess(&state);
-  return 0;
+  return result;
 }
 
 UINT64 GetDllAddress(Requests* in) {
@@ -162,7 +184,13 @@ UINT64 GetDllAddress(Requests* in) {
 
   UNICODE_STRING moduleName;
   RtlInitUnicodeString(&moduleName, wStr);
-  ULONG64 base_address = GetModuleBasex64(source_process, moduleName, FALSE);
+  ULONG64 base_address = 0;
+
+  __try {
+    base_address = GetModuleBasex64(source_process, moduleName, FALSE);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    base_address = 0;
+  }
 
   ExFreePoolWithTag(wStr, 'pcwT');
   ObDereferenceObject(source_process);
@@ -187,15 +215,47 @@ UINT64 GetDllSize(Requests* in) {
 
   UNICODE_STRING moduleName;
   RtlInitUnicodeString(&moduleName, wStr);
-  ULONG64 module_size = GetModuleBasex64(source_process, moduleName, TRUE);
+  ULONG64 module_size = 0;
+
+  __try {
+    module_size = GetModuleBasex64(source_process, moduleName, TRUE);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    module_size = 0;
+  }
 
   ExFreePoolWithTag(wStr, 'pcwT');
   ObDereferenceObject(source_process);
   return module_size;
 }
 
+ULONG g_ActiveProcessLinksOffset = 0;
+
+BOOLEAN InitOffsetsByVersion() {
+  RTL_OSVERSIONINFOW ver = {0};
+  ver.dwOSVersionInfoSize = sizeof(ver);
+  if (!NT_SUCCESS(RtlGetVersion(&ver))) {
+    return FALSE;
+  }
+
+  if (ver.dwMajorVersion == 10 && ver.dwMinorVersion == 0) {
+    if (ver.dwBuildNumber >= 26000) {  // Windows 11 24H2+
+      g_ActiveProcessLinksOffset = 0x1d8;
+    } else {  // Windows 10 / Windows 11 22H2/23H2
+      g_ActiveProcessLinksOffset = 0x448;
+    }
+    return TRUE;
+  }
+  return FALSE;
+}
+
 UINT64 GetProcessIdByName(Requests* in) {
   if (!in || in->name_length == 0 || in->name_length > 64) return 0;
+
+  if (g_ActiveProcessLinksOffset == 0) {
+    if (!InitOffsetsByVersion()) {
+      return 0;
+    }
+  }
 
   char targetName[65] = {0};
   DecodeFixedStr64(&in->name_str, targetName, in->name_length);
@@ -212,45 +272,22 @@ UINT64 GetProcessIdByName(Requests* in) {
   while (currentProcess && processCount < 1000) {
     processCount++;
     HANDLE currentPid = PsGetProcessId(currentProcess);
-
     PCHAR imageName = PsGetProcessImageFileName(currentProcess);
+
     if (imageName && imageName[0]) {
-      BOOLEAN match = TRUE;
-      SIZE_T i = 0;
-
-      while (targetName[i] != '\0') {
-        char c1 = targetName[i];
-        char c2 = imageName[i];
-
-        if (c2 == '\0') {
-          match = FALSE;
-          break;
-        }
-
-        if (c1 >= 'A' && c1 <= 'Z') c1 += 32;
-        if (c2 >= 'A' && c2 <= 'Z') c2 += 32;
-
-        if (c1 != c2) {
-          match = FALSE;
-          break;
-        }
-        i++;
-      }
-
-      if (match && imageName[i] == '\0') {
+      if (_stricmp(targetName, imageName) == 0) {
         foundPid = (UINT64)currentPid;
         break;
       }
     }
 
     PLIST_ENTRY listEntry =
-        (PLIST_ENTRY)((ULONG_PTR)currentProcess + ACTIVE_PROCESS_LINKS_OFFSET);
+        (PLIST_ENTRY)((ULONG_PTR)currentProcess + g_ActiveProcessLinksOffset);
     if (!listEntry->Flink || listEntry->Flink == listEntry) break;
 
     ULONG_PTR nextAddr =
-        (ULONG_PTR)listEntry->Flink - ACTIVE_PROCESS_LINKS_OFFSET;
+        (ULONG_PTR)listEntry->Flink - g_ActiveProcessLinksOffset;
     PEPROCESS nextProcess = (PEPROCESS)nextAddr;
-
     HANDLE nextPid = PsGetProcessId(nextProcess);
     PEPROCESS nextSafe = NULL;
 

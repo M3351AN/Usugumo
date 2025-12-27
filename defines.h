@@ -4,21 +4,22 @@
 #define _DEFINES_H_
 #include <windef.h>
 
-#define ACTIVE_PROCESS_LINKS_OFFSET 0x448
-
 typedef int BOOL;
 typedef ULONG_PTR QWORD;
 
 #define RAISE_IRQL(a, b) *(b) = KfRaiseIrql(a)
 #define SDDL_STRING L"D:P(A;;GA;;;WD)"
 
-#define MOUSEEVENTF_MOVE 0x0001
-#define MOUSEEVENTF_LEFTDOWN 0x0002
-#define MOUSEEVENTF_LEFTUP 0x0004
-#define MOUSEEVENTF_RIGHTDOWN 0x0008
-#define MOUSEEVENTF_RIGHTUP 0x0010
-#define MOUSEEVENTF_MIDDLEDOWN 0x0020
-#define MOUSEEVENTF_MIDDLEUP 0x0040
+#define MOUSEEVENTF_MOVE 0x0001       /* mouse move */
+#define MOUSEEVENTF_LEFTDOWN 0x0002   /* left button down */
+#define MOUSEEVENTF_LEFTUP 0x0004     /* left button up */
+#define MOUSEEVENTF_RIGHTDOWN 0x0008  /* right button down */
+#define MOUSEEVENTF_RIGHTUP 0x0010    /* right button up */
+#define MOUSEEVENTF_MIDDLEDOWN 0x0020 /* middle button down */
+#define MOUSEEVENTF_MIDDLEUP 0x0040   /* middle button up */
+#define MOUSEEVENTF_XDOWN 0x0080      /* x button down */
+#define MOUSEEVENTF_XUP 0x0100        /* x button down */
+#define MOUSEEVENTF_WHEEL 0x0800      /* wheel button rolled */
 #define MOUSEEVENTF_ABSOLUTE 0x8000
 
 typedef struct _PEB_LDR_DATA {

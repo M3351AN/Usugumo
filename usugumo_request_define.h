@@ -48,6 +48,8 @@ typedef struct _Requests {
   unsigned __int64 dwExtraInfo;
   unsigned __int64 screen_width;
   unsigned __int64 screen_height;
+  unsigned __int64 cursor_x;
+  unsigned __int64 cursor_y;
 
   // base/pid request
   unsigned __int64 name_length;
