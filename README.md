@@ -39,3 +39,5 @@ This project is licensed under [**TOSSUCU**](LICENSE).
 ## Credits
 
 - [ekknod/MouseClassServiceCallbackMeme](https://github.com/ekknod/MouseClassServiceCallbackMeme/)
+- [reactos](https://github.com/reactos/reactos/)
+- [danielkrupinski/Osiris](https://github.com/danielkrupinski/Osiris/)

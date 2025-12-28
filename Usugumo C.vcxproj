@@ -120,6 +120,7 @@
     <ClCompile Include="process.c" />
     <ClCompile Include="helpers.c" />
     <ClCompile Include="mouse_operation.c" />
+    <ClCompile Include="reimpl.c" />
     <ClCompile Include="requst_handler.c" />
     <ClCompile Include="Usugumo.c" />
   </ItemGroup>
@@ -131,6 +132,7 @@
     <ClInclude Include="helpers.h" />
     <ClInclude Include="imports.h" />
     <ClInclude Include="mouse_operation.h" />
+    <ClInclude Include="reimpl.h" />
     <ClInclude Include="request_handler.h" />
     <ClInclude Include="usugumo_request_define.h" />
   </ItemGroup>

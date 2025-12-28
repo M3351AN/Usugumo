@@ -10,6 +10,7 @@
 #include "./usugumo_request_define.h"
 #include "./defines.h"
 
+#include "./reimpl.h"
 #include "./dispatches.h"
 #include "./helpers.h"
 #include "./imports.h"

@@ -54,7 +54,7 @@ NTSTATUS MmCopyProtectVirtualMemory(PEPROCESS fromProcess, PVOID fromAddress,
     }
     protectionChanged = TRUE;
 
-    status = MmCopyVirtualMemory(fromProcess, fromAddress, toProcess, toAddress,
+    status = DriverCopyVirtualMemory(fromProcess, fromAddress, toProcess, toAddress,
                                  bufferSize, previousMode, bytesCopied);
 
   } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -103,7 +103,7 @@ BOOLEAN ReadVM(Requests* in) {
 
   SIZE_T memsize = 0;
   __try {
-    status = MmCopyVirtualMemory(from_process, (void*)in->target_addr,
+    status = DriverCopyVirtualMemory(from_process, (void*)in->target_addr,
                                  to_process, (void*)in->request_addr,
                                  in->mem_size, KernelMode, &memsize);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
