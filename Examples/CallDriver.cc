@@ -34,7 +34,7 @@ int main() {
     printf("Module base: 0x%llX, size: 0x%llX\n", base_address, module_size);
 
     std::string pattern = "AA BB CC DD ?? ?? ?? ?? 11 22 33 44";
-    uintptr_t found = op.PatternScan(0x0,0xFFFFFF, pattern);
+    uintptr_t found = op.PatternScanSize(base_address, module_size, pattern);
     printf("Pattern 'AA BB CC DD ?? ?? ?? ?? 11 22 33 44' found at: 0x%llX\n", found);
 
     uint64_t target_var = 0;

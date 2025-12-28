@@ -5,7 +5,6 @@
 #include <cstring>
 
 const DWORD64 TARGET_BASE_ADDRESS = 0xDEAD0000;
-const DWORD64 TARGET_PATTERN_ADDRESS = 0xDEADBEEF;
 
 int main() {
     LPVOID allocated = VirtualAlloc(
@@ -23,7 +22,7 @@ int main() {
     volatile DWORD64* fixedVar = (volatile DWORD64*)allocated;
     *fixedVar = 0x114514;
 
-    unsigned char pattern[12] = {0xAA, 0xBB, 0xCC, 0xDD, 0xDE, 0xAD, 0xBE, 0xFF, 0x11, 0x22, 0x33, 0x44};
+    static const unsigned char pattern[12] = {0xAA, 0xBB, 0xCC, 0xDD, 0xDE, 0xAD, 0xBE, 0xFF, 0x11, 0x22, 0x33, 0x44};
 
     std::cout << "\nTarget var at 0x" << std::hex << (DWORD64)fixedVar 
               << " = 0x" << *fixedVar << std::dec << std::endl;
