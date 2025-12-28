@@ -28,8 +28,8 @@ BOOLEAN InitGreProtectSpriteContent() {
     if (!ModuleBase) return FALSE;
 
     UCHAR Pattern[] = {0xE8, 0xCC, 0xCC, 0xCC, 0xCC, 0x8B,
-                       0xF8, 0x85, 0xC0, 0x75, 0x0E};
-    CHAR Mask[] = "x????xxxxxx";
+                       0xCC, 0x85, 0xC0, 0x75, 0x0E};
+    CHAR Mask[] = "x????x?xxxx";
 
     PVOID FoundAddress =
         SearchSignForImage(ModuleBase, Pattern, Mask, sizeof(Pattern));
