@@ -16,7 +16,7 @@ BOOLEAN RequestHandler(Requests* pstruct) {
       break;
     }
     case USUGUMO_MOUSE: {
-      KernelMouseEvent(pstruct);
+      HandleMouseEvent(pstruct);
       pstruct->return_value = TRUE;
       break;
     }

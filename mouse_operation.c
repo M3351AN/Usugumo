@@ -101,13 +101,15 @@ inline BOOL MouseOpen(void) {
   return gMouseObject.mouse_device && gMouseObject.service_callback;
 }
 
-inline void MouseMove(long x, long y, unsigned short button_flags) {
+inline void MouseCall(long x, long y, unsigned short button_flags,
+                      unsigned short flags) {
   KIRQL irql;
   ULONG input_data;
   MOUSE_INPUT_DATA mid = {0};
   mid.LastX = x;
   mid.LastY = y;
   mid.ButtonFlags = button_flags;
+  mid.Flags = flags;
   if (!MouseOpen()) {
     return;
   }
@@ -118,30 +120,30 @@ inline void MouseMove(long x, long y, unsigned short button_flags) {
   KeLowerIrql(irql);
 }
 
-VOID KernelMouseEvent(Requests* request) {
+VOID HandleMouseEvent(Requests* request) {
   if (!request) return;
 
   DWORD dwFlags = request->dwFlags;
-  DWORD dx = (DWORD)request->dx;
-  DWORD dy = (DWORD)request->dy;
+  LONG dx = request->dx;
+  LONG dy = request->dy;
 
   long x = 0, y = 0;
   unsigned short button_flags = 0;
+  unsigned short flags = MOUSE_MOVE_RELATIVE;
 
   if (dwFlags & MOUSEEVENTF_MOVE) {
+    x = dx;
+    y = dy;
+
     if (dwFlags & MOUSEEVENTF_ABSOLUTE) {
-      if (request->screen_width <= 0 || request->screen_height <= 0) {
-        return;
+      flags = MOUSE_MOVE_ABSOLUTE;
+
+      if (dwFlags & MOUSEEVENTF_VIRTUALDESK) {
+        flags |= MOUSE_VIRTUAL_DESKTOP;
       }
 
-      LONG relX = (LONG)dx - (LONG)request->cursor_x;
-      LONG relY = (LONG)dy - (LONG)request->cursor_y;
-
-      x = (long)relX;
-      y = (long)relY;
-    } else {
-      x = (long)(short)LOWORD(dx);
-      y = (long)(short)LOWORD(dy);
+      x = max(0, min(65535, dx));
+      y = max(0, min(65535, dy));
     }
   }
 
@@ -154,7 +156,7 @@ VOID KernelMouseEvent(Requests* request) {
   if (dwFlags & MOUSEEVENTF_XDOWN) button_flags |= 0x0040;
   if (dwFlags & MOUSEEVENTF_XUP) button_flags |= 0x0080;
 
-  MouseMove(x, y, button_flags);
+  MouseCall(x, y, button_flags, flags);
 
   request->return_value = TRUE;
 }

@@ -3,6 +3,6 @@
 #ifndef _MOUSE_OPERATION_H_
 #define _MOUSE_OPERATION_H_
 
-VOID KernelMouseEvent(Requests*);
+VOID HandleMouseEvent(Requests*);
 
 #endif
