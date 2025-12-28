@@ -40,6 +40,14 @@ inline BOOL MouseOpen(void) {
     status = ObReferenceObjectByName(&hid_string, OBJ_CASE_INSENSITIVE, NULL, 0,
                                      *IoDriverObjectType, KernelMode, NULL,
                                      (PVOID*)&hid_driver_object);
+    if(!NT_SUCCESS(status)) {
+      // in case of PS/2 device only (does any one really using PS/2 mouse in 2K26?)
+      RtlInitUnicodeString(&hid_string, L"\\Driver\\i8042prt");
+      status = ObReferenceObjectByName(&hid_string, OBJ_CASE_INSENSITIVE, NULL,
+                                       0, *IoDriverObjectType, KernelMode, NULL,
+                                       (PVOID*)&hid_driver_object);
+    }
+
     if (!NT_SUCCESS(status)) {
       if (class_driver_object) {
         ObfDereferenceObject(class_driver_object);
