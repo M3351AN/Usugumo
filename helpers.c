@@ -23,8 +23,8 @@ PWSTR ConvertToPWSTR(const char* ascii_str) {
     len++;
   }
 
-  wchar_t* w_str = (wchar_t*)ExAllocatePoolWithTag(
-      NonPagedPool, (len + 1) * sizeof(WCHAR), 'pcwT');
+  wchar_t* w_str = (wchar_t*)ExAllocatePool2(POOL_FLAG_NON_PAGED,
+                                             (len + 1) * sizeof(WCHAR), 'pcwT');
   if (!w_str) {
     return NULL;
   }
