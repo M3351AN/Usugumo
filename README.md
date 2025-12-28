@@ -17,27 +17,10 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event operations, handli
 
 ## License
 
-This project is licensed under [**TOSSUCU**](LICENSE).
-```diff
-+ You are free to:
-	• Use: Utilize the software for any purpose not explicitly restricted
-	• Copy: Reproduce the software without limitation
-	• Modify: Create derivative works through remixing/transforming
-	• Merge: Combine with other materials
-	• Publish: Display/communicate the software publicly
-	• Distribute: Share copies of the software
-
-+ Under the following terms:
-	• Attribution: Must include copyright notice and this license in all copies
-	• Waifu Clause: Don't consider the author as your waifu
-
-- You are not allowed to:
-	• Sublicense: Cannot grant sublicenses for original/modified material
-
-```
+This project is licensed under [**TOSSUCU License 2025.9**](LICENSE).
 
 ## Credits
 
 - [ekknod/MouseClassServiceCallbackMeme](https://github.com/ekknod/MouseClassServiceCallbackMeme/)
-- [reactos](https://github.com/reactos/reactos/)
+- [reactos](https://github.com/reactos/reactos/) BSD Licenced part
 - [danielkrupinski/Osiris](https://github.com/danielkrupinski/Osiris/)
