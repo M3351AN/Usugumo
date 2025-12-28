@@ -1,4 +1,4 @@
-# Usugumo
+﻿# Usugumo
 
 A Windows kernel-mode driver that proxies RPM/WPM/mouse_event operations, handling user-mode process requests via ioctl
 
@@ -22,5 +22,6 @@ This project is licensed under [**TOSSUCU License 2025.9**](LICENSE).
 ## Credits
 
 - [ekknod/MouseClassServiceCallbackMeme](https://github.com/ekknod/MouseClassServiceCallbackMeme/)
-- [reactos](https://github.com/reactos/reactos/) BSD Licenced part
+- [reactos](https://github.com/reactos/reactos/) BSD Licensed part
 - [danielkrupinski/Osiris](https://github.com/danielkrupinski/Osiris/)
+- [oakboat/GsDriver-ring3](https://github.com/oakboat/GsDriver-ring3/)
