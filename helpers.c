@@ -36,3 +36,42 @@ PWSTR ConvertToPWSTR(const char* ascii_str) {
 
   return w_str;
 }
+
+PVOID SearchSignForImage(PVOID ImageBase, PUCHAR Pattern, PCHAR Mask,
+                                ULONG PatternSize) {
+  PIMAGE_NT_HEADERS NtHeaders = RtlImageNtHeader(ImageBase);
+  if (!NtHeaders) return NULL;
+
+  PIMAGE_SECTION_HEADER Section = IMAGE_FIRST_SECTION(NtHeaders);
+  for (ULONG i = 0; i < NtHeaders->FileHeader.NumberOfSections;
+       i++, Section++) {
+    if (strcmp((PCHAR)Section->Name, ".text") == 0 ||
+        (Section->Characteristics & IMAGE_SCN_CNT_CODE)) {
+      PUCHAR Start = (PUCHAR)ImageBase + Section->VirtualAddress;
+      ULONG Size = Section->Misc.VirtualSize;
+
+      for (ULONG j = 0; j <= Size - PatternSize; j++) {
+        BOOLEAN Found = TRUE;
+
+        for (ULONG k = 0; k < PatternSize; k++) {
+          if (Mask[k] == 'x' && Start[j + k] != Pattern[k]) {
+            Found = FALSE;
+            break;
+          }
+        }
+
+        if (Found) return Start + j;
+      }
+    }
+  }
+
+  return NULL;
+}
+
+LPBYTE ResolveRelativeAddress(LPBYTE pAddress, ULONG Index) {
+  LPBYTE Result = NULL;
+  if (pAddress != NULL) {
+    Result = (LPBYTE)(pAddress + *(INT*)(pAddress + Index) + Index + 4);
+  }
+  return Result;
+}

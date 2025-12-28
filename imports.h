@@ -38,4 +38,7 @@ VOID MouseClassServiceCallback(PDEVICE_OBJECT DeviceObject,
                                PMOUSE_INPUT_DATA InputDataStart,
                                PMOUSE_INPUT_DATA InputDataEnd,
                                PULONG InputDataConsumed);
+
+PIMAGE_NT_HEADERS RtlImageNtHeader(PVOID Base);
+
 #endif

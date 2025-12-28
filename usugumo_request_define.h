@@ -9,13 +9,14 @@ extern "C" {
 #include <winioctl.h>
 #endif  // !CTL_CODE
 
-#define USUGUMO_PROBE 0xCAFE0
-#define USUGUMO_READ 0xCAFE1
-#define USUGUMO_WRITE 0xCAFE2
-#define USUGUMO_MOUSE 0xCAFE3
-#define USUGUMO_MODULE_BASE 0xCAFE4
-#define USUGUMO_MODULE_SIZE 0xCAFE5
-#define USUGUMO_PID 0xCAFE6
+#define USUGUMO_PROBE 0x0CAFEFEED
+#define USUGUMO_READ 0x1CAFEFEED
+#define USUGUMO_WRITE 0x2CAFEFEED
+#define USUGUMO_MOUSE 0x3CAFEFEED
+#define USUGUMO_MODULE_BASE 0x4CAFEFEED
+#define USUGUMO_MODULE_SIZE 0x5CAFEFEED
+#define USUGUMO_PID 0x6CAFEFEED
+#define USUGUMO_ANTI_CAPTURE 0x7CAFEFEED
 
 static const unsigned long kIoctlCallDriver =
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x721, METHOD_BUFFERED, FILE_SPECIAL_ACCESS);
@@ -50,6 +51,10 @@ typedef struct _Requests {
   // base/pid request
   unsigned __int64 name_length;
   FixedStr64 name_str;
+
+  // anti capture
+  HWND window_handle;
+  unsigned int protect_flags;
 } Requests;
 #pragma pack(pop)
 

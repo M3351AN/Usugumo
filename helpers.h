@@ -7,4 +7,8 @@ VOID DecodeFixedStr64(const FixedStr64*, char*, SIZE_T);
 
 PWSTR ConvertToPWSTR(const char*);
 
+PVOID SearchSignForImage(PVOID, PUCHAR, PCHAR, ULONG);
+
+LPBYTE ResolveRelativeAddress(PVOID, ULONG);
+
 #endif

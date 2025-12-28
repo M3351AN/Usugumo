@@ -5,6 +5,7 @@
 #include <ntifs.h>
 #include <wdmsec.h>
 
+#include <ntimage.h>
 #include <windef.h>
 
 #include "./usugumo_request_define.h"
@@ -16,7 +17,7 @@
 #include "./imports.h"
 #include "./mouse_operation.h"
 #include "./process.h"
+#include "./anti_capture.h"
 #include "./request_handler.h"
-
 
 #endif

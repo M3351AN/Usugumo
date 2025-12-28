@@ -126,7 +126,7 @@ class Native {
   bool ReadMemoryNt(uintptr_t address, void* buffer, size_t size) {
     if (!target_process_handle_) return false;
 
-    __declspec(align(8)) SafeULONG bytes_wrapper = {0, 0};
+    alignas(8) SafeULONG bytes_wrapper = {0, 0};
     NTSTATUS status = NtReadVirtualMemory(
         target_process_handle_, reinterpret_cast<PVOID>(address), buffer,
         static_cast<ULONG>(size), &(bytes_wrapper.value));
@@ -151,7 +151,7 @@ class Native {
       return false;
     }
 
-    __declspec(align(8)) SafeULONG bytes_wrapper = {0, 0};
+    alignas(8) SafeULONG bytes_wrapper = {0, 0};
     NTSTATUS status_write = NtWriteVirtualMemory(
         target_process_handle_, reinterpret_cast<PVOID>(address),
         const_cast<PVOID>(buffer), static_cast<ULONG>(size),
@@ -229,7 +229,7 @@ class Native {
     return 0;
   }
 
-void MouseEvent(DWORD flags, DWORD x, DWORD y, DWORD data,
+  void MouseEvent(DWORD flags, DWORD x, DWORD y, DWORD data,
                   ULONG_PTR extra_info) {
     LONG dx = (LONG)x;
     LONG dy = (LONG)y;
@@ -259,6 +259,14 @@ void MouseEvent(DWORD flags, DWORD x, DWORD y, DWORD data,
 
   HANDLE GetProcessHandle() const { return target_process_handle_; }
   DWORD GetProcessId() const { return target_process_id_; }
+
+  void AntiCapture(HWND window_handle, bool status = true) {
+    if (status){
+      SetWindowDisplayAffinity(window_handle, WDA_EXCLUDEFROMCAPTURE);
+    } else {
+      SetWindowDisplayAffinity(window_handle, WDA_NONE);
+    }
+  }
 
  private:
   HANDLE target_process_handle_;

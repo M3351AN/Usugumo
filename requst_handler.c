@@ -32,6 +32,10 @@ BOOLEAN RequestHandler(Requests* pstruct) {
       pstruct->return_value = GetProcessIdByName(pstruct);
       break;
     }
+    case USUGUMO_ANTI_CAPTURE: {
+      pstruct->return_value = HandleAntiCapture(pstruct);
+      break;
+    }
     default: {
       pstruct->return_value = FALSE;
       break;

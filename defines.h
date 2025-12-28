@@ -110,4 +110,6 @@ typedef struct _MOUSE_OBJECT {
   BOOL use_mouse;
 } MOUSE_OBJECT, *PMOUSE_OBJECT;
 
+typedef BOOL(__fastcall *GreProtectSpriteContentFn)(PVOID, HWND, INT, UINT);
+
 #endif

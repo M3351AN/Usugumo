@@ -33,7 +33,11 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
   RtlInitUnicodeString(&symbolic_link_name, L"\\DosDevices\\Usugum0");
   status = IoCreateSymbolicLink(&symbolic_link_name, &device_name);
   if (status != STATUS_SUCCESS) return status;
-
+  if (!InitGreProtectSpriteContent())
+  {
+    return STATUS_ABANDONED;
+      // NOT HANDLE. CONTINUE
+  }
   SetFlag(device_object->Flags, DO_BUFFERED_IO);
 
   DriverObject->MajorFunction[IRP_MJ_CREATE] = DefaultDispatch;

@@ -102,7 +102,6 @@ class Operation : public UsugumoDriver {
     return (base != 0 && size != 0);
   }
 
-  // Pattern scan 功能 - 在指定绝对地址范围内扫描
   uintptr_t PatternScan(uintptr_t start, uintptr_t end,
                         const std::string& pattern) {
     if (start >= end) return 0;
