@@ -1,23 +1,10 @@
 // Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
 MOUSE_OBJECT gMouseObject;
-QWORD _KeAcquireSpinLockAtDpcLevel;
-QWORD _KeReleaseSpinLockFromDpcLevel;
-QWORD _IofCompleteRequest;
-QWORD _IoReleaseRemoveLockEx;
 
 inline BOOL MouseOpen(void) {
   // https://github.com/nbqofficial/norsefire
   // https://github.com/ekknod/MouseClassServiceCallbackMeme
-
-  /* Microsoft compiler is sometimes retarded, thats why we have to do this non
-   * sense */
-  /* It would otherwise generate wrapper functions around, and it would cause
-   * system BSOD */
-  _KeAcquireSpinLockAtDpcLevel = (QWORD)KeAcquireSpinLockAtDpcLevel;
-  _KeReleaseSpinLockFromDpcLevel = (QWORD)KeReleaseSpinLockFromDpcLevel;
-  _IofCompleteRequest = (QWORD)IofCompleteRequest;
-  _IoReleaseRemoveLockEx = (QWORD)IoReleaseRemoveLockEx;
 
   if (gMouseObject.use_mouse == 0) {
     UNICODE_STRING class_string;
@@ -56,8 +43,6 @@ inline BOOL MouseOpen(void) {
       return 0;
     }
 
-    PVOID class_driver_base = NULL;
-
     PDEVICE_OBJECT hid_device_object = hid_driver_object->DeviceObject;
     while (hid_device_object && !gMouseObject.service_callback) {
       PDEVICE_OBJECT class_device_object = class_driver_object->DeviceObject;
@@ -72,7 +57,7 @@ inline BOOL MouseOpen(void) {
             ((ULONG_PTR)hid_device_object->DeviceObjectExtension -
              (ULONG_PTR)hid_device_object->DeviceExtension) /
             4;
-        class_driver_base = class_driver_object->DriverStart;
+
         for (ULONG_PTR i = 0; i < device_ext_size; i++) {
           if (device_extension[i] == (ULONG_PTR)class_device_object &&
               device_extension[i + 1] > (ULONG_PTR)class_driver_object) {

@@ -15,7 +15,14 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
                     _In_ PUNICODE_STRING RegistryPath) {
   UNREFERENCED_PARAMETER(DriverObject);
   UNREFERENCED_PARAMETER(RegistryPath);
-
+  /* Microsoft compiler is sometimes retarded, thats why we have to do this non
+   * sense */
+  /* It would otherwise generate wrapper functions around, and it would cause
+   * system BSOD */
+  _KeAcquireSpinLockAtDpcLevel = (QWORD)KeAcquireSpinLockAtDpcLevel;
+  _KeReleaseSpinLockFromDpcLevel = (QWORD)KeReleaseSpinLockFromDpcLevel;
+  _IofCompleteRequest = (QWORD)IofCompleteRequest;
+  _IoReleaseRemoveLockEx = (QWORD)IoReleaseRemoveLockEx;
   UNICODE_STRING device_name, symbolic_link_name;
   PDEVICE_OBJECT device_object;
 
