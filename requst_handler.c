@@ -20,6 +20,11 @@ BOOLEAN RequestHandler(Requests* pstruct) {
       pstruct->return_value = TRUE;
       break;
     }
+    case USUGUMO_KEYBD: {
+      HandleKeybdEvent(pstruct);
+      pstruct->return_value = TRUE;
+      break;
+    }
     case USUGUMO_MODULE_BASE: {
       pstruct->return_value = GetDllAddress(pstruct);
       break;

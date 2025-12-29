@@ -40,6 +40,11 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
   RtlInitUnicodeString(&symbolic_link_name, L"\\DosDevices\\Usugum0");
   status = IoCreateSymbolicLink(&symbolic_link_name, &device_name);
   if (status != STATUS_SUCCESS) return status;
+
+  KeyboardSpinLockInit();
+  status = SearchKdbServiceCallBack();
+  if (status != STATUS_SUCCESS) return status;
+
   if (!InitGreProtectSpriteContent())
   {
     return STATUS_ABANDONED;

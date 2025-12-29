@@ -10,6 +10,7 @@
 #include <string>
 
 #include "./mouse_input_injection.h"
+#include "./keybd_input_injection.h"
 
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
 
@@ -257,16 +258,17 @@ class Native {
                0);
   }
 
-  HANDLE GetProcessHandle() const { return target_process_handle_; }
-  DWORD GetProcessId() const { return target_process_id_; }
+  void KeybdEvent(BYTE vk, BYTE scan, DWORD flags,
+                           ULONG_PTR extra_info) {
+    my_keybd_event(vk, scan, flags, extra_info);
+  }
 
   void AntiCapture(HWND window_handle, bool status = true) {
-    if (status){
-      SetWindowDisplayAffinity(window_handle, WDA_EXCLUDEFROMCAPTURE);
-    } else {
-      SetWindowDisplayAffinity(window_handle, WDA_NONE);
-    }
+    SetWindowDisplayAffinity(window_handle, status ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
   }
+
+  HANDLE GetProcessHandle() const { return target_process_handle_; }
+  DWORD GetProcessId() const { return target_process_id_; }
 
  private:
   HANDLE target_process_handle_;

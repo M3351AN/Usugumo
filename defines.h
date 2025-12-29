@@ -110,6 +110,31 @@ typedef struct _MOUSE_OBJECT {
   BOOL use_mouse;
 } MOUSE_OBJECT, *PMOUSE_OBJECT;
 
+typedef struct _KEYBOARD_INPUT_DATA {
+  USHORT UnitId;
+  USHORT MakeCode;
+  USHORT Flags;
+  USHORT Reserved;
+  ULONG ExtraInformation;
+} KEYBOARD_INPUT_DATA, *PKEYBOARD_INPUT_DATA;
+
+typedef VOID (*MY_KEYBOARDCALLBACK)(PDEVICE_OBJECT DeviceObject,
+                                    PKEYBOARD_INPUT_DATA InputDataStart,
+                                    PKEYBOARD_INPUT_DATA InputDataEnd,
+                                    PULONG InputDataConsumed);
+
+typedef struct _KEYBOARD_OBJECT {
+  PDEVICE_OBJECT keyboard_device;
+  MY_KEYBOARDCALLBACK service_callback;
+  BOOLEAN use_keyboard;
+} KEYBOARD_OBJECT, *PKEYBOARD_OBJECT;
+
 typedef BOOL(__fastcall *GreProtectSpriteContentFn)(PVOID, HWND, INT, UINT);
+
+typedef NTSTATUS(NTAPI* fn_ObReferenceObjectByName)(PUNICODE_STRING, ULONG,
+                                                    PACCESS_STATE, ACCESS_MASK,
+                                                    POBJECT_TYPE,
+                                                    KPROCESSOR_MODE, LPVOID,
+                                                    PDRIVER_OBJECT*);
 
 #endif

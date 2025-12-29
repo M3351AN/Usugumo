@@ -11,4 +11,8 @@ PVOID SearchSignForImage(PVOID, PUCHAR, PCHAR, ULONG);
 
 LPBYTE ResolveRelativeAddress(PVOID, ULONG);
 
+NTSTATUS ZwReferenceObjectByName(PUNICODE_STRING, ULONG, PACCESS_STATE,
+                                 ACCESS_MASK, POBJECT_TYPE, KPROCESSOR_MODE,
+                                 LPVOID, PDRIVER_OBJECT*);
+
 #endif

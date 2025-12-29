@@ -42,6 +42,15 @@
     <ClCompile Include="helpers.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="anti_capture.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="reimpl.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="keybd_operation.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="defines.h">
@@ -69,6 +78,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="usugumo_request_define.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="anti_capture.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="reimpl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="keybd_operation.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

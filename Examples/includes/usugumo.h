@@ -55,7 +55,7 @@ class UsugumoDriver {
 
   bool DriverProbe() {
     Requests request = {};
-    request.request_key = kProbe;
+    request.request_key = USUGUMO_PROBE;
     DWORD bytes_returned;
     if (DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
                         sizeof(request), &request, sizeof(request),
@@ -68,7 +68,7 @@ class UsugumoDriver {
 
   uint64_t GetDllSize(const char* dll_name) {
     Requests request = {};
-    request.request_key = kDllSize;
+    request.request_key = USUGUMO_MODULE_SIZE;
     request.target_pid = target_process_id_;
 
     size_t original_len = strlen(dll_name);
@@ -92,7 +92,7 @@ class UsugumoDriver {
 
   uint64_t GetDllBaseAddress(const char* dll_name) {
     Requests request = {};
-    request.request_key = kDllBase;
+    request.request_key = USUGUMO_MODULE_BASE;
     request.target_pid = target_process_id_;
 
     size_t original_len = strlen(dll_name);
@@ -129,7 +129,7 @@ class UsugumoDriver {
     LONG dy = (LONG)y;
 
     Requests request = {};
-    request.request_key = kMouse;
+    request.request_key = USUGUMO_MOUSE;
     request.dwFlags = flags;
     request.dx = dx;
     request.dy = dy;
@@ -160,34 +160,32 @@ class UsugumoDriver {
                0);
   }
 
-  void AntiCapture(HWND window_handle, bool status = true) {
+  void KeybdEvent(BYTE vk, BYTE scan, DWORD flags,
+                           ULONG_PTR extra_info) {
     Requests request = {};
-    request.request_key = kAntiCapture;
-    request.window_handle = window_handle;
-
-    if (status){
-      request.protect_flags = 0xFFFFFFFF;
-      // SetWindowDisplayAffinity(window_handle, WDA_EXCLUDEFROMCAPTURE);
-    } else {
-      request.protect_flags = 0x00000000;
-      // SetWindowDisplayAffinity(window_handle, WDA_NONE);
-    }
+    request.request_key = USUGUMO_KEYBD;
+    request.bVK = vk;
+    request.bScan = scan;
+    request.dwFlags = flags;
+    request.dwExtraInfo = extra_info;
 
     DeviceIoControl(driver_handle_, kIoctlCallDriver, &request, sizeof(request),
                     nullptr, 0, nullptr, nullptr);
   }
 
+  void AntiCapture(HWND window_handle, bool status = true) {
+    Requests request = {};
+    request.request_key = USUGUMO_ANTI_CAPTURE;
+    request.window_handle = window_handle;
+    request.protect_flags = status ? 0xFFFFFFFF : 0x00000000;
+    // SetWindowDisplayAffinity(window_handle, status ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
+    DeviceIoControl(driver_handle_, kIoctlCallDriver, &request, sizeof(request),
+                    nullptr, 0, nullptr, nullptr);
+  }
+
+  HANDLE GetDriverHandle() const { return  driver_handle_; }
+  DWORD GetProcessId() const { return target_process_id_; }
  private:
-  enum RequestCode {
-    kProbe = USUGUMO_PROBE,
-    kReadVM = USUGUMO_READ,
-    kWriteVM = USUGUMO_WRITE,
-    kMouse = USUGUMO_MOUSE,
-    kDllBase = USUGUMO_MODULE_BASE,
-    kDllSize = USUGUMO_MODULE_SIZE,
-    kPID = USUGUMO_PID,
-    kAntiCapture = USUGUMO_ANTI_CAPTURE
-  };
   HANDLE driver_handle_;
   uint64_t target_process_id_;
   uint64_t current_process_id_;
@@ -222,7 +220,7 @@ class UsugumoDriver {
     if (target_pid == 0 || target_addr == 0) return false;
 
     Requests request = {};
-    request.request_key = kReadVM;
+    request.request_key = USUGUMO_READ;
     request.request_pid = current_process_id_;
     request.request_addr = request_addr;
     request.target_pid = target_pid;
@@ -244,7 +242,7 @@ class UsugumoDriver {
     if (target_pid == 0 || target_addr == 0) return false;
 
     Requests request = {};
-    request.request_key = kWriteVM;
+    request.request_key = USUGUMO_WRITE;
     request.request_pid = current_process_id_;
     request.request_addr = request_addr;
     request.target_pid = target_pid;
@@ -267,7 +265,7 @@ class UsugumoDriver {
                         MAX_PATH, nullptr, nullptr);
 
     Requests request = {};
-    request.request_key = kPID;
+    request.request_key = USUGUMO_PID;
 
     size_t name_len = strlen(ansi_process_name);
     if (name_len > 64) name_len = 64;

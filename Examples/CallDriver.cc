@@ -249,6 +249,12 @@ int main() {
     Sleep(3000);
     op.SetCursorPos(500, 500);
 
+    printf("Waiting 1 second then press VK_LWIN...\n");
+    Sleep(1000);
+    op.KeybdEvent(VK_LWIN, 0, 0, 0);
+    Sleep(100);
+    op.KeybdEvent(VK_LWIN, 0, KEYEVENTF_KEYUP, 0);
+
     printf("Waiting 1 second then anti capture test window...\n");
     Sleep(1000);
     

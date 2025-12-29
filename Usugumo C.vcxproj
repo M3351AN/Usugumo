@@ -118,6 +118,8 @@
   <ItemGroup>
     <ClCompile Include="anti_capture.c" />
     <ClCompile Include="dispatches.c" />
+    <ClInclude Include="keybd_operation.h" />
+    <ClCompile Include="keybd_operation.c" />
     <ClCompile Include="process.c" />
     <ClCompile Include="helpers.c" />
     <ClCompile Include="mouse_operation.c" />

@@ -13,10 +13,11 @@ extern "C" {
 #define USUGUMO_READ 0x1CAFEFEED
 #define USUGUMO_WRITE 0x2CAFEFEED
 #define USUGUMO_MOUSE 0x3CAFEFEED
-#define USUGUMO_MODULE_BASE 0x4CAFEFEED
-#define USUGUMO_MODULE_SIZE 0x5CAFEFEED
-#define USUGUMO_PID 0x6CAFEFEED
-#define USUGUMO_ANTI_CAPTURE 0x7CAFEFEED
+#define USUGUMO_KEYBD 0x4CAFEFEED
+#define USUGUMO_MODULE_BASE 0x5CAFEFEED
+#define USUGUMO_MODULE_SIZE 0x6CAFEFEED
+#define USUGUMO_PID 0x7CAFEFEED
+#define USUGUMO_ANTI_CAPTURE 0x8CAFEFEED
 
 static const unsigned long kIoctlCallDriver =
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x721, METHOD_BUFFERED, FILE_SPECIAL_ACCESS);
@@ -47,6 +48,10 @@ typedef struct _Requests {
   unsigned long dy;
   unsigned long dwData;
   unsigned __int64 dwExtraInfo;
+
+  // keybd_event
+  unsigned short bVK;
+  unsigned short bScan;
 
   // base/pid request
   unsigned __int64 name_length;

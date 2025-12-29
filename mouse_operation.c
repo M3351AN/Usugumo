@@ -1,6 +1,6 @@
 // Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
-MOUSE_OBJECT gMouseObject;
+MOUSE_OBJECT gMouseObject = {0};
 
 inline BOOL MouseOpen(void) {
   // https://github.com/nbqofficial/norsefire

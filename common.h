@@ -16,6 +16,7 @@
 #include "./helpers.h"
 #include "./imports.h"
 #include "./mouse_operation.h"
+#include "./keybd_operation.h"
 #include "./process.h"
 #include "./anti_capture.h"
 #include "./request_handler.h"

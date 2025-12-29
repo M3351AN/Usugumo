@@ -75,3 +75,28 @@ LPBYTE ResolveRelativeAddress(LPBYTE pAddress, ULONG Index) {
   }
   return Result;
 }
+
+NTSTATUS ZwReferenceObjectByName(PUNICODE_STRING ObjectName, ULONG Attributes,
+                                 PACCESS_STATE PassedAccessState,
+                                 ACCESS_MASK DesiredAccess,
+                                 POBJECT_TYPE ObjectType,
+                                 KPROCESSOR_MODE AccessMode,
+                                 LPVOID ParseContext, PDRIVER_OBJECT* Object) {
+  static fn_ObReferenceObjectByName _ObReferenceObjectByName = NULL;
+  NTSTATUS Status = STATUS_UNSUCCESSFUL;
+  UNICODE_STRING FuncName;
+
+  if (_ObReferenceObjectByName == NULL) {
+    RtlInitUnicodeString(&FuncName, L"ObReferenceObjectByName");
+    _ObReferenceObjectByName =
+        (fn_ObReferenceObjectByName)MmGetSystemRoutineAddress(&FuncName);
+  }
+
+  if (_ObReferenceObjectByName != NULL) {
+    Status = _ObReferenceObjectByName(ObjectName, Attributes, PassedAccessState,
+                                      DesiredAccess, ObjectType, AccessMode,
+                                      ParseContext, Object);
+  }
+
+  return Status;
+}
