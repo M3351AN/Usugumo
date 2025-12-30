@@ -5,7 +5,7 @@ VOID DriverUnload(_In_ struct _DRIVER_OBJECT* DriverObject) {
   UNREFERENCED_PARAMETER(DriverObject);
   if (DriverObject->DeviceObject) {
     UNICODE_STRING symbolic_link_name;
-    RtlInitUnicodeString(&symbolic_link_name, L"\\DosDevices\\Usugum0");
+    RtlInitUnicodeString(&symbolic_link_name, L"\\DosDevices\\Global\\Usugum0");
     IoDeleteSymbolicLink(&symbolic_link_name);
     IoDeleteDevice(DriverObject->DeviceObject);
   }
@@ -37,7 +37,7 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
       FILE_DEVICE_SECURE_OPEN, FALSE, &sddl_string, NULL, &device_object);
   if (status != STATUS_SUCCESS) return status;
 
-  RtlInitUnicodeString(&symbolic_link_name, L"\\DosDevices\\Usugum0");
+  RtlInitUnicodeString(&symbolic_link_name, L"\\DosDevices\\Global\\Usugum0");
   status = IoCreateSymbolicLink(&symbolic_link_name, &device_name);
   if (status != STATUS_SUCCESS) return status;
 
