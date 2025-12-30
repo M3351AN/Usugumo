@@ -2,12 +2,12 @@
 #pragma once
 #ifndef _NATIVE_H_
 #define _NATIVE_H_
-#include <TlHelp32.h>
 #include <Windows.h>
-#include <psapi.h>
+#include <TlHelp32.h>
 
 #include <cstdint>
 #include <string>
+#include <algorithm>
 
 #include "./mouse_input_injection.h"
 #include "./keybd_input_injection.h"
@@ -53,6 +53,60 @@ typedef NTSTATUS(WINAPI* pNtProtectVirtualMemory)(
     HANDLE ProcessHandle, PVOID* BaseAddress, PSIZE_T NumberOfBytesToProtect,
     ULONG NewAccessProtection, PULONG OldAccessProtection);
 
+constexpr PROCESS_INFORMATION_CLASS ProcessBasicInformation = (PROCESS_INFORMATION_CLASS)0;
+
+typedef struct _PROCESS_BASIC_INFORMATION {
+    PVOID Reserved1;
+    PVOID PebBaseAddress;
+    PVOID Reserved2[2];
+    ULONG_PTR UniqueProcessId;
+    PVOID Reserved3;
+} PROCESS_BASIC_INFORMATION, *PPROCESS_BASIC_INFORMATION;
+
+typedef struct _PEB_LDR_DATA {
+    ULONG Length;
+    BOOLEAN Initialized;
+    PVOID SsHandle;
+    LIST_ENTRY InLoadOrderModuleList;
+    LIST_ENTRY InMemoryOrderModuleList;
+    LIST_ENTRY InInitializationOrderModuleList;
+} PEB_LDR_DATA, *PPEB_LDR_DATA;
+
+typedef struct _LDR_DATA_TABLE_ENTRY {
+    LIST_ENTRY InLoadOrderLinks;
+    LIST_ENTRY InMemoryOrderLinks;
+    LIST_ENTRY InInitializationOrderLinks;
+    PVOID DllBase;
+    PVOID EntryPoint;
+    ULONG SizeOfImage;
+    UNICODE_STRING FullDllName;
+    UNICODE_STRING BaseDllName;
+    ULONG Flags;
+    WORD LoadCount;
+    WORD TlsIndex;
+    LIST_ENTRY HashLinks;
+    ULONG TimeDateStamp;
+} LDR_DATA_TABLE_ENTRY, *PLDR_DATA_TABLE_ENTRY;
+
+typedef struct _PEB {
+    BOOLEAN InheritedAddressSpace;
+    BOOLEAN ReadImageFileExecOptions;
+    BOOLEAN BeingDebugged;
+    BOOLEAN Spare;
+    PVOID Mutant;
+    PVOID ImageBaseAddress;
+    PPEB_LDR_DATA Ldr;
+    // ...
+} PEB, *PPEB;
+
+typedef NTSTATUS(WINAPI* pNtQueryInformationProcess)(
+    HANDLE ProcessHandle,
+    PROCESS_INFORMATION_CLASS ProcessInformationClass,
+    PVOID ProcessInformation,
+    ULONG ProcessInformationLength,
+    PULONG ReturnLength
+);
+
 inline static OBJECT_ATTRIBUTES InitObjectAttributes(
     PUNICODE_STRING name, ULONG attributes, HANDLE hRoot,
     PSECURITY_DESCRIPTOR security) noexcept {
@@ -89,6 +143,10 @@ inline static pNtWriteVirtualMemory NtWriteVirtualMemory = []() {
 inline static pNtProtectVirtualMemory NtProtectVirtualMemory = []() {
   return reinterpret_cast<pNtProtectVirtualMemory>(
       GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtProtectVirtualMemory"));
+}();
+inline static pNtQueryInformationProcess NtQueryInformationProcess = []() {
+  return reinterpret_cast<pNtQueryInformationProcess>(
+      GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtQueryInformationProcess"));
 }();
 
 class Native {
@@ -169,65 +227,27 @@ class Native {
   uint64_t GetDllBaseAddress(const char* dll_name) {
     if (!target_process_handle_) return 0;
 
-    HMODULE modules[1024];
-    DWORD needed;
-
-    if (EnumProcessModules(target_process_handle_, modules, sizeof(modules),
-                           &needed)) {
-      int module_count = needed / sizeof(HMODULE);
-
-      for (int i = 0; i < module_count; i++) {
-        char module_name[MAX_PATH];
-        if (GetModuleFileNameExA(target_process_handle_, modules[i],
-                                 module_name, sizeof(module_name))) {
-          std::string name(module_name);
-          size_t pos = name.find_last_of("\\/");
-          if (pos != std::string::npos) {
-            name = name.substr(pos + 1);
-          }
-
-          if (_stricmp(name.c_str(), dll_name) == 0) {
-            return reinterpret_cast<uint64_t>(modules[i]);
-          }
-        }
-      }
+    PLDR_DATA_TABLE_ENTRY pLdrEntry = nullptr;
+    if (!GetLdrDataTableEntryByName(dll_name, &pLdrEntry)) {
+        return 0;
     }
 
-    return 0;
+    uint64_t baseAddr = reinterpret_cast<uint64_t>(pLdrEntry->DllBase);
+    delete pLdrEntry;
+    return baseAddr;
   }
 
   uint64_t GetDllSize(const char* dll_name) {
     if (!target_process_handle_) return 0;
 
-    HMODULE modules[1024];
-    DWORD needed;
-
-    if (EnumProcessModules(target_process_handle_, modules, sizeof(modules),
-                           &needed)) {
-      int module_count = needed / sizeof(HMODULE);
-
-      for (int i = 0; i < module_count; i++) {
-        char module_name[MAX_PATH];
-        if (GetModuleFileNameExA(target_process_handle_, modules[i],
-                                 module_name, sizeof(module_name))) {
-          std::string name(module_name);
-          size_t pos = name.find_last_of("\\/");
-          if (pos != std::string::npos) {
-            name = name.substr(pos + 1);
-          }
-
-          if (_stricmp(name.c_str(), dll_name) == 0) {
-            MODULEINFO module_info;
-            if (GetModuleInformation(target_process_handle_, modules[i],
-                                     &module_info, sizeof(module_info))) {
-              return module_info.SizeOfImage;
-            }
-          }
-        }
-      }
+    PLDR_DATA_TABLE_ENTRY pLdrEntry = nullptr;
+    if (!GetLdrDataTableEntryByName(dll_name, &pLdrEntry)) {
+        return 0;
     }
 
-    return 0;
+    uint64_t dllSize = static_cast<uint64_t>(pLdrEntry->SizeOfImage);
+    delete pLdrEntry;
+    return dllSize;
   }
 
   void MouseEvent(DWORD flags, DWORD x, DWORD y, DWORD data,
@@ -306,6 +326,81 @@ class Native {
 
     CloseHandle(snapshot);
     return pid;
+  }
+
+  bool GetLdrDataTableEntryByName(const char* dll_name, PLDR_DATA_TABLE_ENTRY* pOutLdrEntry) {
+    if (!target_process_handle_ || !dll_name || !pOutLdrEntry) {
+        return false;
+    }
+
+    *pOutLdrEntry = new LDR_DATA_TABLE_ENTRY();
+    PROCESS_BASIC_INFORMATION pbi = {0};
+    ULONG returnLength = 0;
+
+    NTSTATUS status = NtQueryInformationProcess(
+        target_process_handle_,
+        ProcessBasicInformation,
+        &pbi,
+        sizeof(PROCESS_BASIC_INFORMATION),
+        &returnLength
+    );
+
+    if (!NT_SUCCESS(status)) {
+        delete *pOutLdrEntry;
+        *pOutLdrEntry = nullptr;
+        return false;
+    }
+
+    PEB peb = {0};
+    if (!ReadMemoryNt(reinterpret_cast<uintptr_t>(pbi.PebBaseAddress), &peb, sizeof(PEB))) {
+        delete *pOutLdrEntry;
+        *pOutLdrEntry = nullptr;
+        return false;
+    }
+
+    PEB_LDR_DATA ldrData = {0};
+    if (!ReadMemoryNt(reinterpret_cast<uintptr_t>(peb.Ldr), &ldrData, sizeof(PEB_LDR_DATA))) {
+        delete *pOutLdrEntry;
+        *pOutLdrEntry = nullptr;
+        return false;
+    }
+
+    PLIST_ENTRY pModuleListHead = &ldrData.InLoadOrderModuleList;
+    PLIST_ENTRY pCurrentListEntry = pModuleListHead->Flink;
+
+    wchar_t dllNameWide[MAX_PATH] = {0};
+    MultiByteToWideChar(CP_ACP, 0, dll_name, -1, dllNameWide, MAX_PATH);
+
+    while (true) {
+        PLDR_DATA_TABLE_ENTRY pRemoteLdrEntry = CONTAINING_RECORD(pCurrentListEntry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        if (!ReadMemoryNt(reinterpret_cast<uintptr_t>(pRemoteLdrEntry), *pOutLdrEntry, sizeof(LDR_DATA_TABLE_ENTRY))) {
+            break;
+        }
+
+        wchar_t baseDllName[MAX_PATH] = {0};
+        if ((*pOutLdrEntry)->BaseDllName.Buffer && (*pOutLdrEntry)->BaseDllName.Length > 0) {
+            size_t len1 = static_cast<size_t>((*pOutLdrEntry)->BaseDllName.Length);
+            size_t len2 = sizeof(baseDllName) - sizeof(wchar_t);
+            ReadMemoryNt(
+                reinterpret_cast<uintptr_t>((*pOutLdrEntry)->BaseDllName.Buffer),
+                baseDllName,
+                std::min(len1, len2)
+            );
+        }
+
+        if (_wcsicmp(baseDllName, dllNameWide) == 0) {
+            return true;
+        }
+
+        pCurrentListEntry = (*pOutLdrEntry)->InLoadOrderLinks.Flink;
+        if (pCurrentListEntry == pModuleListHead) {
+            break;
+        }
+    }
+
+    delete *pOutLdrEntry;
+    *pOutLdrEntry = nullptr;
+    return false;
   }
 };
 
