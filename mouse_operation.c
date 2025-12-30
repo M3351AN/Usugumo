@@ -7,47 +7,50 @@ inline BOOL MouseOpen(void) {
   // https://github.com/ekknod/MouseClassServiceCallbackMeme
 
   if (gMouseObject.use_mouse == 0) {
-    UNICODE_STRING class_string;
-    RtlInitUnicodeString(&class_string, L"\\Driver\\MouClass");
+    UNICODE_STRING class_string = RTL_CONSTANT_STRING(L"\\Driver\\MouClass");
+    UNICODE_STRING mouse_driver_names[] = {
+        RTL_CONSTANT_STRING(L"\\Driver\\MouHID"),
+        RTL_CONSTANT_STRING(L"\\Driver\\i8042prt")};
 
     PDRIVER_OBJECT class_driver_object = NULL;
-    NTSTATUS status = ObReferenceObjectByName(
-        &class_string, OBJ_CASE_INSENSITIVE, NULL, 0, *IoDriverObjectType,
-        KernelMode, NULL, (PVOID*)&class_driver_object);
-    if (!NT_SUCCESS(status)) {
-      gMouseObject.use_mouse = 0;
-      return 0;
-    }
-
-    UNICODE_STRING hid_string;
-    RtlInitUnicodeString(&hid_string, L"\\Driver\\MouHID");
-
     PDRIVER_OBJECT hid_driver_object = NULL;
+    PDEVICE_OBJECT hid_device_object = NULL;
+    PDEVICE_OBJECT class_device_object = NULL;
+    NTSTATUS status = STATUS_UNSUCCESSFUL;
+    size_t driver_idx = 0;
 
-    status = ObReferenceObjectByName(&hid_string, OBJ_CASE_INSENSITIVE, NULL, 0,
-                                     *IoDriverObjectType, KernelMode, NULL,
-                                     (PVOID*)&hid_driver_object);
-    if(!NT_SUCCESS(status)) {
-      // in case of PS/2 device only (does any one really using PS/2 mouse in 2K26?)
-      RtlInitUnicodeString(&hid_string, L"\\Driver\\i8042prt");
-      status = ObReferenceObjectByName(&hid_string, OBJ_CASE_INSENSITIVE, NULL,
-                                       0, *IoDriverObjectType, KernelMode, NULL,
-                                       (PVOID*)&hid_driver_object);
-    }
-
+    status = ObReferenceObjectByName(&class_string, OBJ_CASE_INSENSITIVE, NULL,
+                                     0, *IoDriverObjectType, KernelMode, NULL,
+                                     (PVOID*)&class_driver_object);
     if (!NT_SUCCESS(status)) {
-      if (class_driver_object) {
-        ObfDereferenceObject(class_driver_object);
-      }
       gMouseObject.use_mouse = 0;
-      return 0;
+      return FALSE;
     }
 
-    PDEVICE_OBJECT hid_device_object = hid_driver_object->DeviceObject;
+    for (driver_idx = 0; driver_idx < ARRAYSIZE(mouse_driver_names);
+         driver_idx++) {
+      status = ObReferenceObjectByName(
+          &mouse_driver_names[driver_idx], OBJ_CASE_INSENSITIVE, NULL, 0,
+          *IoDriverObjectType, KernelMode, NULL, (PVOID*)&hid_driver_object);
+      if (NT_SUCCESS(status)) {
+        break;
+      }
+    }
+
+    if (!NT_SUCCESS(status) || hid_driver_object == NULL) {
+      ObfDereferenceObject(class_driver_object);
+      gMouseObject.use_mouse = 0;
+      return FALSE;
+    }
+
+    hid_device_object = hid_driver_object->DeviceObject;
+    gMouseObject.service_callback = NULL;
+    gMouseObject.mouse_device = NULL;
+
     while (hid_device_object && !gMouseObject.service_callback) {
-      PDEVICE_OBJECT class_device_object = class_driver_object->DeviceObject;
+      class_device_object = class_driver_object->DeviceObject;
       while (class_device_object && !gMouseObject.service_callback) {
-        if (!class_device_object->NextDevice && !gMouseObject.mouse_device) {
+        if (!gMouseObject.mouse_device && !class_device_object->NextDevice) {
           gMouseObject.mouse_device = class_device_object;
         }
 
@@ -63,7 +66,6 @@ inline BOOL MouseOpen(void) {
               device_extension[i + 1] > (ULONG_PTR)class_driver_object) {
             gMouseObject.service_callback =
                 (MouseClassServiceCallbackFn)(device_extension[i + 1]);
-
             break;
           }
         }
@@ -86,12 +88,12 @@ inline BOOL MouseOpen(void) {
     ObfDereferenceObject(class_driver_object);
     ObfDereferenceObject(hid_driver_object);
 
-    if (gMouseObject.mouse_device && gMouseObject.service_callback) {
-      gMouseObject.use_mouse = 1;
-    }
+    gMouseObject.use_mouse =
+        (gMouseObject.mouse_device && gMouseObject.service_callback) ? 1 : 0;
   }
 
-  return gMouseObject.mouse_device && gMouseObject.service_callback;
+  return (gMouseObject.mouse_device != NULL) &&
+         (gMouseObject.service_callback != NULL);
 }
 
 inline void MouseCall(long x, long y, unsigned short button_flags,

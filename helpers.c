@@ -84,10 +84,9 @@ NTSTATUS ZwReferenceObjectByName(PUNICODE_STRING ObjectName, ULONG Attributes,
                                  LPVOID ParseContext, PDRIVER_OBJECT* Object) {
   static fn_ObReferenceObjectByName _ObReferenceObjectByName = NULL;
   NTSTATUS Status = STATUS_UNSUCCESSFUL;
-  UNICODE_STRING FuncName;
 
   if (_ObReferenceObjectByName == NULL) {
-    RtlInitUnicodeString(&FuncName, L"ObReferenceObjectByName");
+    UNICODE_STRING FuncName = RTL_CONSTANT_STRING(L"ObReferenceObjectByName");
     _ObReferenceObjectByName =
         (fn_ObReferenceObjectByName)MmGetSystemRoutineAddress(&FuncName);
   }

@@ -5,8 +5,6 @@ extern PLIST_ENTRY PsLoadedModuleList;
 static GreProtectSpriteContentFn GreProtectSpriteContent = NULL;
 
 static PVOID GetWin32kBase() {
-  UNICODE_STRING ModuleName;
-  RtlInitUnicodeString(&ModuleName, L"win32kfull.sys");
   if (!PsLoadedModuleList) return NULL;
   for (PLIST_ENTRY Entry = PsLoadedModuleList->Flink;
        Entry != PsLoadedModuleList; Entry = Entry->Flink) {
