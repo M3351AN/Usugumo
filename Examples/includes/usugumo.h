@@ -28,8 +28,10 @@ class UsugumoDriver {
   }
 
   bool Initialize(uint64_t process_id) {
-    driver_handle_ = CreateFileA("\\\\.\\Usugum0", GENERIC_READ, 0, nullptr,
+    if (driver_handle_  == INVALID_HANDLE_VALUE) {
+      driver_handle_ = CreateFileA("\\\\.\\Usugum0", GENERIC_READ, 0, nullptr,
                                  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    }
     if (driver_handle_ != INVALID_HANDLE_VALUE) {
       target_process_id_ = process_id;
       current_process_id_ = GetCurrentProcessId();
@@ -39,8 +41,11 @@ class UsugumoDriver {
   }
 
   bool Initialize(const wchar_t* process_name) {
-    driver_handle_ = CreateFileA("\\\\.\\Usugum0", GENERIC_READ, 0, nullptr,
+    if (driver_handle_  == INVALID_HANDLE_VALUE) {
+      driver_handle_ = CreateFileA("\\\\.\\Usugum0", GENERIC_READ, 0, nullptr,
                                  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    }
+
     DWORD pid = GetProcessIdByName(process_name);
     if (pid == 0) {
       return false;
@@ -54,6 +59,10 @@ class UsugumoDriver {
   }
 
   bool DriverProbe() {
+    if (driver_handle_  == INVALID_HANDLE_VALUE) {
+      driver_handle_ = CreateFileA("\\\\.\\Usugum0", GENERIC_READ, 0, nullptr,
+                                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    }
     Requests request = {};
     request.request_key = USUGUMO_PROBE;
     DWORD bytes_returned;

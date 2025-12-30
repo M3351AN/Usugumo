@@ -163,19 +163,6 @@ int main() {
     
     Operation op;
     
-    if (!op.Init(L"Target.exe")) {
-        printf("Failed to initialize\n");
-        windowData.windowRunning = false;
-        PostThreadMessage(GetThreadId(windowThread), WM_QUIT, 0, 0);
-        WaitForSingleObject(windowThread, 1000);
-        CloseHandle(windowThread);
-        if (windowData.windowReadyEvent) {
-            CloseHandle(windowData.windowReadyEvent);
-        }
-        system("pause");
-        return 1;
-    }
-    
 #ifdef USING_USUGUMO
     if (!op.DriverProbe()) {
         printf("Driver probe failed\n");
@@ -193,7 +180,19 @@ int main() {
 #else
     printf("Using native api\n");
 #endif
-    
+
+    if (!op.Init(L"Target.exe")) {
+        printf("Failed to initialize\n");
+        windowData.windowRunning = false;
+        PostThreadMessage(GetThreadId(windowThread), WM_QUIT, 0, 0);
+        WaitForSingleObject(windowThread, 1000);
+        CloseHandle(windowThread);
+        if (windowData.windowReadyEvent) {
+            CloseHandle(windowData.windowReadyEvent);
+        }
+        system("pause");
+        return 1;
+    }
     uint64_t base_address = 0;
     uint64_t module_size = 0;
     if (!op.GetModuleInfo("Target.exe", &base_address, &module_size)) {
