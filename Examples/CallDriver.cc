@@ -193,6 +193,11 @@ int main() {
         system("pause");
         return 1;
     }
+#ifdef USING_USUGUMO
+    printf("Driver handle created 0x%p\n", op.GetDriverHandle());
+#else
+    printf("Process handle created 0x%p\n", op.GetProcessHandle());
+#endif
     uint64_t base_address = 0;
     uint64_t module_size = 0;
     if (!op.GetModuleInfo("Target.exe", &base_address, &module_size)) {

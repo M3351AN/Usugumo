@@ -3,7 +3,6 @@
 #ifndef _NATIVE_H_
 #define _NATIVE_H_
 #include <Windows.h>
-#include <TlHelp32.h>
 
 #include <cstdint>
 #include <string>
@@ -13,66 +12,138 @@
 #include "./keybd_input_injection.h"
 
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
+#define STATUS_INFO_LENGTH_MISMATCH ((NTSTATUS)0xC0000004L)
+#define SYSCALL_INSTR_SIZE 16    // most syscall instruction size
+#define SystemProcessInformation 5
+#define NT_FUNC_MAX_SEARCH_SIZE 32 // just incase
 
-typedef struct _UNICODE_STRING {
+typedef struct _UNICODE_STRING UNICODE_STRING, *PUNICODE_STRING;
+typedef struct _CLIENT_ID CLIENT_ID, *PCLIENT_ID;
+typedef struct _OBJECT_ATTRIBUTES OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
+typedef struct _PROCESS_BASIC_INFORMATION PROCESS_BASIC_INFORMATION, *PPROCESS_BASIC_INFORMATION;
+typedef struct _PEB_LDR_DATA PEB_LDR_DATA, *PPEB_LDR_DATA;
+typedef struct _LDR_DATA_TABLE_ENTRY LDR_DATA_TABLE_ENTRY, *PLDR_DATA_TABLE_ENTRY;
+typedef struct _PEB PEB, *PPEB;
+typedef struct _SYSTEM_PROCESS_INFORMATION SYSTEM_PROCESS_INFORMATION, *PSYSTEM_PROCESS_INFORMATION;
+
+static ULONG g_NtOpenProcess_SyscallNum = 0;
+static ULONG g_NtReadVirtualMemory_SyscallNum = 0;
+static ULONG g_NtWriteVirtualMemory_SyscallNum = 0;
+static ULONG g_NtProtectVirtualMemory_SyscallNum = 0;
+static ULONG g_NtQueryInformationProcess_SyscallNum = 0;
+static ULONG g_NtQuerySystemInformation_SyscallNum = 0;
+
+typedef NTSTATUS(NTAPI* _NtOpenProcess)(PHANDLE ProcessHandle,
+                                        ACCESS_MASK DesiredAccess,
+                                        POBJECT_ATTRIBUTES ObjectAttributes,
+                                        PCLIENT_ID ClientId);
+static _NtOpenProcess pfnNtOpenProcess = nullptr;
+
+typedef NTSTATUS(WINAPI* pNtReadVirtualMemory)(HANDLE ProcessHandle,
+                                               PVOID BaseAddress, PVOID Buffer,
+                                               ULONG NumberOfBytesToRead,
+                                               PULONG NumberOfBytesRead);
+static pNtReadVirtualMemory pfnNtReadVirtualMemory = nullptr;
+
+typedef NTSTATUS(WINAPI* pNtWriteVirtualMemory)(HANDLE ProcessHandle,
+                                                PVOID BaseAddress, PVOID Buffer,
+                                                ULONG NumberOfBytesToWrite,
+                                                PULONG NumberOfBytesWritten);
+static pNtWriteVirtualMemory pfnNtWriteVirtualMemory = nullptr;
+
+typedef NTSTATUS(WINAPI* pNtProtectVirtualMemory)(
+    HANDLE ProcessHandle, PVOID* BaseAddress, PSIZE_T NumberOfBytesToProtect,
+    ULONG NewAccessProtection, PULONG OldAccessProtection);
+static pNtProtectVirtualMemory pfnNtProtectVirtualMemory = nullptr;
+
+constexpr PROCESS_INFORMATION_CLASS ProcessBasicInformation = (PROCESS_INFORMATION_CLASS)0;  // retarded
+typedef NTSTATUS(WINAPI* pNtQueryInformationProcess)(
+    HANDLE ProcessHandle,
+    PROCESS_INFORMATION_CLASS ProcessInformationClass,
+    PVOID ProcessInformation,
+    ULONG ProcessInformationLength,
+    PULONG ReturnLength
+);
+static pNtQueryInformationProcess pfnNtQueryInformationProcess = nullptr;
+
+typedef NTSTATUS(WINAPI* pNtQuerySystemInformation)(
+    ULONG SystemInformationClass,
+    PVOID SystemInformation,
+    ULONG SystemInformationLength,
+    PULONG ReturnLength
+);
+static pNtQuerySystemInformation pfnNtQuerySystemInformation = nullptr;
+
+
+/* 
+.text:0000000180162070                 public NtOpenProcess
+.text:0000000180162070 NtOpenProcess   proc near               ; CODE XREF: RtlQueryProcessDebugInformation+17A↑p
+.text:0000000180162070                                         ; RtlQueryProcessDebugInformation+22F↑p ...
+.text:0000000180162070                 mov     r10, rcx        ; NtOpenProcess
+.text:0000000180162073                 mov     eax, 26h ; '&'
+.text:0000000180162078                 test    byte ptr ds:7FFE0308h, 1
+.text:0000000180162080                 jnz     short loc_180162085
+.text:0000000180162082                 syscall                 ; Low latency system call
+.text:0000000180162084                 retn
+.text:0000000180162085 ; ---------------------------------------------------------------------------
+.text:0000000180162085
+.text:0000000180162085 loc_180162085:                          ; CODE XREF: NtOpenProcess+10↑j
+.text:0000000180162085                 int     2Eh             ; DOS 2+ internal - EXECUTE COMMAND
+.text:0000000180162085                                         ; DS:SI -> counted CR-terminated command string
+.text:0000000180162087                 retn
+.text:0000000180162087 NtOpenProcess   endp
+.text:0000000180162087
+.text:0000000180162087 ; ---------------------------------------------------------------------------
+.text:0000000180162088 algn_180162088:                         ; DATA XREF: .pdata:00000001801E34CC↓o
+.text:0000000180162088                 align 10h
+.text:0000000180162090 ; Exported entry 609. NtSetInformationFile
+.text:0000000180162090 ; Exported entry 2256. ZwSetInformationFile
+ */
+static const BYTE g_SyscallTemplate[SYSCALL_INSTR_SIZE] = {
+    0x4C, 0x8B, 0xD1,          
+    0xB8, 0x00, 0x00, 0x00, 0x00,
+    0x0F, 0x05,                
+    0xC3                       
+};
+
+struct _UNICODE_STRING {
   USHORT Length;
   USHORT MaximumLength;
   PWCH Buffer;
-} UNICODE_STRING, *PUNICODE_STRING;
+};
 
-typedef struct _CLIENT_ID {
+struct _CLIENT_ID {
   PVOID UniqueProcess;
   PVOID UniqueThread;
-} CLIENT_ID, *PCLIENT_ID;
+};
 
-typedef struct _OBJECT_ATTRIBUTES {
+struct _OBJECT_ATTRIBUTES {
   ULONG Length;
   HANDLE RootDirectory;
   PUNICODE_STRING ObjectName;
   ULONG Attributes;
   PVOID SecurityDescriptor;
   PVOID SecurityQualityOfService;
-} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
+};
 
-typedef NTSTATUS(NTAPI* _NtOpenProcess)(PHANDLE ProcessHandle,
-                                        ACCESS_MASK DesiredAccess,
-                                        POBJECT_ATTRIBUTES ObjectAttributes,
-                                        PCLIENT_ID ClientId);
-
-typedef NTSTATUS(WINAPI* pNtReadVirtualMemory)(HANDLE ProcessHandle,
-                                               PVOID BaseAddress, PVOID Buffer,
-                                               ULONG NumberOfBytesToRead,
-                                               PULONG NumberOfBytesRead);
-
-typedef NTSTATUS(WINAPI* pNtWriteVirtualMemory)(HANDLE ProcessHandle,
-                                                PVOID BaseAddress, PVOID Buffer,
-                                                ULONG NumberOfBytesToWrite,
-                                                PULONG NumberOfBytesWritten);
-
-typedef NTSTATUS(WINAPI* pNtProtectVirtualMemory)(
-    HANDLE ProcessHandle, PVOID* BaseAddress, PSIZE_T NumberOfBytesToProtect,
-    ULONG NewAccessProtection, PULONG OldAccessProtection);
-
-constexpr PROCESS_INFORMATION_CLASS ProcessBasicInformation = (PROCESS_INFORMATION_CLASS)0;
-
-typedef struct _PROCESS_BASIC_INFORMATION {
+struct _PROCESS_BASIC_INFORMATION {
     PVOID Reserved1;
     PVOID PebBaseAddress;
     PVOID Reserved2[2];
     ULONG_PTR UniqueProcessId;
     PVOID Reserved3;
-} PROCESS_BASIC_INFORMATION, *PPROCESS_BASIC_INFORMATION;
+};
 
-typedef struct _PEB_LDR_DATA {
+struct _PEB_LDR_DATA {
     ULONG Length;
     BOOLEAN Initialized;
     PVOID SsHandle;
     LIST_ENTRY InLoadOrderModuleList;
     LIST_ENTRY InMemoryOrderModuleList;
     LIST_ENTRY InInitializationOrderModuleList;
-} PEB_LDR_DATA, *PPEB_LDR_DATA;
+};
 
-typedef struct _LDR_DATA_TABLE_ENTRY {
+struct _LDR_DATA_TABLE_ENTRY {
     LIST_ENTRY InLoadOrderLinks;
     LIST_ENTRY InMemoryOrderLinks;
     LIST_ENTRY InInitializationOrderLinks;
@@ -86,9 +157,9 @@ typedef struct _LDR_DATA_TABLE_ENTRY {
     WORD TlsIndex;
     LIST_ENTRY HashLinks;
     ULONG TimeDateStamp;
-} LDR_DATA_TABLE_ENTRY, *PLDR_DATA_TABLE_ENTRY;
+};
 
-typedef struct _PEB {
+struct _PEB {
     BOOLEAN InheritedAddressSpace;
     BOOLEAN ReadImageFileExecOptions;
     BOOLEAN BeingDebugged;
@@ -96,16 +167,178 @@ typedef struct _PEB {
     PVOID Mutant;
     PVOID ImageBaseAddress;
     PPEB_LDR_DATA Ldr;
-    // ...
-} PEB, *PPEB;
+};
 
-typedef NTSTATUS(WINAPI* pNtQueryInformationProcess)(
-    HANDLE ProcessHandle,
-    PROCESS_INFORMATION_CLASS ProcessInformationClass,
-    PVOID ProcessInformation,
-    ULONG ProcessInformationLength,
-    PULONG ReturnLength
-);
+struct _SYSTEM_PROCESS_INFORMATION {
+    ULONG NextEntryOffset;
+    ULONG NumberOfThreads;
+    ULONG_PTR WorkingSetPrivateSize;
+    ULONG HardFaultCount;
+    ULONG NumberOfThreadsHighWatermark;
+    ULONGLONG CycleTime;
+    ULONG_PTR CreateTime;
+    ULONG_PTR UserTime;
+    ULONG_PTR KernelTime;
+    UNICODE_STRING ImageName;
+    ULONG BasePriority;
+    HANDLE ProcessId;
+    HANDLE InheritedFromProcessId;
+    ULONG HandleCount;
+    ULONG SessionId;
+    ULONG_PTR PageDirectoryBase;
+    SIZE_T PeakVirtualSize;
+    SIZE_T VirtualSize;
+    ULONG PageFaultCount;
+    SIZE_T PeakWorkingSetSize;
+    SIZE_T WorkingSetSize;
+    SIZE_T QuotaPeakPagedPoolUsage;
+    SIZE_T QuotaPagedPoolUsage;
+    SIZE_T QuotaPeakNonPagedPoolUsage;
+    SIZE_T QuotaNonPagedPoolUsage;
+    SIZE_T PagefileUsage;
+    SIZE_T PeakPagefileUsage;
+    SIZE_T PrivatePageCount;
+    LARGE_INTEGER ReadOperationCount;
+    LARGE_INTEGER WriteOperationCount;
+    LARGE_INTEGER OtherOperationCount;
+    LARGE_INTEGER ReadTransferCount;
+    LARGE_INTEGER WriteTransferCount;
+    LARGE_INTEGER OtherTransferCount;
+};
+
+static bool FindSyscallInstruction(PBYTE pFuncBytes, ULONG funcSearchSize, ULONG& syscallOffset)
+{
+    if (!pFuncBytes || funcSearchSize < 2)
+        return false;
+
+    for (ULONG i = 0; i <= funcSearchSize - 2; i++)
+    {
+        if (pFuncBytes[i] == 0x0F && pFuncBytes[i+1] == 0x05)
+        {
+            syscallOffset = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+template <typename T>
+static T ConstructSyscallFunction(ULONG syscallNum)
+{
+    if (syscallNum == 0)
+        return nullptr;
+
+    PBYTE pMem = (PBYTE)VirtualAlloc(nullptr, SYSCALL_INSTR_SIZE, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!pMem)
+        return nullptr;
+
+    memcpy(pMem, g_SyscallTemplate, SYSCALL_INSTR_SIZE);
+    *(PULONG)(pMem + 4) = syscallNum;
+
+    DWORD oldProtect = 0;
+    if (!VirtualProtect(pMem, SYSCALL_INSTR_SIZE, PAGE_EXECUTE_READ, &oldProtect))
+    {
+        VirtualFree(pMem, 0, MEM_RELEASE);
+        return nullptr;
+    }
+
+    return (T)pMem;
+}
+
+static void ManualSysCall_Init()
+{
+    PBYTE pNtdllBase = (PBYTE)GetModuleHandleW(L"ntdll.dll");
+    if (!pNtdllBase)
+        return;
+
+    PIMAGE_DOS_HEADER pDosHeader = (PIMAGE_DOS_HEADER)pNtdllBase;
+    if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE)
+        return;
+
+    PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)((uintptr_t)pNtdllBase + pDosHeader->e_lfanew);
+    if (pNtHeaders->Signature != IMAGE_NT_SIGNATURE || pNtHeaders->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC)
+        return;
+
+    IMAGE_DATA_DIRECTORY exportDirData = pNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    if (exportDirData.VirtualAddress == 0 || exportDirData.Size == 0)
+        return;
+
+    PIMAGE_EXPORT_DIRECTORY pExportDir = (PIMAGE_EXPORT_DIRECTORY)((uintptr_t)pNtdllBase + exportDirData.VirtualAddress);
+    if (!pExportDir)
+        return;
+
+    PDWORD pFuncNames = (PDWORD)((uintptr_t)pNtdllBase + pExportDir->AddressOfNames);
+    PDWORD pFuncAddrs = (PDWORD)((uintptr_t)pNtdllBase + pExportDir->AddressOfFunctions);
+    PWORD pFuncOrdinals = (PWORD)((uintptr_t)pNtdllBase + pExportDir->AddressOfNameOrdinals);
+
+    for (ULONG i = 0; i < pExportDir->NumberOfNames; i++)
+    {
+        uintptr_t funcNameRva = pFuncNames[i];
+        const char* pFuncName = (const char*)((uintptr_t)pNtdllBase + funcNameRva);
+        if (!pFuncName)
+            continue;
+
+        if (strncmp(pFuncName, "Nt", 2) != 0 || strncmp(pFuncName, "Zw", 2) == 0)
+            continue;
+
+        uintptr_t funcRva = pFuncAddrs[pFuncOrdinals[i]];
+        PBYTE pFuncBytes = (PBYTE)((uintptr_t)pNtdllBase + funcRva);
+        if (!pFuncBytes)
+            continue;
+
+        if (pFuncBytes[0] != 0x4C || pFuncBytes[1] != 0x8B || pFuncBytes[2] != 0xD1 || pFuncBytes[3] != 0xB8)
+        {
+            continue;
+        }
+
+        ULONG syscallNum = *(PULONG)(pFuncBytes + 4);
+        if (syscallNum == 0)
+            continue;
+
+        ULONG syscallOffset = 0;
+        if (!FindSyscallInstruction(pFuncBytes, NT_FUNC_MAX_SEARCH_SIZE, syscallOffset))
+        {
+            continue;
+        }
+
+        if (strcmp(pFuncName, "NtOpenProcess") == 0)
+        {
+            g_NtOpenProcess_SyscallNum = syscallNum;
+        }
+        else if (strcmp(pFuncName, "NtReadVirtualMemory") == 0)
+        {
+            g_NtReadVirtualMemory_SyscallNum = syscallNum;
+        }
+        else if (strcmp(pFuncName, "NtWriteVirtualMemory") == 0)
+        {
+            g_NtWriteVirtualMemory_SyscallNum = syscallNum;
+        }
+        else if (strcmp(pFuncName, "NtProtectVirtualMemory") == 0)
+        {
+            g_NtProtectVirtualMemory_SyscallNum = syscallNum;
+        }
+        else if (strcmp(pFuncName, "NtQueryInformationProcess") == 0)
+        {
+            g_NtQueryInformationProcess_SyscallNum = syscallNum;
+        }
+        else if (strcmp(pFuncName, "NtQuerySystemInformation") == 0)
+        {
+            g_NtQuerySystemInformation_SyscallNum = syscallNum;
+        }
+    }
+
+    pfnNtOpenProcess = ConstructSyscallFunction<_NtOpenProcess>(g_NtOpenProcess_SyscallNum);
+    pfnNtReadVirtualMemory = ConstructSyscallFunction<pNtReadVirtualMemory>(g_NtReadVirtualMemory_SyscallNum);
+    pfnNtWriteVirtualMemory = ConstructSyscallFunction<pNtWriteVirtualMemory>(g_NtWriteVirtualMemory_SyscallNum);
+    pfnNtProtectVirtualMemory = ConstructSyscallFunction<pNtProtectVirtualMemory>(g_NtProtectVirtualMemory_SyscallNum);
+    pfnNtQueryInformationProcess = ConstructSyscallFunction<pNtQueryInformationProcess>(g_NtQueryInformationProcess_SyscallNum);
+    pfnNtQuerySystemInformation = ConstructSyscallFunction<pNtQuerySystemInformation>(g_NtQuerySystemInformation_SyscallNum);
+}
+
+static bool g_ManualSysCallInited = []() {
+    ManualSysCall_Init();
+    return true;
+}();
 
 inline static OBJECT_ATTRIBUTES InitObjectAttributes(
     PUNICODE_STRING name, ULONG attributes, HANDLE hRoot,
@@ -124,31 +357,35 @@ inline static OBJECT_ATTRIBUTES InitObjectAttributes(
 inline static HANDLE NtOpenProcess(DWORD dwDesiredAccess, BOOL bInheritHandle,
                                    DWORD dwProcessId) noexcept {
   HANDLE hProcess = 0;
-  _NtOpenProcess pNtOpenProcess = (_NtOpenProcess)GetProcAddress(
-      GetModuleHandleA("ntdll.dll"), "NtOpenProcess");
   CLIENT_ID clientId = {(PVOID)(ULONG_PTR)dwProcessId, NULL};
   OBJECT_ATTRIBUTES objAttr = InitObjectAttributes(NULL, 0, NULL, NULL);
-  pNtOpenProcess(&hProcess, dwDesiredAccess, &objAttr, &clientId);
+  if (pfnNtOpenProcess)
+  {
+      pfnNtOpenProcess(&hProcess, dwDesiredAccess, &objAttr, &clientId);
+  }
   return hProcess;
 }
-
+/* 
+why not, cuz we have a warpper function already ^^^
+inline static _NtOpenProcess NtOpenProcess = []() {
+  return pfnNtOpenProcess;
+}();
+*/
 inline static pNtReadVirtualMemory NtReadVirtualMemory = []() {
-  return reinterpret_cast<pNtReadVirtualMemory>(
-      GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtReadVirtualMemory"));
+  return pfnNtReadVirtualMemory;
 }();
 inline static pNtWriteVirtualMemory NtWriteVirtualMemory = []() {
-  return reinterpret_cast<pNtWriteVirtualMemory>(
-      GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtWriteVirtualMemory"));
+  return pfnNtWriteVirtualMemory;
 }();
 inline static pNtProtectVirtualMemory NtProtectVirtualMemory = []() {
-  return reinterpret_cast<pNtProtectVirtualMemory>(
-      GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtProtectVirtualMemory"));
+  return pfnNtProtectVirtualMemory;
 }();
 inline static pNtQueryInformationProcess NtQueryInformationProcess = []() {
-  return reinterpret_cast<pNtQueryInformationProcess>(
-      GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtQueryInformationProcess"));
+  return pfnNtQueryInformationProcess;
 }();
-
+inline static pNtQuerySystemInformation NtQuerySystemInformation = []() {
+  return pfnNtQuerySystemInformation;
+}();
 class Native {
  public:
   Native() : target_process_handle_(nullptr), target_process_id_(0) {}
@@ -176,9 +413,8 @@ class Native {
     return Initialize(static_cast<uint64_t>(pid), desired_access);
   }
 
-  // too complex stuff, I dont like it.
   struct SafeULONG {
-    ULONG value;  // We just need this
+    ULONG value;
     ULONG reserved;
   };
 
@@ -303,29 +539,54 @@ class Native {
   }
 
   static DWORD GetProcessIdByName(const wchar_t* process_name) {
-    PROCESSENTRY32W pe32;
-    pe32.dwSize = sizeof(PROCESSENTRY32W);
+    if (!pfnNtQuerySystemInformation || !process_name)
+        return 0;
 
-    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snapshot == INVALID_HANDLE_VALUE) {
-      return 0;
+    DWORD dwPid = 0;
+    ULONG ulBufferSize = 0x10000;
+    PBYTE pBuffer = (PBYTE)VirtualAlloc(nullptr, ulBufferSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!pBuffer)
+        return 0;
+
+    NTSTATUS status = STATUS_INFO_LENGTH_MISMATCH;
+    while (status == STATUS_INFO_LENGTH_MISMATCH)
+    {
+        status = pfnNtQuerySystemInformation(SystemProcessInformation, pBuffer, ulBufferSize, nullptr);
+        if (status == STATUS_INFO_LENGTH_MISMATCH)
+        {
+            VirtualFree(pBuffer, 0, MEM_RELEASE);
+            ulBufferSize *= 2;
+            pBuffer = (PBYTE)VirtualAlloc(nullptr, ulBufferSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+            if (!pBuffer)
+                return 0;
+        }
     }
 
-    if (!Process32FirstW(snapshot, &pe32)) {
-      CloseHandle(snapshot);
-      return 0;
+    if (!NT_SUCCESS(status))
+    {
+        VirtualFree(pBuffer, 0, MEM_RELEASE);
+        return 0;
     }
 
-    DWORD pid = 0;
-    do {
-      if (_wcsicmp(pe32.szExeFile, process_name) == 0) {
-        pid = pe32.th32ProcessID;
-        break;
-      }
-    } while (Process32NextW(snapshot, &pe32));
+    PSYSTEM_PROCESS_INFORMATION pSPI = (PSYSTEM_PROCESS_INFORMATION)pBuffer;
+    while (true)
+    {
+        if (pSPI->ImageName.Buffer && pSPI->ProcessId != nullptr)
+        {
+            if (_wcsicmp(pSPI->ImageName.Buffer, process_name) == 0)
+            {
+                dwPid = (DWORD)(ULONG_PTR)pSPI->ProcessId;
+                break;
+            }
+        }
 
-    CloseHandle(snapshot);
-    return pid;
+        if (pSPI->NextEntryOffset == 0)
+            break;
+        pSPI = (PSYSTEM_PROCESS_INFORMATION)((uintptr_t)pSPI + pSPI->NextEntryOffset);
+    }
+
+    VirtualFree(pBuffer, 0, MEM_RELEASE);
+    return dwPid;
   }
 
   bool GetLdrDataTableEntryByName(const char* dll_name, PLDR_DATA_TABLE_ENTRY* pOutLdrEntry) {
