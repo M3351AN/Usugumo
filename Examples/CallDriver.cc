@@ -4,21 +4,78 @@
 #include <iostream>
 #include <thread>
 #include <atomic>
+#include <memory>
+#include <string_view>
 
 #include "./includes/operation.h"
 
+using WindowHandle = HWND;
+using ThreadHandle = HANDLE;
+using EventHandle = HANDLE;
+using Address = uintptr_t;
+using SizeType = size_t;
+
+constexpr inline DWORD WINDOW_CREATION_TIMEOUT = 5000u;
+constexpr inline DWORD THREAD_WAIT_TIMEOUT = 1000u;
+constexpr inline DWORD DESTROY_WINDOW_TIMEOUT = 5000u;
+constexpr inline UINT WINDOW_WIDTH = 200u;
+constexpr inline UINT WINDOW_HEIGHT = 150u;
+constexpr inline Address TEST_MEMORY_ADDR = 0xDEAD0000ULL;
+constexpr inline uint64_t TEST_WRITE_VALUE = 0x1919810ULL;
+constexpr inline std::string_view WINDOW_CLASS_NAME = "TestWindowClass";
+constexpr inline std::string_view WINDOW_TITLE = "Test";
+constexpr inline std::wstring_view TARGET_PROCESS_NAME = L"Target.exe";
+constexpr inline std::string_view SCAN_PATTERN = "AA BB CC DD ?? ?? ?? ?? 11 22 33 44";
+
+struct HandleDeleter {
+    void operator()(HANDLE h) const noexcept {
+        if (h != nullptr && h != INVALID_HANDLE_VALUE) {
+            CloseHandle(h);
+        }
+    }
+};
+
+using UniqueThreadPtr = std::unique_ptr<void, HandleDeleter>;
+using UniqueEventPtr = std::unique_ptr<void, HandleDeleter>;
+
 struct WindowData {
-    HWND hwnd = nullptr;
+    WindowHandle hwnd = nullptr;
     std::atomic<bool> windowReady{false};
     std::atomic<bool> windowRunning{true};
-    HANDLE windowReadyEvent = nullptr;
+    UniqueEventPtr windowReadyEvent;
 };
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    WindowData* windowData = reinterpret_cast<WindowData*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+
     switch (uMsg) {
+        case WM_CREATE: {
+            CREATESTRUCT* createStruct = reinterpret_cast<CREATESTRUCT*>(lParam);
+            WindowData* data = reinterpret_cast<WindowData*>(createStruct->lpCreateParams);
+            SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(data));
+            return 0;
+        }
+
+        case WM_SYSCOMMAND: {
+            if (wParam == SC_CLOSE) {
+                if (windowData && windowData->windowRunning.load()) {
+                    return 0;
+                }
+            }
+            return DefWindowProc(hwnd, uMsg, wParam, lParam);
+        }
+
+        case WM_CLOSE: {
+            if (windowData && windowData->windowRunning.load()) {
+                return 0;
+            }
+            return DefWindowProc(hwnd, uMsg, wParam, lParam);
+        }
+
         case WM_DESTROY:
             PostQuitMessage(0);
             return 0;
+
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
@@ -26,19 +83,22 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             EndPaint(hwnd, &ps);
             return 0;
         }
+
         default:
             return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
 }
 
-DWORD WINAPI WindowThreadProc(LPVOID lpParameter) {
+DWORD WINAPI WindowThreadProc(LPVOID lpParameter) noexcept {
     WindowData* windowData = static_cast<WindowData*>(lpParameter);
-    const char CLASS_NAME[] = "TestWindowClass";
-    
+    if (!windowData) {
+        return 1;
+    }
+
     WNDCLASSA wc = {};
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = GetModuleHandle(NULL);
-    wc.lpszClassName = CLASS_NAME;
+    wc.lpszClassName = WINDOW_CLASS_NAME.data();
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
     
@@ -46,28 +106,28 @@ DWORD WINAPI WindowThreadProc(LPVOID lpParameter) {
         printf("Failed to register window class in thread. Error: %lu\n", GetLastError());
         windowData->windowReady = false;
         if (windowData->windowReadyEvent) {
-            SetEvent(windowData->windowReadyEvent);
+            SetEvent(windowData->windowReadyEvent.get());
         }
         return 1;
     }
     
-    HWND hwnd = CreateWindowExA(
+    WindowHandle hwnd = CreateWindowExA(
         0,
-        CLASS_NAME,
-        "Test Window",
+        WINDOW_CLASS_NAME.data(),
+        WINDOW_TITLE.data(),
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 400, 300,
+        CW_USEDEFAULT, CW_USEDEFAULT, WINDOW_WIDTH, WINDOW_HEIGHT,
         NULL,
         NULL,
         GetModuleHandle(NULL),
-        NULL
+        windowData
     );
     
     if (!hwnd) {
         printf("Failed to create window in thread. Error: %lu\n", GetLastError());
         windowData->windowReady = false;
         if (windowData->windowReadyEvent) {
-            SetEvent(windowData->windowReadyEvent);
+            SetEvent(windowData->windowReadyEvent.get());
         }
         return 1;
     }
@@ -75,7 +135,7 @@ DWORD WINAPI WindowThreadProc(LPVOID lpParameter) {
     windowData->hwnd = hwnd;
     windowData->windowReady = true;
     if (windowData->windowReadyEvent) {
-        SetEvent(windowData->windowReadyEvent);
+        SetEvent(windowData->windowReadyEvent.get());
     }
     
     ShowWindow(hwnd, SW_SHOW);
@@ -105,20 +165,23 @@ DWORD WINAPI WindowThreadProc(LPVOID lpParameter) {
         DispatchMessage(&msg);
     }
     
-    UnregisterClassA(CLASS_NAME, GetModuleHandle(NULL));
+    UnregisterClassA(WINDOW_CLASS_NAME.data(), GetModuleHandle(NULL));
     
     return 0;
 }
 
-HANDLE CreateWindowThread(WindowData& windowData) {
-    windowData.windowReadyEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+UniqueThreadPtr CreateWindowThread(WindowData& windowData) noexcept {
+    windowData.windowReadyEvent = UniqueEventPtr(
+        CreateEvent(NULL, TRUE, FALSE, NULL),
+        HandleDeleter()
+    );
     if (!windowData.windowReadyEvent) {
         printf("Failed to create window ready event. Error: %lu\n", GetLastError());
-        return NULL;
+        return nullptr;
     }
     
     DWORD threadId;
-    HANDLE threadHandle = CreateThread(
+    ThreadHandle threadHandle = CreateThread(
         NULL,
         0,
         WindowThreadProc,
@@ -129,32 +192,30 @@ HANDLE CreateWindowThread(WindowData& windowData) {
     
     if (!threadHandle) {
         printf("Failed to create window thread. Error: %lu\n", GetLastError());
-        CloseHandle(windowData.windowReadyEvent);
-        windowData.windowReadyEvent = nullptr;
-        return NULL;
+        windowData.windowReadyEvent.reset();
+        return nullptr;
     }
     
-    WaitForSingleObject(windowData.windowReadyEvent, 5000);
+    WaitForSingleObject(windowData.windowReadyEvent.get(), WINDOW_CREATION_TIMEOUT);
     
     if (!windowData.windowReady) {
         printf("Window creation failed or timeout.\n");
         windowData.windowRunning = false;
-        WaitForSingleObject(threadHandle, 1000);
+        WaitForSingleObject(threadHandle, THREAD_WAIT_TIMEOUT);
         CloseHandle(threadHandle);
-        CloseHandle(windowData.windowReadyEvent);
-        windowData.windowReadyEvent = nullptr;
-        return NULL;
+        windowData.windowReadyEvent.reset();
+        return nullptr;
     }
     
     printf("Window created successfully in thread. HWND: 0x%p\n", windowData.hwnd);
     
-    return threadHandle;
+    return UniqueThreadPtr(threadHandle, HandleDeleter());
 }
 
 int main() {
     WindowData windowData;
     
-    HANDLE windowThread = CreateWindowThread(windowData);
+    UniqueThreadPtr windowThread = CreateWindowThread(windowData);
     if (!windowThread) {
         printf("Failed to create window thread.\n");
         system("pause");
@@ -167,12 +228,11 @@ int main() {
     if (!op.DriverProbe()) {
         printf("Driver probe failed\n");
         windowData.windowRunning = false;
-        PostThreadMessage(GetThreadId(windowThread), WM_QUIT, 0, 0);
-        WaitForSingleObject(windowThread, 1000);
-        CloseHandle(windowThread);
-        if (windowData.windowReadyEvent) {
-            CloseHandle(windowData.windowReadyEvent);
+        DWORD threadId = GetThreadId(reinterpret_cast<HANDLE>(windowThread.get()));
+        if (threadId != 0) {
+            PostThreadMessage(threadId, WM_QUIT, 0, 0);
         }
+        WaitForSingleObject(windowThread.get(), THREAD_WAIT_TIMEOUT);
         system("pause");
         return 1;
     }
@@ -181,15 +241,14 @@ int main() {
     printf("Using native api\n");
 #endif
 
-    if (!op.Init(L"Target.exe")) {
+    if (!op.Init(TARGET_PROCESS_NAME)) {
         printf("Failed to initialize\n");
         windowData.windowRunning = false;
-        PostThreadMessage(GetThreadId(windowThread), WM_QUIT, 0, 0);
-        WaitForSingleObject(windowThread, 1000);
-        CloseHandle(windowThread);
-        if (windowData.windowReadyEvent) {
-            CloseHandle(windowData.windowReadyEvent);
+        DWORD threadId = GetThreadId(reinterpret_cast<HANDLE>(windowThread.get()));
+        if (threadId != 0) {
+            PostThreadMessage(threadId, WM_QUIT, 0, 0);
         }
+        WaitForSingleObject(windowThread.get(), THREAD_WAIT_TIMEOUT);
         system("pause");
         return 1;
     }
@@ -198,42 +257,40 @@ int main() {
 #else
     printf("Process handle created 0x%p\n", op.GetProcessHandle());
 #endif
+    std::string targetProcessNameNarrow(TARGET_PROCESS_NAME.begin(), TARGET_PROCESS_NAME.end());
     uint64_t base_address = 0;
     uint64_t module_size = 0;
-    if (!op.GetModuleInfo("Target.exe", &base_address, &module_size)) {
+    if (!op.GetModuleInfo(targetProcessNameNarrow.c_str(), &base_address, &module_size)) {
         printf("Failed to get module info\n");
         windowData.windowRunning = false;
-        PostThreadMessage(GetThreadId(windowThread), WM_QUIT, 0, 0);
-        WaitForSingleObject(windowThread, 1000);
-        CloseHandle(windowThread);
-        if (windowData.windowReadyEvent) {
-            CloseHandle(windowData.windowReadyEvent);
+        DWORD threadId = GetThreadId(reinterpret_cast<HANDLE>(windowThread.get()));
+        if (threadId != 0) {
+            PostThreadMessage(threadId, WM_QUIT, 0, 0);
         }
+        WaitForSingleObject(windowThread.get(), THREAD_WAIT_TIMEOUT);
         system("pause");
         return 1;
     }
     
     printf("Module base: 0x%llX, size: 0x%llX\n", base_address, module_size);
 
-    std::string pattern = "AA BB CC DD ?? ?? ?? ?? 11 22 33 44";
-    uintptr_t found = op.PatternScanSize(base_address, module_size, pattern);
-    printf("Pattern 'AA BB CC DD ?? ?? ?? ?? 11 22 33 44' found at: 0x%llX\n", found);
+    Address found = op.PatternScanSize(base_address, module_size, SCAN_PATTERN.data());
+    printf("Pattern '%s' found at: 0x%llX\n", SCAN_PATTERN.data(), found);
 
     uint64_t target_var = 0;
-    if (!op.Read<uint64_t>(0xDEAD0000, &target_var)) {
+    if (!op.Read<uint64_t>(TEST_MEMORY_ADDR, &target_var)) {
         printf("Failed to read memory\n");
     } else {
-        printf("Read target_var = 0x%llX at 0x%llX\n", target_var, 0xDEAD0000ULL);
+        printf("Read target_var = 0x%llX at 0x%llX\n", target_var, TEST_MEMORY_ADDR);
     }
     
-    uint64_t new_value = 0x1919810;
-    if (!op.Write<uint64_t>(0xDEAD0000, new_value, sizeof(uint64_t))) {
+    if (!op.Write<uint64_t>(TEST_MEMORY_ADDR, TEST_WRITE_VALUE, sizeof(uint64_t))) {
         printf("Failed to write memory\n");
     } else {
-        printf("Written 0x%llX to 0x%llX\n", new_value, 0xDEAD0000ULL);
+        printf("Written 0x%llX to 0x%llX\n", TEST_WRITE_VALUE, TEST_MEMORY_ADDR);
     }
     
-    if (op.Read<uint64_t>(0xDEAD0000, &target_var)) {
+    if (op.Read<uint64_t>(TEST_MEMORY_ADDR, &target_var)) {
         printf("Read back target_var = 0x%llX\n", target_var);
     }
     
@@ -285,14 +342,9 @@ int main() {
         PostMessage(windowData.hwnd, WM_CLOSE, 0, 0);
     }
     
-    WaitForSingleObject(windowThread, 5000);
+    WaitForSingleObject(windowThread.get(), DESTROY_WINDOW_TIMEOUT);
     
     printf("Done\n");
-    
-    CloseHandle(windowThread);
-    if (windowData.windowReadyEvent) {
-        CloseHandle(windowData.windowReadyEvent);
-    }
     
     system("pause");
     return 0;

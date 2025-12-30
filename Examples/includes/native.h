@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <string>
 #include <algorithm>
+#include <string_view>
+#include <memory>
 
 #include "./mouse_input_injection.h"
 #include "./keybd_input_injection.h"
@@ -16,8 +18,10 @@
 #ifndef STATUS_INFO_LENGTH_MISMATCH
 #define STATUS_INFO_LENGTH_MISMATCH ((NTSTATUS)0xC0000004L)
 #endif
-#define SYSCALL_INSTR_SIZE 16    // most syscall instruction size
-#define NT_FUNC_MAX_SEARCH_SIZE 32 // just incase
+
+constexpr inline size_t kSyscallSize = 16uz;  // most syscall instruction size
+constexpr inline size_t kSNtFuncMaxSize = 32uz;  // just incase
+constexpr inline ULONG kDefaultBufferSize = 0x10000u;
 
 typedef struct _UNICODE_STRING UNICODE_STRING, *PUNICODE_STRING;
 typedef struct _CLIENT_ID CLIENT_ID, *PCLIENT_ID;
@@ -76,7 +80,6 @@ typedef NTSTATUS(WINAPI* pNtQuerySystemInformation)(
 );
 static pNtQuerySystemInformation pfnNtQuerySystemInformation = nullptr;
 
-
 /* 
 .text:0000000180162070                 public NtOpenProcess
 .text:0000000180162070 NtOpenProcess   proc near               ; CODE XREF: RtlQueryProcessDebugInformation+17A↑p
@@ -101,7 +104,7 @@ static pNtQuerySystemInformation pfnNtQuerySystemInformation = nullptr;
 .text:0000000180162090 ; Exported entry 609. NtSetInformationFile
 .text:0000000180162090 ; Exported entry 2256. ZwSetInformationFile
  */
-static const BYTE g_SyscallTemplate[SYSCALL_INSTR_SIZE] = {
+static const BYTE g_SyscallTemplate[kSyscallSize] = {
     0x4C, 0x8B, 0xD1,          
     0xB8, 0x00, 0x00, 0x00, 0x00,
     0x0F, 0x05,                
@@ -208,7 +211,25 @@ struct _SYSTEM_PROCESS_INFORMATION {
     LARGE_INTEGER OtherTransferCount;
 };
 
-static bool FindSyscallInstruction(PBYTE pFuncBytes, ULONG funcSearchSize, ULONG& syscallOffset)
+using Address = uintptr_t;
+using SizeType = size_t;
+using ProcessId = DWORD;
+using ProcessHandle = HANDLE;
+using SyscallNum = ULONG;
+
+struct VirtualMemDeleter {
+    void operator()(PBYTE p) const noexcept {
+        if (p != nullptr) {
+            VirtualFree(p, 0, MEM_RELEASE);
+        }
+    }
+};
+
+using UniqueVirtualMemPtr = std::unique_ptr<BYTE, VirtualMemDeleter>;
+
+using UniqueLdrEntryPtr = std::unique_ptr<LDR_DATA_TABLE_ENTRY>;
+
+static bool FindSyscallInstruction(PBYTE pFuncBytes, ULONG funcSearchSize, ULONG& syscallOffset) noexcept
 {
     if (!pFuncBytes || funcSearchSize < 2)
         return false;
@@ -225,29 +246,31 @@ static bool FindSyscallInstruction(PBYTE pFuncBytes, ULONG funcSearchSize, ULONG
 }
 
 template <typename T>
-static T ConstructSyscallFunction(ULONG syscallNum)
+static T ConstructSyscallFunction(ULONG syscallNum) noexcept
 {
     if (syscallNum == 0)
         return nullptr;
 
-    PBYTE pMem = (PBYTE)VirtualAlloc(nullptr, SYSCALL_INSTR_SIZE, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    UniqueVirtualMemPtr pMem(
+        (PBYTE)VirtualAlloc(nullptr, kSyscallSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
+    );
     if (!pMem)
         return nullptr;
 
-    memcpy(pMem, g_SyscallTemplate, SYSCALL_INSTR_SIZE);
-    *(PULONG)(pMem + 4) = syscallNum;
+    memcpy(pMem.get(), g_SyscallTemplate, kSyscallSize);
+    auto syscallBytes = std::bit_cast<std::array<uint8_t, 4>>(syscallNum);
+    std::copy(syscallBytes.begin(), syscallBytes.end(), pMem.get() + 4);
 
     DWORD oldProtect = 0;
-    if (!VirtualProtect(pMem, SYSCALL_INSTR_SIZE, PAGE_EXECUTE_READ, &oldProtect))
+    if (!VirtualProtect(pMem.get(), kSyscallSize, PAGE_EXECUTE_READ, &oldProtect))
     {
-        VirtualFree(pMem, 0, MEM_RELEASE);
         return nullptr;
     }
 
-    return (T)pMem;
+    return (T)pMem.release();
 }
 
-static void ManualSysCall_Init()
+static void ManualSysCall_Init() noexcept
 {
     PBYTE pNtdllBase = (PBYTE)GetModuleHandleW(L"ntdll.dll");
     if (!pNtdllBase)
@@ -257,7 +280,7 @@ static void ManualSysCall_Init()
     if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE)
         return;
 
-    PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)((uintptr_t)pNtdllBase + pDosHeader->e_lfanew);
+    PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)((Address)pNtdllBase + pDosHeader->e_lfanew);
     if (pNtHeaders->Signature != IMAGE_NT_SIGNATURE || pNtHeaders->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC)
         return;
 
@@ -265,18 +288,18 @@ static void ManualSysCall_Init()
     if (exportDirData.VirtualAddress == 0 || exportDirData.Size == 0)
         return;
 
-    PIMAGE_EXPORT_DIRECTORY pExportDir = (PIMAGE_EXPORT_DIRECTORY)((uintptr_t)pNtdllBase + exportDirData.VirtualAddress);
+    PIMAGE_EXPORT_DIRECTORY pExportDir = (PIMAGE_EXPORT_DIRECTORY)((Address)pNtdllBase + exportDirData.VirtualAddress);
     if (!pExportDir)
         return;
 
-    PDWORD pFuncNames = (PDWORD)((uintptr_t)pNtdllBase + pExportDir->AddressOfNames);
-    PDWORD pFuncAddrs = (PDWORD)((uintptr_t)pNtdllBase + pExportDir->AddressOfFunctions);
-    PWORD pFuncOrdinals = (PWORD)((uintptr_t)pNtdllBase + pExportDir->AddressOfNameOrdinals);
+    PDWORD pFuncNames = (PDWORD)((Address)pNtdllBase + pExportDir->AddressOfNames);
+    PDWORD pFuncAddrs = (PDWORD)((Address)pNtdllBase + pExportDir->AddressOfFunctions);
+    PWORD pFuncOrdinals = (PWORD)((Address)pNtdllBase + pExportDir->AddressOfNameOrdinals);
 
     for (ULONG i = 0; i < pExportDir->NumberOfNames; i++)
     {
         uintptr_t funcNameRva = pFuncNames[i];
-        const char* pFuncName = (const char*)((uintptr_t)pNtdllBase + funcNameRva);
+        const char* pFuncName = (const char*)((Address)pNtdllBase + funcNameRva);
         if (!pFuncName)
             continue;
 
@@ -284,7 +307,7 @@ static void ManualSysCall_Init()
             continue;
 
         uintptr_t funcRva = pFuncAddrs[pFuncOrdinals[i]];
-        PBYTE pFuncBytes = (PBYTE)((uintptr_t)pNtdllBase + funcRva);
+        PBYTE pFuncBytes = (PBYTE)((Address)pNtdllBase + funcRva);
         if (!pFuncBytes)
             continue;
 
@@ -298,7 +321,7 @@ static void ManualSysCall_Init()
             continue;
 
         ULONG syscallOffset = 0;
-        if (!FindSyscallInstruction(pFuncBytes, NT_FUNC_MAX_SEARCH_SIZE, syscallOffset))
+        if (!FindSyscallInstruction(pFuncBytes, kSNtFuncMaxSize, syscallOffset))
         {
             continue;
         }
@@ -337,7 +360,7 @@ static void ManualSysCall_Init()
     pfnNtQuerySystemInformation = ConstructSyscallFunction<pNtQuerySystemInformation>(g_NtQuerySystemInformation_SyscallNum);
 }
 
-static bool g_ManualSysCallInited = []() {
+static bool g_ManualSysCallInited = []() noexcept {
     ManualSysCall_Init();
     return true;
 }();
@@ -356,9 +379,9 @@ inline static OBJECT_ATTRIBUTES InitObjectAttributes(
   return object;
 }
 
-inline static HANDLE NtOpenProcess(DWORD dwDesiredAccess, BOOL bInheritHandle,
-                                   DWORD dwProcessId) noexcept {
-  HANDLE hProcess = 0;
+inline static ProcessHandle NtOpenProcess(DWORD dwDesiredAccess, BOOL bInheritHandle,
+                                   ProcessId dwProcessId) noexcept {
+  ProcessHandle hProcess = 0;
   CLIENT_ID clientId = {(PVOID)(ULONG_PTR)dwProcessId, NULL};
   OBJECT_ATTRIBUTES objAttr = InitObjectAttributes(NULL, 0, NULL, NULL);
   if (pfnNtOpenProcess)
@@ -367,71 +390,86 @@ inline static HANDLE NtOpenProcess(DWORD dwDesiredAccess, BOOL bInheritHandle,
   }
   return hProcess;
 }
-/* 
-why not, cuz we have a warpper function already ^^^
-inline static _NtOpenProcess NtOpenProcess = []() {
-  return pfnNtOpenProcess;
-}();
-*/
-inline static pNtReadVirtualMemory NtReadVirtualMemory = []() {
+
+inline static pNtReadVirtualMemory NtReadVirtualMemory = []() noexcept {
   return pfnNtReadVirtualMemory;
 }();
-inline static pNtWriteVirtualMemory NtWriteVirtualMemory = []() {
+inline static pNtWriteVirtualMemory NtWriteVirtualMemory = []() noexcept {
   return pfnNtWriteVirtualMemory;
 }();
-inline static pNtProtectVirtualMemory NtProtectVirtualMemory = []() {
+inline static pNtProtectVirtualMemory NtProtectVirtualMemory = []() noexcept {
   return pfnNtProtectVirtualMemory;
 }();
-inline static pNtQueryInformationProcess NtQueryInformationProcess = []() {
+inline static pNtQueryInformationProcess NtQueryInformationProcess = []() noexcept {
   return pfnNtQueryInformationProcess;
 }();
-inline static pNtQuerySystemInformation NtQuerySystemInformation = []() {
+inline static pNtQuerySystemInformation NtQuerySystemInformation = []() noexcept {
   return pfnNtQuerySystemInformation;
 }();
 class Native {
  public:
-  Native() : target_process_handle_(nullptr), target_process_id_(0) {}
+  Native() noexcept : target_process_handle_(nullptr), target_process_id_(0), dpi_(0) {}
 
-  ~Native() {
+  ~Native() noexcept {
     if (target_process_handle_) {
       CloseHandle(target_process_handle_);
     }
   }
 
+  Native(const Native&) = delete;
+  Native& operator=(const Native&) = delete;
+
+  Native(Native&& other) noexcept {
+    *this = std::move(other);
+  }
+
+  Native& operator=(Native&& other) noexcept {
+    if (this != &other) {
+      target_process_handle_ = other.target_process_handle_;
+      target_process_id_ = other.target_process_id_;
+      dpi_ = other.dpi_;
+
+      other.target_process_handle_ = nullptr;
+      other.target_process_id_ = 0;
+      other.dpi_ = 0;
+    }
+    return *this;
+  }
+
   bool Initialize(uint64_t process_id,
-                  DWORD desired_access = PROCESS_ALL_ACCESS) {
-    target_process_id_ = static_cast<DWORD>(process_id);
+                  DWORD desired_access = PROCESS_ALL_ACCESS) noexcept {
+    target_process_id_ = static_cast<ProcessId>(process_id);
     target_process_handle_ =
         NtOpenProcess(desired_access, FALSE, target_process_id_);
     return target_process_handle_ != nullptr;
   }
 
-  bool Initialize(const wchar_t* process_name,
-                  DWORD desired_access = PROCESS_ALL_ACCESS) {
-    DWORD pid = GetProcessIdByName(process_name);
+  bool Initialize(std::wstring_view process_name,
+                  DWORD desired_access = PROCESS_ALL_ACCESS) noexcept {
+    ProcessId pid = GetProcessIdByName(process_name);
     if (pid == 0) {
       return false;
     }
     return Initialize(static_cast<uint64_t>(pid), desired_access);
   }
-
+  // dont askme why, ni idea. but hate this
   struct SafeULONG {
     ULONG value;
     ULONG reserved;
   };
 
-  bool ReadMemoryNt(uintptr_t address, void* buffer, size_t size) {
-    if (!target_process_handle_) return false;
+  bool ReadMemoryNt(Address address, void* buffer, SizeType size) noexcept {
+    if (!target_process_handle_ || !buffer || size == 0) return false;
 
     alignas(8) SafeULONG bytes_wrapper = {0, 0};
     NTSTATUS status = NtReadVirtualMemory(
         target_process_handle_, reinterpret_cast<PVOID>(address), buffer,
         static_cast<ULONG>(size), &(bytes_wrapper.value));
     return NT_SUCCESS(status) &&
-           static_cast<size_t>(bytes_wrapper.value) == size;
+           static_cast<SizeType>(bytes_wrapper.value) == size;
   }
 
-  bool WriteMemoryNt(uintptr_t address, const void* buffer, size_t size) {
+  bool WriteMemoryNt(Address address, const void* buffer, SizeType size) noexcept {
     if (!target_process_handle_ || !buffer || size == 0) {
       return false;
     }
@@ -459,106 +497,107 @@ class Native {
                            oldProtect, &temp);
 
     return NT_SUCCESS(status_write) &&
-           static_cast<size_t>(bytes_wrapper.value) == size;
+           static_cast<SizeType>(bytes_wrapper.value) == size;
   }
 
-  uint64_t GetDllBaseAddress(const char* dll_name) {
+  uint64_t GetDllBaseAddress(const char* dll_name) noexcept {
     if (!target_process_handle_) return 0;
 
-    PLDR_DATA_TABLE_ENTRY pLdrEntry = nullptr;
-    if (!GetLdrDataTableEntryByName(dll_name, &pLdrEntry)) {
+    UniqueLdrEntryPtr pLdrEntry;
+    if (!GetLdrDataTableEntryByName(dll_name, pLdrEntry)) {
         return 0;
     }
 
-    uint64_t baseAddr = reinterpret_cast<uint64_t>(pLdrEntry->DllBase);
-    delete pLdrEntry;
-    return baseAddr;
+    return reinterpret_cast<uint64_t>(pLdrEntry->DllBase);
   }
 
-  uint64_t GetDllSize(const char* dll_name) {
+  uint64_t GetDllSize(const char* dll_name) noexcept {
     if (!target_process_handle_) return 0;
 
-    PLDR_DATA_TABLE_ENTRY pLdrEntry = nullptr;
-    if (!GetLdrDataTableEntryByName(dll_name, &pLdrEntry)) {
+    UniqueLdrEntryPtr pLdrEntry;
+    if (!GetLdrDataTableEntryByName(dll_name, pLdrEntry)) {
         return 0;
     }
 
-    uint64_t dllSize = static_cast<uint64_t>(pLdrEntry->SizeOfImage);
-    delete pLdrEntry;
-    return dllSize;
+    return static_cast<uint64_t>(pLdrEntry->SizeOfImage);
   }
 
   void MouseEvent(DWORD flags, DWORD x, DWORD y, DWORD data,
-                  ULONG_PTR extra_info) {
+                  ULONG_PTR extra_info) noexcept {
     LONG dx = (LONG)x;
     LONG dy = (LONG)y;
 
     my_mouse_event(flags, dx, dy, data, extra_info);
   }
 
-  void MouseLeftDown() { MouseEvent(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0); }
+  void MouseLeftDown() noexcept { MouseEvent(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0); }
 
-  void MouseLeftUp() { MouseEvent(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0); }
+  void MouseLeftUp() noexcept { MouseEvent(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0); }
 
-  void MouseMove(DWORD x, DWORD y) {
+  void MouseMove(DWORD x, DWORD y) noexcept {
     if (dpi_ == 0) dpi_ = GetSystemDPI();
-    DWORD dx = (x * 100 + dpi_ / 2) / dpi_;
-    DWORD dy = (y * 100 + dpi_ / 2) / dpi_;
+    DWORD dx = (x * 100u + dpi_ / 2) / dpi_;
+    DWORD dy = (y * 100u + dpi_ / 2) / dpi_;
     MouseEvent(MOUSEEVENTF_MOVE, dx, dy, 0, 0);
   }
 
-  void SetCursorPos(DWORD x, DWORD y) {
+  void SetCursorPos(DWORD x, DWORD y) noexcept {
     int screen_width = GetSystemMetrics(SM_CXSCREEN) - 1;
     int screen_height = GetSystemMetrics(SM_CYSCREEN) - 1;
-    int virtual_x = (x * 65535) / screen_width;
-    int virtual_y = (y * 65535) / screen_height;
+    int virtual_x = (x * 65535u) / screen_width;
+    int virtual_y = (y * 65535u) / screen_height;
     MouseEvent(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, virtual_x, virtual_y, 0,
                0);
   }
 
   void KeybdEvent(BYTE vk, BYTE scan, DWORD flags,
-                           ULONG_PTR extra_info) {
+                           ULONG_PTR extra_info) noexcept {
     my_keybd_event(vk, scan, flags, extra_info);
   }
 
-  void AntiCapture(HWND window_handle, bool status = true) {
+  void AntiCapture(HWND window_handle, bool status = true) noexcept {
     SetWindowDisplayAffinity(window_handle, status ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
   }
 
-  HANDLE GetProcessHandle() const { return target_process_handle_; }
-  DWORD GetProcessId() const { return target_process_id_; }
+  ProcessHandle GetProcessHandle() const noexcept { return target_process_handle_; }
+  ProcessId GetProcessId() const noexcept { return target_process_id_; }
 
  private:
-  HANDLE target_process_handle_;
-  DWORD target_process_id_;
-  int dpi_ = 0;
+  ProcessHandle target_process_handle_;
+  ProcessId target_process_id_;
+  int dpi_;
 
-  static int GetSystemDPI() {
-    HDC hdc = GetDC(nullptr);
-    int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
-    ReleaseDC(nullptr, hdc);
-    return dpi;
+  static int GetSystemDPI() noexcept {
+    if (HDC hdc = GetDC(nullptr); hdc != nullptr) {
+      int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
+      ReleaseDC(nullptr, hdc);
+      return dpi;
+    }
+    return 96;
   }
 
-  static DWORD GetProcessIdByName(const wchar_t* process_name) {
-    if (!pfnNtQuerySystemInformation || !process_name)
+  static ProcessId GetProcessIdByName(std::wstring_view process_name) noexcept {
+    if (!pfnNtQuerySystemInformation || process_name.empty())
         return 0;
 
-    DWORD dwPid = 0;
-    ULONG ulBufferSize = 0x10000;
-    PBYTE pBuffer = (PBYTE)VirtualAlloc(nullptr, ulBufferSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    ProcessId dwPid = 0;
+    ULONG ulBufferSize = kDefaultBufferSize;
+    UniqueVirtualMemPtr pBuffer(
+        (PBYTE)VirtualAlloc(nullptr, ulBufferSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
+    );
     if (!pBuffer)
         return 0;
 
     NTSTATUS status = STATUS_INFO_LENGTH_MISMATCH;
     while (status == STATUS_INFO_LENGTH_MISMATCH)
     {
-        status = pfnNtQuerySystemInformation(5, pBuffer, ulBufferSize, nullptr);
+        status = pfnNtQuerySystemInformation(5, pBuffer.get(), ulBufferSize, nullptr);
         if (status == STATUS_INFO_LENGTH_MISMATCH)
         {
-            VirtualFree(pBuffer, 0, MEM_RELEASE);
             ulBufferSize *= 2;
-            pBuffer = (PBYTE)VirtualAlloc(nullptr, ulBufferSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+            pBuffer.reset(
+                (PBYTE)VirtualAlloc(nullptr, ulBufferSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
+            );
             if (!pBuffer)
                 return 0;
         }
@@ -566,37 +605,35 @@ class Native {
 
     if (!NT_SUCCESS(status))
     {
-        VirtualFree(pBuffer, 0, MEM_RELEASE);
         return 0;
     }
 
-    PSYSTEM_PROCESS_INFORMATION pSPI = (PSYSTEM_PROCESS_INFORMATION)pBuffer;
+    PSYSTEM_PROCESS_INFORMATION pSPI = (PSYSTEM_PROCESS_INFORMATION)pBuffer.get();
     while (true)
     {
         if (pSPI->ImageName.Buffer && pSPI->ProcessId != nullptr)
         {
-            if (_wcsicmp(pSPI->ImageName.Buffer, process_name) == 0)
+            if (_wcsicmp(pSPI->ImageName.Buffer, process_name.data()) == 0)
             {
-                dwPid = (DWORD)(ULONG_PTR)pSPI->ProcessId;
+                dwPid = (ProcessId)(ULONG_PTR)pSPI->ProcessId;
                 break;
             }
         }
 
         if (pSPI->NextEntryOffset == 0)
             break;
-        pSPI = (PSYSTEM_PROCESS_INFORMATION)((uintptr_t)pSPI + pSPI->NextEntryOffset);
+        pSPI = (PSYSTEM_PROCESS_INFORMATION)((Address)pSPI + pSPI->NextEntryOffset);
     }
 
-    VirtualFree(pBuffer, 0, MEM_RELEASE);
     return dwPid;
   }
 
-  bool GetLdrDataTableEntryByName(const char* dll_name, PLDR_DATA_TABLE_ENTRY* pOutLdrEntry) {
-    if (!target_process_handle_ || !dll_name || !pOutLdrEntry) {
+  bool GetLdrDataTableEntryByName(const char* dll_name, UniqueLdrEntryPtr& pOutLdrEntry) noexcept {
+    if (!target_process_handle_ || !dll_name) {
         return false;
     }
 
-    *pOutLdrEntry = new LDR_DATA_TABLE_ENTRY();
+    pOutLdrEntry = std::make_unique<LDR_DATA_TABLE_ENTRY>();
     PROCESS_BASIC_INFORMATION pbi = {0};
     ULONG returnLength = 0;
 
@@ -609,22 +646,19 @@ class Native {
     );
 
     if (!NT_SUCCESS(status)) {
-        delete *pOutLdrEntry;
-        *pOutLdrEntry = nullptr;
+        pOutLdrEntry.reset();
         return false;
     }
 
     PEB peb = {0};
-    if (!ReadMemoryNt(reinterpret_cast<uintptr_t>(pbi.PebBaseAddress), &peb, sizeof(PEB))) {
-        delete *pOutLdrEntry;
-        *pOutLdrEntry = nullptr;
+    if (!ReadMemoryNt(reinterpret_cast<Address>(pbi.PebBaseAddress), &peb, sizeof(PEB))) {
+        pOutLdrEntry.reset();
         return false;
     }
 
     PEB_LDR_DATA ldrData = {0};
-    if (!ReadMemoryNt(reinterpret_cast<uintptr_t>(peb.Ldr), &ldrData, sizeof(PEB_LDR_DATA))) {
-        delete *pOutLdrEntry;
-        *pOutLdrEntry = nullptr;
+    if (!ReadMemoryNt(reinterpret_cast<Address>(peb.Ldr), &ldrData, sizeof(PEB_LDR_DATA))) {
+        pOutLdrEntry.reset();
         return false;
     }
 
@@ -636,16 +670,16 @@ class Native {
 
     while (true) {
         PLDR_DATA_TABLE_ENTRY pRemoteLdrEntry = CONTAINING_RECORD(pCurrentListEntry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
-        if (!ReadMemoryNt(reinterpret_cast<uintptr_t>(pRemoteLdrEntry), *pOutLdrEntry, sizeof(LDR_DATA_TABLE_ENTRY))) {
+        if (!ReadMemoryNt(reinterpret_cast<Address>(pRemoteLdrEntry), pOutLdrEntry.get(), sizeof(LDR_DATA_TABLE_ENTRY))) {
             break;
         }
 
         wchar_t baseDllName[MAX_PATH] = {0};
-        if ((*pOutLdrEntry)->BaseDllName.Buffer && (*pOutLdrEntry)->BaseDllName.Length > 0) {
-            size_t len1 = static_cast<size_t>((*pOutLdrEntry)->BaseDllName.Length);
-            size_t len2 = sizeof(baseDllName) - sizeof(wchar_t);
+        if (pOutLdrEntry->BaseDllName.Buffer && pOutLdrEntry->BaseDllName.Length > 0) {
+            SizeType len1 = static_cast<SizeType>(pOutLdrEntry->BaseDllName.Length);
+            SizeType len2 = sizeof(baseDllName) - sizeof(wchar_t);
             ReadMemoryNt(
-                reinterpret_cast<uintptr_t>((*pOutLdrEntry)->BaseDllName.Buffer),
+                reinterpret_cast<Address>(pOutLdrEntry->BaseDllName.Buffer),
                 baseDllName,
                 std::min(len1, len2)
             );
@@ -655,14 +689,13 @@ class Native {
             return true;
         }
 
-        pCurrentListEntry = (*pOutLdrEntry)->InLoadOrderLinks.Flink;
+        pCurrentListEntry = pOutLdrEntry->InLoadOrderLinks.Flink;
         if (pCurrentListEntry == pModuleListHead) {
             break;
         }
     }
 
-    delete *pOutLdrEntry;
-    *pOutLdrEntry = nullptr;
+    pOutLdrEntry.reset();
     return false;
   }
 };

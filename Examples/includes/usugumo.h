@@ -3,137 +3,127 @@
 #ifndef _USUGUMO_H_
 #define _USUGUMO_H_
 #include <Windows.h>
-#include <TlHelp32.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <mutex>
-#include <string>
+#include <optional>
+#include <string_view>
 #include <vector>
 
 #include "../../usugumo_request_define.h"
 
+constexpr inline size_t kFixedStr64MaxLength = 64uz;
+constexpr inline LPCSTR kDriverDevice = "\\\\.\\Usugum0";
+
+using ProcessId = uint64_t;
+using VirtualAddress = uintptr_t;
+using MemorySize = size_t;
+using DpiValue = int;
+using ByteBuffer = std::byte*;
+using ConstByteBuffer = const std::byte*;
+
 class UsugumoDriver {
  public:
-  UsugumoDriver()
+  UsugumoDriver() noexcept
       : driver_handle_(INVALID_HANDLE_VALUE),
         target_process_id_(0),
-        current_process_id_(0) {}
+        current_process_id_(0),
+        dpi_(0) {}
 
-  ~UsugumoDriver() {
+  ~UsugumoDriver() noexcept {
     if (driver_handle_ != INVALID_HANDLE_VALUE) {
       CloseHandle(driver_handle_);
     }
   }
 
-  bool Initialize(uint64_t process_id) {
-    if (driver_handle_  == INVALID_HANDLE_VALUE) {
-      driver_handle_ = CreateFileA("\\\\.\\Usugum0", GENERIC_READ, 0, nullptr,
-                                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    }
-    if (driver_handle_ != INVALID_HANDLE_VALUE) {
-      target_process_id_ = process_id;
-      current_process_id_ = GetCurrentProcessId();
-      return true;
-    }
-    return false;
+  UsugumoDriver(const UsugumoDriver&) = delete;
+  UsugumoDriver& operator=(const UsugumoDriver&) = delete;
+
+  UsugumoDriver(UsugumoDriver&& other) noexcept {
+    *this = std::move(other);
   }
 
-  bool Initialize(const wchar_t* process_name) {
-    if (driver_handle_  == INVALID_HANDLE_VALUE) {
-      driver_handle_ = CreateFileA("\\\\.\\Usugum0", GENERIC_READ, 0, nullptr,
-                                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    }
+  UsugumoDriver& operator=(UsugumoDriver&& other) noexcept {
+    if (this != &other) {
+      driver_handle_ = other.driver_handle_;
+      target_process_id_ = other.target_process_id_;
+      current_process_id_ = other.current_process_id_;
+      dpi_ = other.dpi_;
 
-    DWORD pid = GetProcessIdByName(process_name);
-    if (pid == 0) {
+      other.driver_handle_ = INVALID_HANDLE_VALUE;
+      other.target_process_id_ = 0;
+      other.current_process_id_ = 0;
+      other.dpi_ = 0;
+    }
+    return *this;
+  }
+
+  bool Initialize(ProcessId process_id) noexcept {
+    if (!OpenDriverHandle()) {
       return false;
     }
-    if (driver_handle_ != INVALID_HANDLE_VALUE) {
-      target_process_id_ = pid;
-      current_process_id_ = GetCurrentProcessId();
-      return true;
-    }
-    return false;
+
+    target_process_id_ = process_id;
+    current_process_id_ = GetCurrentProcessId();
+    return true;
   }
 
-  bool DriverProbe() {
-    if (driver_handle_  == INVALID_HANDLE_VALUE) {
-      driver_handle_ = CreateFileA("\\\\.\\Usugum0", GENERIC_READ, 0, nullptr,
-                                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  bool Initialize(std::wstring_view process_name) noexcept {
+    if (!OpenDriverHandle()) {
+      return false;
     }
+
+    const auto pid_opt = GetProcessIdByName(process_name);
+    if (!pid_opt.has_value()) {
+      return false;
+    }
+
+    target_process_id_ = *pid_opt;
+    current_process_id_ = GetCurrentProcessId();
+    return true;
+  }
+
+  bool DriverProbe() noexcept {
+    if (!OpenDriverHandle()) {
+      return false;
+    }
+
     Requests request = {};
     request.request_key = USUGUMO_PROBE;
-    DWORD bytes_returned;
-    if (DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
+
+    if (DWORD bytes_returned = 0;
+        DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
                         sizeof(request), &request, sizeof(request),
                         &bytes_returned, nullptr)) {
-      return request.return_value;
+      return request.return_value != 0;
     }
 
     return false;
   }
 
-  uint64_t GetDllSize(const char* dll_name) {
-    Requests request = {};
-    request.request_key = USUGUMO_MODULE_SIZE;
-    request.target_pid = target_process_id_;
-
-    size_t original_len = strlen(dll_name);
-    if (original_len > 64) original_len = 64;
-    request.name_length = original_len;
-
-    FixedStr64 fixed_str;
-    EncodeFixedStr64(dll_name, &fixed_str);
-    request.name_str = fixed_str;
-
-    DWORD bytes_returned;
-
-    if (DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
-                        sizeof(request), &request, sizeof(request),
-                        &bytes_returned, nullptr)) {
-      return request.return_value;
-    }
-
-    return 0;
+  uint64_t GetDllSize(std::string_view dll_name) noexcept {
+    return GetDllInfo<USUGUMO_MODULE_SIZE>(dll_name);
   }
 
-  uint64_t GetDllBaseAddress(const char* dll_name) {
-    Requests request = {};
-    request.request_key = USUGUMO_MODULE_BASE;
-    request.target_pid = target_process_id_;
-
-    size_t original_len = strlen(dll_name);
-    if (original_len > 64) original_len = 64;
-    request.name_length = original_len;
-
-    FixedStr64 fixed_str;
-    EncodeFixedStr64(dll_name, &fixed_str);
-    request.name_str = fixed_str;
-
-    DWORD bytes_returned;
-
-    if (DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
-                        sizeof(request), &request, sizeof(request),
-                        &bytes_returned, nullptr)) {
-      return request.return_value;
-    }
-
-    return 0;
+  uint64_t GetDllBaseAddress(std::string_view dll_name) noexcept {
+    return GetDllInfo<USUGUMO_MODULE_BASE>(dll_name);
   }
 
-  bool ReadMemoryKm(uintptr_t address, void* buffer, size_t size) {
+  bool ReadMemoryKm(VirtualAddress address, void* buffer, MemorySize size) noexcept {
     return ReadVirtualMemory(target_process_id_, address,
-                             reinterpret_cast<uintptr_t>(buffer), size);
+                             reinterpret_cast<VirtualAddress>(buffer), size);
   }
 
-  bool WriteMemoryKm(uintptr_t address, const void* buffer, size_t size) {
+  bool WriteMemoryKm(VirtualAddress address, const void* buffer, MemorySize size) noexcept {
     return WriteVirtualMemory(target_process_id_, address,
-                              reinterpret_cast<uintptr_t>(buffer), size);
+                              reinterpret_cast<VirtualAddress>(buffer), size);
   }
   void MouseEvent(DWORD flags, DWORD x, DWORD y, DWORD data,
-                  ULONG_PTR extra_info) {
+                  ULONG_PTR extra_info) noexcept {
     LONG dx = (LONG)x;
     LONG dy = (LONG)y;
 
@@ -149,28 +139,30 @@ class UsugumoDriver {
                     nullptr, 0, nullptr, nullptr);
   }
 
-  void MouseLeftDown() { MouseEvent(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0); }
+  void MouseLeftDown() noexcept { MouseEvent(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0); }
 
-  void MouseLeftUp() { MouseEvent(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0); }
+  void MouseLeftUp() noexcept { MouseEvent(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0); }
 
-  void MouseMove(DWORD x, DWORD y) {
-    if (dpi_ == 0) dpi_ = GetSystemDPI();
-    DWORD dx = (x * 100 + dpi_ / 2) / dpi_;
-    DWORD dy = (y * 100 + dpi_ / 2) / dpi_;
+  void MouseMove(DWORD x, DWORD y) noexcept {
+    if (dpi_ == 0) {
+      dpi_ = GetSystemDPI();
+    }
+    const DWORD dx = (x * 100u + dpi_ / 2) / dpi_;
+    const DWORD dy = (y * 100u + dpi_ / 2) / dpi_;
     MouseEvent(MOUSEEVENTF_MOVE, dx, dy, 0, 0);
   }
 
-  void SetCursorPos(DWORD x, DWORD y) {
-    int screen_width = GetSystemMetrics(SM_CXSCREEN) - 1;
-    int screen_height = GetSystemMetrics(SM_CYSCREEN) - 1;
-    int virtual_x = (x * 65535) / screen_width;
-    int virtual_y = (y * 65535) / screen_height;
+  void SetCursorPos(DWORD x, DWORD y) noexcept {
+    const int screen_width = GetSystemMetrics(SM_CXSCREEN) - 1;
+    const int screen_height = GetSystemMetrics(SM_CYSCREEN) - 1;
+    const int virtual_x = (x * 65535u) / screen_width;
+    const int virtual_y = (y * 65535u) / screen_height;
     MouseEvent(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, virtual_x, virtual_y, 0,
                0);
   }
 
   void KeybdEvent(BYTE vk, BYTE scan, DWORD flags,
-                           ULONG_PTR extra_info) {
+                           ULONG_PTR extra_info) noexcept {
     Requests request = {};
     request.request_key = USUGUMO_KEYBD;
     request.bVK = vk;
@@ -182,51 +174,90 @@ class UsugumoDriver {
                     nullptr, 0, nullptr, nullptr);
   }
 
-  void AntiCapture(HWND window_handle, bool status = true) {
+  void AntiCapture(HWND window_handle, bool status = true) noexcept {
     Requests request = {};
     request.request_key = USUGUMO_ANTI_CAPTURE;
     request.window_handle = window_handle;
-    request.protect_flags = status ? 0xFFFFFFFF : 0x00000000;
-    // SetWindowDisplayAffinity(window_handle, status ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
+    request.protect_flags = status ? 0xFFFFFFFFu : 0x00000000u;
+
     DeviceIoControl(driver_handle_, kIoctlCallDriver, &request, sizeof(request),
                     nullptr, 0, nullptr, nullptr);
   }
 
-  HANDLE GetDriverHandle() const { return  driver_handle_; }
-  DWORD GetProcessId() const { return target_process_id_; }
+  HANDLE GetDriverHandle() const noexcept { return  driver_handle_; }
+  ProcessId GetProcessId() const noexcept { return target_process_id_; }
  private:
   HANDLE driver_handle_;
-  uint64_t target_process_id_;
-  uint64_t current_process_id_;
-  int dpi_ = 0;
+  ProcessId target_process_id_;
+  ProcessId current_process_id_;
+  DpiValue dpi_;
 
-  static int GetSystemDPI() {
-    HDC hdc = GetDC(nullptr);
-    int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
-    ReleaseDC(nullptr, hdc);
-    return dpi;
-  }
-
-  void EncodeFixedStr64(const char* str, FixedStr64* fixed_str) {
-    size_t len = strlen(str);
-    if (len > 64) {
-      len = 64;
+  template <uint64_t RequestKey>
+  uint64_t GetDllInfo(std::string_view dll_name) noexcept {
+    if (driver_handle_ == INVALID_HANDLE_VALUE) {
+      return 0;
     }
 
-    memset(fixed_str->blocks, 0, sizeof(fixed_str->blocks));
+    Requests request = {};
+    request.request_key = RequestKey;
+    request.target_pid = target_process_id_;
 
-    for (size_t i = 0; i < len; i++) {
-      size_t block_index = i / 8;
-      size_t pos_in_block = i % 8;
-      int shift = 8 * (7 - pos_in_block);
-      fixed_str->blocks[block_index] |=
-          (static_cast<uint64_t>(static_cast<unsigned char>(str[i])) << shift);
+    const auto name_len = std::clamp(dll_name.size(), 0uz, kFixedStr64MaxLength);
+    request.name_length = name_len;
+
+    FixedStr64 fixed_str;
+    EncodeFixedStr64(dll_name, &fixed_str);
+    request.name_str = fixed_str;
+
+    if (DWORD bytes_returned = 0;
+        DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
+                        sizeof(request), &request, sizeof(request),
+                        &bytes_returned, nullptr)) {
+      return request.return_value;
+    }
+
+    return 0;
+  }
+
+  bool OpenDriverHandle() noexcept {
+    if (driver_handle_ != INVALID_HANDLE_VALUE) {
+      return true;
+    }
+
+    driver_handle_ = CreateFileA(kDriverDevice, GENERIC_READ, 0, nullptr,
+                                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    return driver_handle_ != INVALID_HANDLE_VALUE;
+  }
+
+  static DpiValue GetSystemDPI() noexcept {
+    if (HDC hdc = GetDC(nullptr); hdc != nullptr) {
+      const DpiValue dpi = GetDeviceCaps(hdc, LOGPIXELSX);
+      ReleaseDC(nullptr, hdc);
+      return dpi;
+    }
+    return 96;
+  }
+
+  void EncodeFixedStr64(std::string_view str, FixedStr64* fixed_str) noexcept {
+    assert(fixed_str != nullptr);
+
+    const auto str_len = std::clamp(str.size(), 0uz, kFixedStr64MaxLength);
+    std::memset(fixed_str->blocks, 0, sizeof(fixed_str->blocks));
+
+    for (size_t i = 0; i < str_len; ++i) {
+      const size_t block_index = i / 8uz;
+      const size_t pos_in_block = i % 8uz;
+      const int shift = 8 * (7 - static_cast<int>(pos_in_block));
+      const uint64_t char_val = static_cast<uint64_t>(static_cast<unsigned char>(str[i]));
+      fixed_str->blocks[block_index] |= (char_val << shift);
     }
   }
 
-  bool ReadVirtualMemory(uint64_t target_pid, uint64_t target_addr,
-                         uint64_t request_addr, size_t size) {
-    if (target_pid == 0 || target_addr == 0) return false;
+  bool ReadVirtualMemory(ProcessId target_pid, VirtualAddress target_addr,
+                         VirtualAddress request_addr, MemorySize size) noexcept {
+    if (target_pid == 0 || target_addr == 0 || size == 0) {
+      return false;
+    }
 
     Requests request = {};
     request.request_key = USUGUMO_READ;
@@ -236,19 +267,20 @@ class UsugumoDriver {
     request.target_addr = target_addr;
     request.mem_size = size;
 
-    DWORD bytes_returned;
-
-    if (DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
+    if (DWORD bytes_returned = 0;
+        DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
                         sizeof(request), &request, sizeof(request),
                         &bytes_returned, nullptr)) {
-      return request.return_value;
+      return request.return_value != 0;
     }
     return false;
   }
 
-  bool WriteVirtualMemory(uint64_t target_pid, uint64_t target_addr,
-                          uint64_t request_addr, size_t size) {
-    if (target_pid == 0 || target_addr == 0) return false;
+  bool WriteVirtualMemory(ProcessId target_pid, VirtualAddress target_addr,
+                          VirtualAddress request_addr, MemorySize size) noexcept {
+    if (target_pid == 0 || target_addr == 0 || size == 0) {
+      return false;
+    }
 
     Requests request = {};
     request.request_key = USUGUMO_WRITE;
@@ -258,40 +290,39 @@ class UsugumoDriver {
     request.target_addr = target_addr;
     request.mem_size = size;
 
-    DWORD bytes_returned;
-
-    if (DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
+    if (DWORD bytes_returned = 0;
+        DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
                         sizeof(request), &request, sizeof(request),
                         &bytes_returned, nullptr)) {
-      return request.return_value;
+      return request.return_value != 0;
     }
     return false;
   }
 
-  DWORD GetProcessIdByName(const wchar_t* process_name) {
+  std::optional<DWORD> GetProcessIdByName(std::wstring_view process_name) noexcept {
     char ansi_process_name[MAX_PATH] = {0};
-    WideCharToMultiByte(CP_ACP, 0, process_name, -1, ansi_process_name,
-                        MAX_PATH, nullptr, nullptr);
+    WideCharToMultiByte(CP_ACP, 0, process_name.data(), static_cast<int>(process_name.size()),
+                        ansi_process_name, MAX_PATH, nullptr, nullptr);
 
     Requests request = {};
     request.request_key = USUGUMO_PID;
 
-    size_t name_len = strlen(ansi_process_name);
-    if (name_len > 64) name_len = 64;
+    const auto name_len = std::clamp(strlen(ansi_process_name), 0uz, kFixedStr64MaxLength);
     request.name_length = name_len;
 
     FixedStr64 fixed_str;
     EncodeFixedStr64(ansi_process_name, &fixed_str);
     request.name_str = fixed_str;
 
-    DWORD bytes_returned = 0;
-    DWORD found_pid = 0;
-    if (DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
+    if (DWORD bytes_returned = 0;
+        DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
                         sizeof(request), &request, sizeof(request),
                         &bytes_returned, nullptr)) {
-      found_pid = static_cast<DWORD>(request.return_value);
+      const DWORD pid = static_cast<DWORD>(request.return_value);
+      return pid != 0 ? std::optional<DWORD>(pid) : std::nullopt;
     }
-    return found_pid;
+
+    return std::nullopt;
   }
 };
 
