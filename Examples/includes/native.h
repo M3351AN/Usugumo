@@ -10,11 +10,13 @@
 
 #include "./mouse_input_injection.h"
 #include "./keybd_input_injection.h"
-
+#ifndef NT_SUCCESS
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
+#endif
+#ifndef STATUS_INFO_LENGTH_MISMATCH
 #define STATUS_INFO_LENGTH_MISMATCH ((NTSTATUS)0xC0000004L)
+#endif
 #define SYSCALL_INSTR_SIZE 16    // most syscall instruction size
-#define SystemProcessInformation 5
 #define NT_FUNC_MAX_SEARCH_SIZE 32 // just incase
 
 typedef struct _UNICODE_STRING UNICODE_STRING, *PUNICODE_STRING;
@@ -551,7 +553,7 @@ class Native {
     NTSTATUS status = STATUS_INFO_LENGTH_MISMATCH;
     while (status == STATUS_INFO_LENGTH_MISMATCH)
     {
-        status = pfnNtQuerySystemInformation(SystemProcessInformation, pBuffer, ulBufferSize, nullptr);
+        status = pfnNtQuerySystemInformation(5, pBuffer, ulBufferSize, nullptr);
         if (status == STATUS_INFO_LENGTH_MISMATCH)
         {
             VirtualFree(pBuffer, 0, MEM_RELEASE);
