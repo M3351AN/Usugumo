@@ -63,6 +63,6 @@ NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject,
                      _In_ PUNICODE_STRING RegistryPath) {
   UNREFERENCED_PARAMETER(DriverObject);
   UNREFERENCED_PARAMETER(RegistryPath);
-  UNICODE_STRING drv_name = RTL_CONSTANT_STRING(L"\\Driver\\Usugum0");
-  return IoCreateDriver(&drv_name, DriverInit);
+  // So it's kdmapper able
+  return IoCreateDriver(NULL, DriverInit);
 }
