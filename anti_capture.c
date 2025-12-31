@@ -12,7 +12,7 @@ static PVOID GetWin32kBase() {
         CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
 
     if (Module->BaseDllName.Buffer &&
-        _wcsicmp(Module->BaseDllName.Buffer, L"win32kfull.sys") == 0) {
+        kwcsicmp(Module->BaseDllName.Buffer, L"win32kfull.sys") == 0) {
       return Module->DllBase;
     }
   }

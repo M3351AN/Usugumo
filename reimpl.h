@@ -5,6 +5,8 @@
 
 int __cdecl kstricmp(const char* Str1, const char* Str2);
 
+int __cdecl kwcsicmp(const wchar_t* Str1, const wchar_t* Str2);
+
 NTSTATUS
 DriverCopyVirtualMemory(IN PEPROCESS SourceProcess, IN PVOID SourceAddress,
                         IN PEPROCESS TargetProcess, OUT PVOID TargetAddress,
