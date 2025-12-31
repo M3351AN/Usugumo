@@ -144,6 +144,7 @@
     <MASM Include="ke_reimpl.asm" />
     <MASM Include="kmemmove.asm" />
     <MASM Include="mouse.asm" />
+    <MASM Include="rtl_reimpl.asm" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

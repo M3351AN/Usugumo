@@ -17,4 +17,6 @@ DriverCopyVirtualMemory(IN PEPROCESS SourceProcess, IN PVOID SourceAddress,
 
 KIRQL KeGetCurrentIrqlMeme(void);
 
+PIMAGE_NT_HEADERS RtlImageNtHeaderMeme(PVOID Base);
+
 #endif

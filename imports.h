@@ -34,6 +34,4 @@ ZwProtectVirtualMemory(IN HANDLE ProcessHandle, IN OUT PVOID* BaseAddress,
 
 NTSYSAPI PCHAR PsGetProcessImageFileName(PEPROCESS Process);
 
-PIMAGE_NT_HEADERS RtlImageNtHeader(PVOID Base);
-
 #endif

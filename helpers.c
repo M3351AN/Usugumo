@@ -39,7 +39,7 @@ PWSTR ConvertToPWSTR(const char* ascii_str) {
 
 PVOID SearchSignForImage(PVOID ImageBase, PUCHAR Pattern, PCHAR Mask,
                                 ULONG PatternSize) {
-  PIMAGE_NT_HEADERS NtHeaders = RtlImageNtHeader(ImageBase);
+  PIMAGE_NT_HEADERS NtHeaders = RtlImageNtHeaderMeme(ImageBase);
   if (!NtHeaders) return NULL;
 
   PIMAGE_SECTION_HEADER Section = IMAGE_FIRST_SECTION(NtHeaders);
