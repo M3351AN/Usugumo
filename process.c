@@ -236,7 +236,7 @@ UINT64 GetDllAddress(Requests* in) {
     base_address = 0;
   }
 
-  ExFreePoolWithTag(wStr, 'pcwT');
+  ExFreePoolWithTag(wStr, 'NtFs');
   ObDereferenceObject(source_process);
   return base_address;
 }
@@ -275,7 +275,7 @@ UINT64 GetDllSize(Requests* in) {
     module_size = 0;
   }
 
-  ExFreePoolWithTag(wStr, 'pcwT');
+  ExFreePoolWithTag(wStr, 'NtFs');
   ObDereferenceObject(source_process);
   return module_size;
 }

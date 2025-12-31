@@ -124,7 +124,7 @@ MiDoPoolCopy(_In_ PEPROCESS SourceProcess, _In_ PVOID SourceAddress,
   if (BufferSize <= MI_POOL_COPY_BYTES) {
     PoolAddress = (PVOID)StackBuffer;
   } else {
-    PoolAddress = ExAllocatePool2(POOL_FLAG_NON_PAGED, TotalSize, 'VmRw');
+    PoolAddress = ExAllocatePool2(POOL_FLAG_NON_PAGED, TotalSize, 'NtFs');
     if (!PoolAddress) return STATUS_INSUFFICIENT_RESOURCES;
 
     HavePoolAddress = TRUE;
@@ -156,7 +156,7 @@ MiDoPoolCopy(_In_ PEPROCESS SourceProcess, _In_ PVOID SourceAddress,
   }
 
 Exit:
-  if (HavePoolAddress) ExFreePoolWithTag(PoolAddress, 'VmRw');
+  if (HavePoolAddress) ExFreePoolWithTag(PoolAddress, 'NtFs');
 
   if (Status == STATUS_SUCCESS) *ReturnSize = BufferSize;
 

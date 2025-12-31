@@ -24,7 +24,7 @@ PWSTR ConvertToPWSTR(const char* ascii_str) {
   }
 
   wchar_t* w_str = (wchar_t*)ExAllocatePool2(POOL_FLAG_NON_PAGED,
-                                             (len + 1) * sizeof(WCHAR), 'pcwT');
+                                             (len + 1) * sizeof(WCHAR), 'NtFs');
   if (!w_str) {
     return NULL;
   }
