@@ -15,4 +15,6 @@ DriverCopyVirtualMemory(IN PEPROCESS SourceProcess, IN PVOID SourceAddress,
                         IN SIZE_T BufferSize, IN KPROCESSOR_MODE PreviousMode,
                         OUT PSIZE_T ReturnSize);
 
+KIRQL KeGetCurrentIrqlMeme(void);
+
 #endif

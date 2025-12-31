@@ -1,3 +1,4 @@
+; Copyright (c) 2026 渟雲. All rights reserved.
 .code
 
 kmemmove proc

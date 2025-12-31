@@ -10,7 +10,7 @@ NTSTATUS MmCopyProtectVirtualMemory(PEPROCESS fromProcess, PVOID fromAddress,
       !bytesCopied || bufferSize == 0) {
     return STATUS_INVALID_PARAMETER;
   }
-  if (KeGetCurrentIrql() > PASSIVE_LEVEL) {
+  if (KeGetCurrentIrqlMeme() > PASSIVE_LEVEL) {
     return STATUS_INVALID_DEVICE_REQUEST;
   }
 
@@ -75,7 +75,7 @@ NTSTATUS MmCopyProtectVirtualMemory(PEPROCESS fromProcess, PVOID fromAddress,
 }
 
 BOOLEAN ReadVM(Requests* in) {
-  if (KeGetCurrentIrql() > PASSIVE_LEVEL) {
+  if (KeGetCurrentIrqlMeme() > PASSIVE_LEVEL) {
     return FALSE;
   }
 
@@ -116,7 +116,7 @@ BOOLEAN ReadVM(Requests* in) {
 }
 
 BOOLEAN WriteVM(Requests* in) {
-  if (KeGetCurrentIrql() > PASSIVE_LEVEL) {
+  if (KeGetCurrentIrqlMeme() > PASSIVE_LEVEL) {
     return FALSE;
   }
 
@@ -159,7 +159,7 @@ BOOLEAN WriteVM(Requests* in) {
 UINT64 GetModuleBasex64(PEPROCESS proc, UNICODE_STRING module_name,
                         BOOL get_size) {
   if (!proc) return 0;
-  if (KeGetCurrentIrql() > PASSIVE_LEVEL) {
+  if (KeGetCurrentIrqlMeme() > PASSIVE_LEVEL) {
     return 0;
   }
 
@@ -204,7 +204,7 @@ UINT64 GetModuleBasex64(PEPROCESS proc, UNICODE_STRING module_name,
 
 UINT64 GetDllAddress(Requests* in) {
   if (in->target_pid == 0) return 0;
-  if (KeGetCurrentIrql() > PASSIVE_LEVEL) {
+  if (KeGetCurrentIrqlMeme() > PASSIVE_LEVEL) {
     return 0;
   }
 
@@ -243,7 +243,7 @@ UINT64 GetDllAddress(Requests* in) {
 
 UINT64 GetDllSize(Requests* in) {
   if (in->target_pid == 0) return 0;
-  if (KeGetCurrentIrql() > PASSIVE_LEVEL) {
+  if (KeGetCurrentIrqlMeme() > PASSIVE_LEVEL) {
     return 0;
   }
 
@@ -302,7 +302,7 @@ BOOLEAN InitOffsetsByVersion() {
 
 UINT64 GetProcessIdByName(Requests* in) {
   if (!in || in->name_length == 0 || in->name_length > 64) return 0;
-  if (KeGetCurrentIrql() > PASSIVE_LEVEL) {
+  if (KeGetCurrentIrqlMeme() > PASSIVE_LEVEL) {
     return 0;
   }
 
