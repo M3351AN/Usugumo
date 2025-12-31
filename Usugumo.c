@@ -24,8 +24,17 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
   _IofCompleteRequest = (QWORD)IofCompleteRequest;
   _IoReleaseRemoveLockEx = (QWORD)IoReleaseRemoveLockEx;
 
-  UNICODE_STRING device_name =
-      RTL_CONSTANT_STRING(L"\\Device\\Usugum0");  // die lit
+  LARGE_INTEGER perf_counter;
+  KeQueryPerformanceCounter(&perf_counter);
+  ULONG ramdon_seed =
+      (ULONG)perf_counter.LowPart ^ (ULONG)perf_counter.HighPart;
+  WCHAR random_device_name_buf[256] = {0};
+  UNICODE_STRING device_name;
+  RtlStringCbPrintfW(random_device_name_buf,
+             sizeof(random_device_name_buf) / sizeof(WCHAR),
+                     L"\\Device\\%04X", RtlRandomEx(&ramdon_seed));
+  RtlInitUnicodeString(&device_name, random_device_name_buf);
+
   UNICODE_STRING sddl_string = RTL_CONSTANT_STRING(SDDL_STRING);
   UNICODE_STRING symbolic_link_name =
       RTL_CONSTANT_STRING(L"\\DosDevices\\Global\\Usugum0");
@@ -35,6 +44,7 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
   NTSTATUS status = IoCreateDeviceSecure(
       DriverObject, 0, &device_name, FILE_DEVICE_UNKNOWN,
       FILE_DEVICE_SECURE_OPEN, FALSE, &sddl_string, NULL, &device_object);
+
   if (status != STATUS_SUCCESS) return status;
 
   status = IoCreateSymbolicLink(&symbolic_link_name, &device_name);

@@ -6,6 +6,7 @@
 #include <wdmsec.h>
 
 #include <ntimage.h>
+#include <ntstrsafe.h>
 #include <windef.h>
 
 #include "./usugumo_request_define.h"
