@@ -1,6 +1,13 @@
 ﻿# Usugumo
 
-A Windows kernel-mode driver that proxies RPM/WPM/mouse_event operations, handling user-mode process requests via ioctl
+A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc operations, handling user-mode process requests via ioctl
+
+> [!WARNING]
+> This project IS NOT designed to combat AC/AV/EDR or sth like that.
+> 
+> And no matter what purpose you use it for, I DO NOT guarantee anything about it and assume ALL RISKS at your own risk
+> 
+> Unless strictly tested and appropriately modified, in principle, DO NOT directly use any code from this project for production environments
 
 ---
 
@@ -8,7 +15,11 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event operations, handli
 
 - Handling user-mode process requests via ioctl
 - Kernel-mode RPM/WPM
+- Kernel-mode fetch module info(base, size)
+- Kernel-mode get PID via name
 - Kernel-mode mouse input
+- Kernel-mode keyboard input
+- Kernel-mode anti capture
   
 ## KnownIssues
 
@@ -18,6 +29,12 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event operations, handli
 ## License
 
 This project is licensed under [**TOSSUCU License 2025.9**](LICENSE).
+
+## Usage
+
+See [Examples](./Examples)
+
+There‘s also an alternative example that utilizes Native API, which is not a best practice, but better than most user-mode pasta.
 
 ## Credits
 
