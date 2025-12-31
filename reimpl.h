@@ -3,6 +3,8 @@
 #ifndef _REIMPL_H_
 #define _REIMPL_H_
 
+int __cdecl kstricmp(const char* Str1, const char* Str2);
+
 NTSTATUS
 DriverCopyVirtualMemory(IN PEPROCESS SourceProcess, IN PVOID SourceAddress,
                         IN PEPROCESS TargetProcess, OUT PVOID TargetAddress,

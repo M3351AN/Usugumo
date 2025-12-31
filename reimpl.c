@@ -3,14 +3,31 @@
 
 #define MI_MAPPED_COPY_PAGES 14
 
-static inline void* kmemcpy(void* dest, const void* src, unsigned long count) {
-  __movsb((unsigned char*)dest, (const unsigned char*)src, count);
-  return dest;
+__int64 __fastcall _kascii_stricmp(const char* a1, const char* a2) {
+  int v4;  // r8d
+  int v5;  // edx
+  int v6;  // r9d
+  int v7;  // eax
+
+  do {
+    v4 = *a1++;
+    v5 = *a2;
+    v6 = v4 + 32;
+    if ((unsigned int)(v4 - 65) > 0x19) v6 = v4;
+    v7 = v5 + 32;
+    ++a2;
+    if ((unsigned int)(v5 - 65) > 0x19) v7 = v5;
+  } while (v6 && v6 == v7);
+  return (unsigned int)(v6 - v7);
 }
 
-static inline void* reimpl_memcpy(void* dest, const void* src, SIZE_T count) {
-  return kmemcpy((unsigned char*)dest, (const unsigned char*)src,
-                 (unsigned long)count);
+int __cdecl kstricmp(const char* Str1, const char* Str2) {
+  return (int)_kascii_stricmp(Str1, Str2);
+}
+
+static inline void* kmemcpy(void* dest, const void* src, SIZE_T count) {
+  __movsb((unsigned char*)dest, (const unsigned char*)src, count);
+  return dest;
 }
 
 NTSTATUS
@@ -84,7 +101,7 @@ MiDoMappedCopy(_In_ PEPROCESS SourceProcess, _In_ PVOID SourceAddress,
     KeStackAttachProcess((PRKPROCESS)TargetProcess, &ApcState);
 
     __try {
-      reimpl_memcpy(CurrentTargetAddress, MdlAddress, CurrentSize);
+      kmemcpy(CurrentTargetAddress, MdlAddress, CurrentSize);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
       Status = GetExceptionCode();
       KeUnstackDetachProcess(&ApcState);

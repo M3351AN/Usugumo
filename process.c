@@ -336,7 +336,7 @@ UINT64 GetProcessIdByName(Requests* in) {
     }
 
     if (imageName && imageName[0]) {
-      if (_stricmp(targetName, imageName) == 0) {
+      if (kstricmp(targetName, imageName) == 0) {
         foundPid = (UINT64)currentPid;
         break;
       }
