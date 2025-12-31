@@ -23,18 +23,20 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc o
   
 ## KnownIssues
 
-- Currently only works on x64 windows
+- Currently only works on x64 windows (other arch, no quiero)
 - Current implementation does not take into account CR3 encryption, kernel-mode memory protection, etc., and is only used as a PoC
-
-## License
-
-This project is licensed under [**TOSSUCU License 2025.9**](LICENSE).
 
 ## Usage
 
 See [Examples](./Examples)
 
 There‘s also an alternative example that utilizes Native API, which is not a best practice, but better than most user-mode pasta.
+
+## License
+
+This project is licensed under [**TOSSUCU License 2025.9**](LICENSE).
+
+For most development purposes, it can be considered a variant of MIT or BSD.
 
 ## Credits
 
