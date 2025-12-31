@@ -141,6 +141,7 @@
     <ClInclude Include="usugumo_request_define.h" />
   </ItemGroup>
   <ItemGroup>
+    <MASM Include="kmemmove.asm" />
     <MASM Include="mouse.asm" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

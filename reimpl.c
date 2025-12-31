@@ -46,11 +46,6 @@ int __cdecl kwcsicmp(const wchar_t* Str1, const wchar_t* Str2) {
   return v6 - v7;
 }
 
-static inline void* kmemcpy(void* dest, const void* src, SIZE_T count) {
-  __movsb((unsigned char*)dest, (const unsigned char*)src, count);
-  return dest;
-}
-
 NTSTATUS
 MiDoMappedCopy(_In_ PEPROCESS SourceProcess, _In_ PVOID SourceAddress,
                _In_ PEPROCESS TargetProcess, _Out_ PVOID TargetAddress,
@@ -122,7 +117,7 @@ MiDoMappedCopy(_In_ PEPROCESS SourceProcess, _In_ PVOID SourceAddress,
     KeStackAttachProcess((PRKPROCESS)TargetProcess, &ApcState);
 
     __try {
-      kmemcpy(CurrentTargetAddress, MdlAddress, CurrentSize);
+      kmemmove(CurrentTargetAddress, MdlAddress, CurrentSize);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
       Status = GetExceptionCode();
       KeUnstackDetachProcess(&ApcState);

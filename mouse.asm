@@ -2,18 +2,17 @@ EXTERNDEF _KeAcquireSpinLockAtDpcLevel:PROC
 EXTERNDEF _KeReleaseSpinLockFromDpcLevel:PROC
 EXTERNDEF _IofCompleteRequest:PROC
 EXTERNDEF _IoReleaseRemoveLockEx:PROC
-EXTERNDEF memmove:PROC
-
+EXTERNDEF kmemmove:PROC
 .data
 WPP_RECORDER_INITIALIZED dq 0;
 WPP_GLOBAL_Control dq 0;
 .code
 
-WPP_RECORDER_SF proc
+WPP_RECORDER_SFMeme proc
 	ret
-WPP_RECORDER_SF endp
+WPP_RECORDER_SFMeme endp
 
-MouseClassReadCopyData proc
+MouseClassReadCopyDataMeme proc
 	mov    r11,rsp
 	mov    QWORD PTR [r11+8h],rbx
 	mov    QWORD PTR [r11+10h],rbp
@@ -45,7 +44,7 @@ MouseClassReadCopyData proc
 	mov    rcx,r14
 	mov    r8d,r12d
 	mov    r15d,r12d
-	call   memmove
+	call   kmemmove
 	add    r14,r15
 	mov    ebx,ebp
 	sub    ebx,r12d
@@ -53,7 +52,7 @@ MouseClassReadCopyData proc
 	mov    rdx,QWORD PTR [rdi+68h]
 	mov    r8,rbx
 	mov    rcx,r14
-	call   memmove
+	call   kmemmove
 	mov    rcx,QWORD PTR [rdi+68h]
 	add    rcx,rbx
 	mov    QWORD PTR [rdi+78h],rcx
@@ -83,12 +82,12 @@ J1FF:
 	pop    r12
 	pop    rdi
 	ret
-MouseClassReadCopyData endp
+MouseClassReadCopyDataMeme endp
 
 
 
 
-MouseClassDequeueRead proc
+MouseClassDequeueReadMeme proc
 	xor    edx,edx
 	lea    r8,[rcx+98h]
 J9:
@@ -120,10 +119,10 @@ J47:
 J4C:
 	mov    ecx,3h
 	int    29h
-MouseClassDequeueRead endp
+MouseClassDequeueReadMeme endp
 
 
-MouseClassServiceCallback proc
+MouseClassServiceCallbackMeme proc
 	mov    rax,rsp
 	mov    QWORD PTR [rax+8h],rbx
 	mov    QWORD PTR [rax+10h],rsi
@@ -155,7 +154,7 @@ MouseClassServiceCallback proc
 	lea    r9d,[rsi+32h]
 	lea    r8d,[rsi+3h]
 	mov    dl,5h
-	call   WPP_RECORDER_SF
+	call   WPP_RECORDER_SFMeme
 
 J61:
 
@@ -172,7 +171,7 @@ J61:
 	mov    QWORD PTR [rbp-8h],rax
 	lea    rax,[rbp-10h]
 	mov    QWORD PTR [rbp-10h],rax
-	call   MouseClassDequeueRead
+	call   MouseClassDequeueReadMeme
 	mov    rsi,rax
 	xor    r9d,r9d
 	mov    rax,0aaaaaaaaaaaaaaabh
@@ -201,7 +200,7 @@ J61:
 	mov    DWORD PTR [rsp+38h],ebx
 	mov    QWORD PTR [rsp+30h],rsi
 	mov    QWORD PTR [rsp+28h],r15
-	call   WPP_RECORDER_SF
+	call   WPP_RECORDER_SFMeme
 
 J11d:
 
@@ -216,14 +215,14 @@ J11d:
 	mov    QWORD PTR [rsp+30h],rsi
 	mov    rcx,QWORD PTR [rcx+40h]
 	mov    QWORD PTR [rsp+28h],r15
-	call   WPP_RECORDER_SF
+	call   WPP_RECORDER_SFMeme
 
 J15e:
 
 	mov    rcx,QWORD PTR [rsi+18h]
 	mov    r8,r12
 	mov    rdx,r14
-	call   memmove
+	call   kmemmove
 	mov    QWORD PTR [rsi+38h],r12
 	lea    rcx,[rbp-10h]
 	xor    r8d,r8d
@@ -255,7 +254,7 @@ J1aa:
 	mov    rcx,QWORD PTR [rcx+40h]
 	mov    DWORD PTR [rsp+30h],ebx
 	mov    QWORD PTR [rsp+28h],r15
-	call   WPP_RECORDER_SF
+	call   WPP_RECORDER_SFMeme
 
 J1e4:
 
@@ -276,7 +275,7 @@ J1e4:
 	sub    eax,edx
 	mov    DWORD PTR [rsp+30h],eax
 	mov    QWORD PTR [rsp+28h],r15
-	call   WPP_RECORDER_SF
+	call   WPP_RECORDER_SFMeme
 
 J22f:
 
@@ -298,7 +297,7 @@ J22f:
 	mov    DWORD PTR [rsp+38h],ebx
 	mov    DWORD PTR [rsp+30h],r12d
 	mov    QWORD PTR [rsp+28h],r15
-	call   WPP_RECORDER_SF
+	call   WPP_RECORDER_SFMeme
 	lea    rax,WPP_RECORDER_INITIALIZED
 
 J287:
@@ -319,7 +318,7 @@ J287:
 	mov    QWORD PTR [rsp+38h],r14
 	mov    DWORD PTR [rsp+30h],esi
 	mov    QWORD PTR [rsp+28h],r15
-	call   WPP_RECORDER_SF
+	call   WPP_RECORDER_SFMeme
 
 J2cc:
 
@@ -327,7 +326,7 @@ J2cc:
 	mov    rdx,r14
 	mov    r8d,esi
 	mov    ebx,esi
-	call   memmove
+	call   kmemmove
 	add    QWORD PTR [rdi+70h],rbx
 	add    r14,rbx
 	mov    rdx,QWORD PTR [rdi+68h]
@@ -358,7 +357,7 @@ J301:
 	mov    QWORD PTR [rsp+38h],r14
 	mov    DWORD PTR [rsp+30h],ebx
 	mov    QWORD PTR [rsp+28h],r15
-	call   WPP_RECORDER_SF
+	call   WPP_RECORDER_SFMeme
 	mov    rax,QWORD PTR [rdi+70h]
 
 J350:
@@ -366,7 +365,7 @@ J350:
 	mov    r8,rbx
 	mov    rdx,r14
 	mov    rcx,rax
-	call   memmove
+	call   kmemmove
 	add    QWORD PTR [rdi+70h],rbx
 
 J362:
@@ -396,19 +395,19 @@ J362:
 	mov    eax,DWORD PTR [rdi+54h]
 	mov    DWORD PTR [rsp+30h],eax
 	mov    QWORD PTR [rsp+28h],r15
-	call   WPP_RECORDER_SF
+	call   WPP_RECORDER_SFMeme
 	jmp    J41d
 
 J3d5:
 
 	mov    rcx,rdi
-	call   MouseClassDequeueRead
+	call   MouseClassDequeueReadMeme
 	mov    rbx,rax
 	test   rax,rax
 	je     J422
 	mov    rdx,rax
 	mov    rcx,rdi
-	call   MouseClassReadCopyData
+	call   MouseClassReadCopyDataMeme
 	mov    DWORD PTR [rbx+30h],eax
 	lea    rcx,[rbp-10h]
 	mov    rdx,QWORD PTR [rbp-8h]
@@ -476,7 +475,7 @@ J49C:
 	mov    r9d,3ch
 	mov    dl,5h
 	lea    r8d,[r9-39h]
-	call   WPP_RECORDER_SF
+	call   WPP_RECORDER_SFMeme
 
 J4c7:
 
@@ -491,7 +490,7 @@ J4c7:
 	pop    r12
 	pop    rbp
 	ret
-MouseClassServiceCallback endp
+MouseClassServiceCallbackMeme endp
 
 end
 

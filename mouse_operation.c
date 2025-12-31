@@ -110,7 +110,7 @@ inline void MouseCall(long x, long y, unsigned short button_flags,
   }
   mid.UnitId = 1;
   RAISE_IRQL(DISPATCH_LEVEL, &irql);
-  MouseClassServiceCallback(gMouseObject.mouse_device, &mid,
+  MouseClassServiceCallbackMeme(gMouseObject.mouse_device, &mid,
                             (PMOUSE_INPUT_DATA)&mid + 1, &input_data);
   KeLowerIrql(irql);
 }

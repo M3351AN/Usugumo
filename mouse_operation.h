@@ -8,6 +8,11 @@ QWORD _KeReleaseSpinLockFromDpcLevel;
 QWORD _IofCompleteRequest;
 QWORD _IoReleaseRemoveLockEx;
 
+VOID MouseClassServiceCallbackMeme(PDEVICE_OBJECT DeviceObject,
+                               PMOUSE_INPUT_DATA InputDataStart,
+                               PMOUSE_INPUT_DATA InputDataEnd,
+                               PULONG InputDataConsumed);
+
 VOID HandleMouseEvent(Requests*);
 
 #endif

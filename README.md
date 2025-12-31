@@ -25,6 +25,7 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc o
 
 - Currently only works on x64 windows (other arch, no quiero)
 - Current implementation does not take into account CR3 encryption, kernel-mode memory protection, etc., and is only used as a PoC
+- This is just a PoC, which is why you may find my approach relatively elegant in some places, while overly ghetto in others
 
 ## Usage
 
