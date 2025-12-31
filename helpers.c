@@ -45,7 +45,7 @@ PVOID SearchSignForImage(PVOID ImageBase, PUCHAR Pattern, PCHAR Mask,
   PIMAGE_SECTION_HEADER Section = IMAGE_FIRST_SECTION(NtHeaders);
   for (ULONG i = 0; i < NtHeaders->FileHeader.NumberOfSections;
        i++, Section++) {
-    if (strcmp((PCHAR)Section->Name, ".text") == 0 ||
+    if (kstricmp((PCHAR)Section->Name, ".text") == 0 ||
         (Section->Characteristics & IMAGE_SCN_CNT_CODE)) {
       PUCHAR Start = (PUCHAR)ImageBase + Section->VirtualAddress;
       ULONG Size = Section->Misc.VirtualSize;
