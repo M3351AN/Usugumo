@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <string_view>
 #include <memory>
+#include <unordered_map>
 
 #include "./mouse_input_injection.h"
 #include "./keybd_input_injection.h"
@@ -19,8 +20,8 @@
 #define STATUS_INFO_LENGTH_MISMATCH ((NTSTATUS)0xC0000004L)
 #endif
 
-constexpr inline size_t kSyscallSize = 16uz;  // most syscall instruction size
-constexpr inline size_t kSNtFuncMaxSize = 32uz;  // just incase
+constexpr inline size_t kIndirectSyscallSize = 22uz;
+constexpr inline size_t kSNtFuncMaxSize = 64uz; // usually wont exceed 64 bytes
 constexpr inline ULONG kDefaultBufferSize = 0x10000u;
 
 typedef struct _UNICODE_STRING UNICODE_STRING, *PUNICODE_STRING;
@@ -32,12 +33,13 @@ typedef struct _LDR_DATA_TABLE_ENTRY LDR_DATA_TABLE_ENTRY, *PLDR_DATA_TABLE_ENTR
 typedef struct _PEB PEB, *PPEB;
 typedef struct _SYSTEM_PROCESS_INFORMATION SYSTEM_PROCESS_INFORMATION, *PSYSTEM_PROCESS_INFORMATION;
 
-static ULONG g_NtOpenProcess_SyscallNum = 0;
-static ULONG g_NtReadVirtualMemory_SyscallNum = 0;
-static ULONG g_NtWriteVirtualMemory_SyscallNum = 0;
-static ULONG g_NtProtectVirtualMemory_SyscallNum = 0;
-static ULONG g_NtQueryInformationProcess_SyscallNum = 0;
-static ULONG g_NtQuerySystemInformation_SyscallNum = 0;
+struct SyscallInfo {
+    ULONG syscallNum;
+    uintptr_t syscallAddr;
+    void* funcPtr;
+};
+
+static std::unordered_map<std::string, SyscallInfo> g_SyscallInfoMap;
 
 typedef NTSTATUS(NTAPI* _NtOpenProcess)(PHANDLE ProcessHandle,
                                         ACCESS_MASK DesiredAccess,
@@ -80,6 +82,7 @@ typedef NTSTATUS(WINAPI* pNtQuerySystemInformation)(
 );
 static pNtQuerySystemInformation pfnNtQuerySystemInformation = nullptr;
 
+
 /* 
 .text:0000000180162070                 public NtOpenProcess
 .text:0000000180162070 NtOpenProcess   proc near               ; CODE XREF: RtlQueryProcessDebugInformation+17A↑p
@@ -104,11 +107,12 @@ static pNtQuerySystemInformation pfnNtQuerySystemInformation = nullptr;
 .text:0000000180162090 ; Exported entry 609. NtSetInformationFile
 .text:0000000180162090 ; Exported entry 2256. ZwSetInformationFile
  */
-static const BYTE g_SyscallTemplate[kSyscallSize] = {
-    0x4C, 0x8B, 0xD1,          
-    0xB8, 0x00, 0x00, 0x00, 0x00,
-    0x0F, 0x05,                
-    0xC3                       
+
+static const BYTE g_IndirectSyscallTemplate[] = {
+    0x4C, 0x8B, 0xD1,       // mov r10, rcx
+    0xB8, 0x00, 0x00, 0x00, 0x00, // mov eax, SSN (4 bytes)
+    0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, // jmp [rip] (6 bytes)
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // syscall addr (8 bytes)
 };
 
 struct _UNICODE_STRING {
@@ -229,7 +233,7 @@ using UniqueVirtualMemPtr = std::unique_ptr<BYTE, VirtualMemDeleter>;
 
 using UniqueLdrEntryPtr = std::unique_ptr<LDR_DATA_TABLE_ENTRY>;
 
-static bool FindSyscallInstruction(PBYTE pFuncBytes, ULONG funcSearchSize, ULONG& syscallOffset) noexcept
+static bool FindSyscallInstruction(PBYTE pFuncBytes, ULONG funcSearchSize, uintptr_t& syscallAddr) noexcept
 {
     if (!pFuncBytes || funcSearchSize < 2)
         return false;
@@ -238,126 +242,204 @@ static bool FindSyscallInstruction(PBYTE pFuncBytes, ULONG funcSearchSize, ULONG
     {
         if (pFuncBytes[i] == 0x0F && pFuncBytes[i+1] == 0x05)
         {
-            syscallOffset = i;
+            syscallAddr = reinterpret_cast<uintptr_t>(pFuncBytes + i);
             return true;
         }
     }
     return false;
 }
 
-template <typename T>
-static T ConstructSyscallFunction(ULONG syscallNum) noexcept
+static bool IsFunctionHooked(PBYTE pFuncBytes) noexcept
 {
-    if (syscallNum == 0)
-        return nullptr;
+    if (!pFuncBytes) return false;
+    
+    if (pFuncBytes[0] == 0xE9) { // jmp
+        return true;
+    }
+    
+    if (pFuncBytes[0] == 0xFF && pFuncBytes[1] == 0x25) { // jmp [rip+imm32]
+        return true;
+    }
+    
+    return false;
+}
 
-    UniqueVirtualMemPtr pMem(
-        (PBYTE)VirtualAlloc(nullptr, kSyscallSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
-    );
-    if (!pMem)
-        return nullptr;
-
-    memcpy(pMem.get(), g_SyscallTemplate, kSyscallSize);
-    auto syscallBytes = std::bit_cast<std::array<uint8_t, 4>>(syscallNum);
-    std::copy(syscallBytes.begin(), syscallBytes.end(), pMem.get() + 4);
-
-    DWORD oldProtect = 0;
-    if (!VirtualProtect(pMem.get(), kSyscallSize, PAGE_EXECUTE_READ, &oldProtect))
-    {
+template <typename FuncPtr>
+static FuncPtr ConstructIndirectSyscall(ULONG syscallNum, uintptr_t syscallAddr) noexcept
+{
+    // here we direct called VirtualAlloc/Protect
+    // any way better but wont cause DEP issue?
+    if (syscallNum == 0 || syscallAddr == 0) {
         return nullptr;
     }
 
-    return (T)pMem.release();
+    UniqueVirtualMemPtr pMem(
+        (PBYTE)VirtualAlloc(nullptr, sizeof(g_IndirectSyscallTemplate), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)
+    );
+    if (!pMem) {
+        return nullptr;
+    }
+
+    memcpy(pMem.get(), g_IndirectSyscallTemplate, sizeof(g_IndirectSyscallTemplate));
+    
+    memcpy(pMem.get() + 4, &syscallNum, 4);
+    
+    memcpy(pMem.get() + 14, &syscallAddr, 8);
+    
+    DWORD oldProtect = 0;
+    if (!VirtualProtect(pMem.get(), sizeof(g_IndirectSyscallTemplate), PAGE_EXECUTE_READ, &oldProtect)) {
+        return nullptr;
+    }
+    
+    FlushInstructionCache(GetCurrentProcess(), pMem.get(), sizeof(g_IndirectSyscallTemplate));
+    
+    return reinterpret_cast<FuncPtr>(pMem.release());
 }
 
 static void ManualSysCall_Init() noexcept
 {
-    PBYTE pNtdllBase = (PBYTE)GetModuleHandleW(L"ntdll.dll");
-    if (!pNtdllBase)
+    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
+    if (!hNtdll) {
         return;
-
-    PIMAGE_DOS_HEADER pDosHeader = (PIMAGE_DOS_HEADER)pNtdllBase;
-    if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE)
+    }
+    
+    PBYTE pNtdllBase = reinterpret_cast<PBYTE>(hNtdll);
+    
+    PIMAGE_DOS_HEADER pDosHeader = reinterpret_cast<PIMAGE_DOS_HEADER>(pNtdllBase);
+    if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
         return;
-
-    PIMAGE_NT_HEADERS pNtHeaders = (PIMAGE_NT_HEADERS)((Address)pNtdllBase + pDosHeader->e_lfanew);
-    if (pNtHeaders->Signature != IMAGE_NT_SIGNATURE || pNtHeaders->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC)
+    }
+    
+    PIMAGE_NT_HEADERS pNtHeaders = reinterpret_cast<PIMAGE_NT_HEADERS>(pNtdllBase + pDosHeader->e_lfanew);
+    if (pNtHeaders->Signature != IMAGE_NT_SIGNATURE) {
         return;
-
-    IMAGE_DATA_DIRECTORY exportDirData = pNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
-    if (exportDirData.VirtualAddress == 0 || exportDirData.Size == 0)
+    }
+    
+    IMAGE_DATA_DIRECTORY exportDir = pNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    if (exportDir.VirtualAddress == 0 || exportDir.Size == 0) {
         return;
-
-    PIMAGE_EXPORT_DIRECTORY pExportDir = (PIMAGE_EXPORT_DIRECTORY)((Address)pNtdllBase + exportDirData.VirtualAddress);
-    if (!pExportDir)
-        return;
-
-    PDWORD pFuncNames = (PDWORD)((Address)pNtdllBase + pExportDir->AddressOfNames);
-    PDWORD pFuncAddrs = (PDWORD)((Address)pNtdllBase + pExportDir->AddressOfFunctions);
-    PWORD pFuncOrdinals = (PWORD)((Address)pNtdllBase + pExportDir->AddressOfNameOrdinals);
-
-    for (ULONG i = 0; i < pExportDir->NumberOfNames; i++)
+    }
+    
+    PIMAGE_EXPORT_DIRECTORY pExportDir = reinterpret_cast<PIMAGE_EXPORT_DIRECTORY>(pNtdllBase + exportDir.VirtualAddress);
+    
+    PDWORD pFuncNames = reinterpret_cast<PDWORD>(pNtdllBase + pExportDir->AddressOfNames);
+    PDWORD pFuncAddrs = reinterpret_cast<PDWORD>(pNtdllBase + pExportDir->AddressOfFunctions);
+    PWORD pFuncOrdinals = reinterpret_cast<PWORD>(pNtdllBase + pExportDir->AddressOfNameOrdinals);
+    
+    for (DWORD i = 0; i < pExportDir->NumberOfNames; i++) {
+        const char* pFuncName = reinterpret_cast<const char*>(pNtdllBase + pFuncNames[i]);
+        
+        // Nt or Zw should be same in user mode, but we only care about Nt functions
+        // skip just for performance
+        // if you want to support Zw functions, just remove this check
+        if (strncmp(pFuncName, "Nt", 2) != 0 || strncmp(pFuncName, "Zw", 2) == 0) {
+            continue;
+        }
+        
+        DWORD funcRVA = pFuncAddrs[pFuncOrdinals[i]];
+        if (funcRVA == 0) {
+            continue;
+        }
+        
+        PBYTE pFuncBytes = pNtdllBase + funcRVA;
+        
+        if (IsFunctionHooked(pFuncBytes)) {
+            // incase of hooked, skip this function
+            // anyway, usermode EDR/AV/AC should cant hook these functions
+            continue;
+        }
+        
+        // mov r10, rcx; mov eax, syscallNum
+        if (pFuncBytes[0] != 0x4C || pFuncBytes[1] != 0x8B || pFuncBytes[2] != 0xD1 || pFuncBytes[3] != 0xB8) {
+            continue;
+        }
+        
+        ULONG syscallNum = *reinterpret_cast<ULONG*>(pFuncBytes + 4);
+        if (syscallNum == 0) {
+            continue;
+        }
+        
+        uintptr_t syscallAddr = 0;
+        if (!FindSyscallInstruction(pFuncBytes, kSNtFuncMaxSize, syscallAddr)) {
+            continue;
+        }
+        
+        SyscallInfo info;
+        info.syscallNum = syscallNum;
+        info.syscallAddr = syscallAddr;
+        info.funcPtr = nullptr;
+        
+        g_SyscallInfoMap[pFuncName] = info;
+    }
+    
+    // NtOpenProcess
     {
-        uintptr_t funcNameRva = pFuncNames[i];
-        const char* pFuncName = (const char*)((Address)pNtdllBase + funcNameRva);
-        if (!pFuncName)
-            continue;
-
-        if (strncmp(pFuncName, "Nt", 2) != 0 || strncmp(pFuncName, "Zw", 2) == 0)
-            continue;
-
-        uintptr_t funcRva = pFuncAddrs[pFuncOrdinals[i]];
-        PBYTE pFuncBytes = (PBYTE)((Address)pNtdllBase + funcRva);
-        if (!pFuncBytes)
-            continue;
-
-        if (pFuncBytes[0] != 0x4C || pFuncBytes[1] != 0x8B || pFuncBytes[2] != 0xD1 || pFuncBytes[3] != 0xB8)
-        {
-            continue;
-        }
-
-        ULONG syscallNum = *(PULONG)(pFuncBytes + 4);
-        if (syscallNum == 0)
-            continue;
-
-        ULONG syscallOffset = 0;
-        if (!FindSyscallInstruction(pFuncBytes, kSNtFuncMaxSize, syscallOffset))
-        {
-            continue;
-        }
-
-        if (strcmp(pFuncName, "NtOpenProcess") == 0)
-        {
-            g_NtOpenProcess_SyscallNum = syscallNum;
-        }
-        else if (strcmp(pFuncName, "NtReadVirtualMemory") == 0)
-        {
-            g_NtReadVirtualMemory_SyscallNum = syscallNum;
-        }
-        else if (strcmp(pFuncName, "NtWriteVirtualMemory") == 0)
-        {
-            g_NtWriteVirtualMemory_SyscallNum = syscallNum;
-        }
-        else if (strcmp(pFuncName, "NtProtectVirtualMemory") == 0)
-        {
-            g_NtProtectVirtualMemory_SyscallNum = syscallNum;
-        }
-        else if (strcmp(pFuncName, "NtQueryInformationProcess") == 0)
-        {
-            g_NtQueryInformationProcess_SyscallNum = syscallNum;
-        }
-        else if (strcmp(pFuncName, "NtQuerySystemInformation") == 0)
-        {
-            g_NtQuerySystemInformation_SyscallNum = syscallNum;
+        auto it = g_SyscallInfoMap.find("NtOpenProcess");
+        if (it != g_SyscallInfoMap.end()) {
+            pfnNtOpenProcess = ConstructIndirectSyscall<_NtOpenProcess>(
+                it->second.syscallNum, it->second.syscallAddr);
+            it->second.funcPtr = reinterpret_cast<void*>(pfnNtOpenProcess);
         }
     }
-
-    pfnNtOpenProcess = ConstructSyscallFunction<_NtOpenProcess>(g_NtOpenProcess_SyscallNum);
-    pfnNtReadVirtualMemory = ConstructSyscallFunction<pNtReadVirtualMemory>(g_NtReadVirtualMemory_SyscallNum);
-    pfnNtWriteVirtualMemory = ConstructSyscallFunction<pNtWriteVirtualMemory>(g_NtWriteVirtualMemory_SyscallNum);
-    pfnNtProtectVirtualMemory = ConstructSyscallFunction<pNtProtectVirtualMemory>(g_NtProtectVirtualMemory_SyscallNum);
-    pfnNtQueryInformationProcess = ConstructSyscallFunction<pNtQueryInformationProcess>(g_NtQueryInformationProcess_SyscallNum);
-    pfnNtQuerySystemInformation = ConstructSyscallFunction<pNtQuerySystemInformation>(g_NtQuerySystemInformation_SyscallNum);
+    
+    // NtReadVirtualMemory
+    {
+        auto it = g_SyscallInfoMap.find("NtReadVirtualMemory");
+        if (it != g_SyscallInfoMap.end()) {
+            pfnNtReadVirtualMemory = ConstructIndirectSyscall<pNtReadVirtualMemory>(
+                it->second.syscallNum, it->second.syscallAddr);
+            it->second.funcPtr = reinterpret_cast<void*>(pfnNtReadVirtualMemory);
+        }
+    }
+    
+    // NtWriteVirtualMemory
+    {
+        auto it = g_SyscallInfoMap.find("NtWriteVirtualMemory");
+        if (it != g_SyscallInfoMap.end()) {
+            pfnNtWriteVirtualMemory = ConstructIndirectSyscall<pNtWriteVirtualMemory>(
+                it->second.syscallNum, it->second.syscallAddr);
+            it->second.funcPtr = reinterpret_cast<void*>(pfnNtWriteVirtualMemory);
+        }
+    }
+    
+    // NtProtectVirtualMemory
+    {
+        auto it = g_SyscallInfoMap.find("NtProtectVirtualMemory");
+        if (it != g_SyscallInfoMap.end()) {
+            pfnNtProtectVirtualMemory = ConstructIndirectSyscall<pNtProtectVirtualMemory>(
+                it->second.syscallNum, it->second.syscallAddr);
+            it->second.funcPtr = reinterpret_cast<void*>(pfnNtProtectVirtualMemory);
+        }
+    }
+    
+    // NtQueryInformationProcess
+    {
+        auto it = g_SyscallInfoMap.find("NtQueryInformationProcess");
+        if (it != g_SyscallInfoMap.end()) {
+            pfnNtQueryInformationProcess = ConstructIndirectSyscall<pNtQueryInformationProcess>(
+                it->second.syscallNum, it->second.syscallAddr);
+            it->second.funcPtr = reinterpret_cast<void*>(pfnNtQueryInformationProcess);
+        }
+    }
+    
+    // NtQuerySystemInformation
+    {
+        auto it = g_SyscallInfoMap.find("NtQuerySystemInformation");
+        if (it != g_SyscallInfoMap.end()) {
+            pfnNtQuerySystemInformation = ConstructIndirectSyscall<pNtQuerySystemInformation>(
+                it->second.syscallNum, it->second.syscallAddr);
+            it->second.funcPtr = reinterpret_cast<void*>(pfnNtQuerySystemInformation);
+        }
+    }
+    
+    // fail openprocess, nosense to use other syscalls
+    if (!pfnNtOpenProcess) {
+        pfnNtReadVirtualMemory = nullptr;
+        pfnNtWriteVirtualMemory = nullptr;
+        pfnNtProtectVirtualMemory = nullptr;
+        pfnNtQueryInformationProcess = nullptr;
+        pfnNtQuerySystemInformation = nullptr;
+    }
 }
 
 static bool g_ManualSysCallInited = []() noexcept {
@@ -406,6 +488,7 @@ inline static pNtQueryInformationProcess NtQueryInformationProcess = []() noexce
 inline static pNtQuerySystemInformation NtQuerySystemInformation = []() noexcept {
   return pfnNtQuerySystemInformation;
 }();
+
 class Native {
  public:
   Native() noexcept : target_process_handle_(nullptr), target_process_id_(0), dpi_(0) {}
