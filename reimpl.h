@@ -19,4 +19,5 @@ KIRQL KeGetCurrentIrqlMeme(void);
 
 PIMAGE_NT_HEADERS RtlImageNtHeaderMeme(PVOID Base);
 
+SIZE_T MmSizeOfMdlMeme(PVOID Base, SIZE_T Length);
 #endif

@@ -66,7 +66,7 @@ MiDoMappedCopy(_In_ PEPROCESS SourceProcess, _In_ PVOID SourceAddress,
   PAGED_CODE();
 
   MdlRequiredSize =
-      MmSizeOfMdl(SourceAddress, MI_MAPPED_COPY_PAGES * PAGE_SIZE);
+      MmSizeOfMdlMeme(SourceAddress, MI_MAPPED_COPY_PAGES * PAGE_SIZE);
   if (MdlRequiredSize == 0 ||
       MdlRequiredSize > (MI_MAPPED_COPY_PAGES * PAGE_SIZE * 2)) {
     Status = STATUS_INVALID_PARAMETER;
@@ -184,4 +184,11 @@ DriverCopyVirtualMemory(IN PEPROCESS SourceProcess, IN PVOID SourceAddress,
                           TargetAddress, BufferSize, PreviousMode, ReturnSize);
 
   return Status;
+}
+
+SIZE_T MmSizeOfMdlMeme(PVOID Base, SIZE_T Length) {
+  UINT_PTR base_ptr_val = (UINT_PTR)Base;
+  unsigned __int16 base_low_12bit = (unsigned __int16)(base_ptr_val & 0xFFF);
+
+    return 8 * ((((unsigned __int16)base_low_12bit + Length + 4095) >> 12) + 48);
 }
