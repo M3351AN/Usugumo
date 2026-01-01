@@ -100,6 +100,8 @@
       <DisableSpecificWarnings>4819;4603;4627;4986;4987;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <CompileAs>CompileAsC</CompileAs>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <Optimization>MaxSpeed</Optimization>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
     </ClCompile>
     <Link>
       <LargeAddressAware>true</LargeAddressAware>
@@ -107,6 +109,7 @@
       <RandomizedBaseAddress>true</RandomizedBaseAddress>
       <AdditionalDependencies>Wdmsec.lib;%(AdditionalDependencies);$(KernelBufferOverflowLib);$(DDK_LIB_PATH)ntoskrnl.lib;$(DDK_LIB_PATH)hal.lib;$(DDK_LIB_PATH)wmilib.lib;$(KMDF_LIB_PATH)$(KMDF_VER_PATH)\WdfLdr.lib;$(KMDF_LIB_PATH)$(KMDF_VER_PATH)\WdfDriverEntry.lib</AdditionalDependencies>
       <GenerateMapFile>true</GenerateMapFile>
+      <MergeSections>_TEXT=.vmp;_PAGE=.tmd</MergeSections>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
