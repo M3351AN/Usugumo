@@ -3,7 +3,7 @@
 
 #define MI_MAPPED_COPY_PAGES 14
 
-__int64 __fastcall _kascii_stricmp(const char* a1, const char* a2) {
+__int64 _kascii_stricmp(const char* a1, const char* a2) {
   int v4;  // r8d
   int v5;  // edx
   int v6;  // r9d
@@ -21,11 +21,11 @@ __int64 __fastcall _kascii_stricmp(const char* a1, const char* a2) {
   return (unsigned int)(v6 - v7);
 }
 
-int __cdecl kstricmp(const char* Str1, const char* Str2) {
+int kstricmp(const char* Str1, const char* Str2) {
   return (int)_kascii_stricmp(Str1, Str2);
 }
 
-int __cdecl kwcsicmp(const wchar_t* Str1, const wchar_t* Str2) {
+int kwcsicmp(const wchar_t* Str1, const wchar_t* Str2) {
   const wchar_t* v2;    // r10
   signed __int64 v3;    // r9
   unsigned __int16 v4;  // r8
