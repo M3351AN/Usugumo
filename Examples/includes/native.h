@@ -274,7 +274,7 @@ static FuncPtr ConstructIndirectSyscall(ULONG syscallNum, uintptr_t syscallAddr)
     }
 
     UniqueVirtualMemPtr pMem(
-        (PBYTE)VirtualAlloc(nullptr, sizeof(g_IndirectSyscallTemplate), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)
+        (PBYTE)VirtualAlloc(nullptr, sizeof(g_IndirectSyscallTemplate), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
     );
     if (!pMem) {
         return nullptr;
