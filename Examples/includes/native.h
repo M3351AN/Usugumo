@@ -82,8 +82,15 @@ typedef NTSTATUS(WINAPI* pNtQuerySystemInformation)(
 );
 static pNtQuerySystemInformation pfnNtQuerySystemInformation = nullptr;
 
-
 /* 
+.text:0000000180162070 ; Exported entry 451. NtOpenProcess
+.text:0000000180162070 ; Exported entry 2098. ZwOpenProcess
+.text:0000000180162070
+.text:0000000180162070 ; =============== S U B R O U T I N E =======================================
+.text:0000000180162070
+.text:0000000180162070 ; Alternative name is 'NtOpenProcess'
+.text:0000000180162070
+.text:0000000180162070 ; __int64 NtOpenProcess()
 .text:0000000180162070                 public NtOpenProcess
 .text:0000000180162070 NtOpenProcess   proc near               ; CODE XREF: RtlQueryProcessDebugInformation+17A↑p
 .text:0000000180162070                                         ; RtlQueryProcessDebugInformation+22F↑p ...
@@ -100,14 +107,7 @@ static pNtQuerySystemInformation pfnNtQuerySystemInformation = nullptr;
 .text:0000000180162085                                         ; DS:SI -> counted CR-terminated command string
 .text:0000000180162087                 retn
 .text:0000000180162087 NtOpenProcess   endp
-.text:0000000180162087
-.text:0000000180162087 ; ---------------------------------------------------------------------------
-.text:0000000180162088 algn_180162088:                         ; DATA XREF: .pdata:00000001801E34CC↓o
-.text:0000000180162088                 align 10h
-.text:0000000180162090 ; Exported entry 609. NtSetInformationFile
-.text:0000000180162090 ; Exported entry 2256. ZwSetInformationFile
  */
-
 static const BYTE g_IndirectSyscallTemplate[] = {
     0x4C, 0x8B, 0xD1,       // mov r10, rcx
     0xB8, 0x00, 0x00, 0x00, 0x00, // mov eax, SSN (4 bytes)
@@ -329,9 +329,10 @@ static void ManualSysCall_Init() noexcept
     for (DWORD i = 0; i < pExportDir->NumberOfNames; i++) {
         const char* pFuncName = reinterpret_cast<const char*>(pNtdllBase + pFuncNames[i]);
         
-        // Nt or Zw should be same in user mode, but we only care about Nt functions
+        // Nt or Zw is 100% same in user mode, 
+        // but we only care about Nt functions
         // skip just for performance
-        // if you want to support Zw functions, just remove this check
+        // there are not "Zw only" functions in user mode
         if (strncmp(pFuncName, "Nt", 2) != 0 || strncmp(pFuncName, "Zw", 2) == 0) {
             continue;
         }
