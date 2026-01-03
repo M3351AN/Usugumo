@@ -16,6 +16,9 @@
 #ifndef NT_SUCCESS
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
 #endif
+#ifndef STATUS_UNSUCCESSFUL
+#define STATUS_UNSUCCESSFUL ((NTSTATUS)0xC0000001L)
+#endif
 #ifndef STATUS_INFO_LENGTH_MISMATCH
 #define STATUS_INFO_LENGTH_MISMATCH ((NTSTATUS)0xC0000004L)
 #endif
@@ -41,6 +44,26 @@ struct SyscallInfo {
 
 static std::unordered_map<std::string, SyscallInfo> g_SyscallInfoMap;
 
+typedef NTSTATUS(WINAPI* pNtAllocateVirtualMemory)(
+    HANDLE ProcessHandle,
+    PVOID* BaseAddress,
+    ULONG ZeroBits,
+    PSIZE_T RegionSize,
+    ULONG AllocationType,
+    ULONG Protect
+);
+static pNtAllocateVirtualMemory pfnNtAllocateVirtualMemory = nullptr;
+
+typedef NTSTATUS(WINAPI* pNtProtectVirtualMemory)(
+    HANDLE ProcessHandle, PVOID* BaseAddress, PSIZE_T NumberOfBytesToProtect,
+    ULONG NewAccessProtection, PULONG OldAccessProtection);
+static pNtProtectVirtualMemory pfnNtProtectVirtualMemory = nullptr;
+
+typedef NTSTATUS(WINAPI* pNtFreeVirtualMemory)(
+    HANDLE ProcessHandle, LPVOID lpAddress, SIZE_T dwSize, DWORD dwFreeType);
+static pNtFreeVirtualMemory pfnNtFreeVirtualMemory = nullptr;
+
+
 typedef NTSTATUS(NTAPI* _NtOpenProcess)(PHANDLE ProcessHandle,
                                         ACCESS_MASK DesiredAccess,
                                         POBJECT_ATTRIBUTES ObjectAttributes,
@@ -58,11 +81,6 @@ typedef NTSTATUS(WINAPI* pNtWriteVirtualMemory)(HANDLE ProcessHandle,
                                                 ULONG NumberOfBytesToWrite,
                                                 PULONG NumberOfBytesWritten);
 static pNtWriteVirtualMemory pfnNtWriteVirtualMemory = nullptr;
-
-typedef NTSTATUS(WINAPI* pNtProtectVirtualMemory)(
-    HANDLE ProcessHandle, PVOID* BaseAddress, PSIZE_T NumberOfBytesToProtect,
-    ULONG NewAccessProtection, PULONG OldAccessProtection);
-static pNtProtectVirtualMemory pfnNtProtectVirtualMemory = nullptr;
 
 constexpr PROCESS_INFORMATION_CLASS ProcessBasicInformation = (PROCESS_INFORMATION_CLASS)0;  // retarded
 typedef NTSTATUS(WINAPI* pNtQueryInformationProcess)(
@@ -114,8 +132,10 @@ static pNtUserSetWindowDisplayAffinity pfnNtUserSetWindowDisplayAffinity = nullp
 .text:0000000180162087 NtOpenProcess   endp
  */
 static const BYTE g_IndirectSyscallTemplate[] = {
+    // here we construct our syscall
     0x4C, 0x8B, 0xD1,       // mov r10, rcx
     0xB8, 0x00, 0x00, 0x00, 0x00, // mov eax, SSN (4 bytes)
+    // here we jump to syscall in the function
     0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, // jmp [rip] (6 bytes)
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // syscall addr (8 bytes)
 };
@@ -229,7 +249,12 @@ using SyscallNum = ULONG;
 struct VirtualMemDeleter {
     void operator()(PBYTE p) const noexcept {
         if (p != nullptr) {
-            VirtualFree(p, 0, MEM_RELEASE);
+            // Use NtFreeVirtualMemory if available, otherwise use VirtualFree
+            if (pfnNtFreeVirtualMemory) {
+                pfnNtFreeVirtualMemory(GetCurrentProcess(), &p, 0, MEM_RELEASE);
+            } else {
+                VirtualFree(p, 0, MEM_RELEASE);
+            }
         }
     }
 };
@@ -278,9 +303,28 @@ static FuncPtr ConstructIndirectSyscall(ULONG syscallNum, uintptr_t syscallAddr)
         return nullptr;
     }
 
-    UniqueVirtualMemPtr pMem(
-        (PBYTE)VirtualAlloc(nullptr, sizeof(g_IndirectSyscallTemplate), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
-    );
+    PVOID pAllocBase = nullptr;
+    SIZE_T allocSize = sizeof(g_IndirectSyscallTemplate);
+    NTSTATUS allocStatus = STATUS_UNSUCCESSFUL;
+    if (pfnNtAllocateVirtualMemory)
+    {
+        allocStatus = pfnNtAllocateVirtualMemory(
+            GetCurrentProcess(),
+            &pAllocBase,
+            0,
+            &allocSize,
+            MEM_COMMIT | MEM_RESERVE,
+            PAGE_READWRITE
+        );
+    } else {
+    // fall back to VirtualAlloc for construct NtAllocateVirtualMemory it self.
+        pAllocBase = VirtualAlloc(nullptr, sizeof(g_IndirectSyscallTemplate), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        if (!pAllocBase) {
+            return nullptr;
+        }
+    }
+
+    UniqueVirtualMemPtr pMem((PBYTE)pAllocBase);
     if (!pMem) {
         return nullptr;
     }
@@ -292,8 +336,23 @@ static FuncPtr ConstructIndirectSyscall(ULONG syscallNum, uintptr_t syscallAddr)
     memcpy(pMem.get() + 14, &syscallAddr, 8);
     
     DWORD oldProtect = 0;
-    if (!VirtualProtect(pMem.get(), sizeof(g_IndirectSyscallTemplate), PAGE_EXECUTE_READ, &oldProtect)) {
-        return nullptr;
+    PVOID pProtectBase = pMem.get();
+    SIZE_T protectSize = sizeof(g_IndirectSyscallTemplate);
+    NTSTATUS protectStatus = STATUS_UNSUCCESSFUL;
+    if (pfnNtProtectVirtualMemory)
+    {
+        protectStatus = pfnNtProtectVirtualMemory(
+            GetCurrentProcess(),
+            &pProtectBase,
+            &protectSize,
+            PAGE_EXECUTE_READ,
+            &oldProtect
+        );
+    } else {
+    // fall back to VirtualProtect for construct NtProtectVirtualMemory it self.
+        if (!VirtualProtect(pMem.get(), sizeof(g_IndirectSyscallTemplate), PAGE_EXECUTE_READ, &oldProtect)) {
+            return nullptr;
+        }
     }
     
     FlushInstructionCache(GetCurrentProcess(), pMem.get(), sizeof(g_IndirectSyscallTemplate));
@@ -394,6 +453,30 @@ static void ManualSysCall_Init() noexcept
         ParseModuleForSyscalls(hWin32u);
     }
 
+    // NtAllocateVirtualMemory and NtProtectVirtualMemory
+    {
+        auto it = g_SyscallInfoMap.find("NtAllocateVirtualMemory");
+        if (it != g_SyscallInfoMap.end()) {
+            pfnNtAllocateVirtualMemory = ConstructIndirectSyscall<pNtAllocateVirtualMemory>(
+                it->second.syscallNum, it->second.syscallAddr);
+            it->second.funcPtr = reinterpret_cast<void*>(pfnNtAllocateVirtualMemory);
+        }
+    }
+
+    {
+        auto it = g_SyscallInfoMap.find("NtProtectVirtualMemory");
+        if (it != g_SyscallInfoMap.end()) {
+            pfnNtProtectVirtualMemory = ConstructIndirectSyscall<pNtProtectVirtualMemory>(
+                it->second.syscallNum, it->second.syscallAddr);
+            it->second.funcPtr = reinterpret_cast<void*>(pfnNtProtectVirtualMemory);
+        }
+    }
+    // if we cant find NtAllocateVirtualMemory or NtProtectVirtualMemory, 
+    // we cant construct other syscalls
+    if (!pfnNtAllocateVirtualMemory || !pfnNtProtectVirtualMemory) {
+        return;
+    }
+
     // NtOpenProcess
     {
         auto it = g_SyscallInfoMap.find("NtOpenProcess");
@@ -424,16 +507,6 @@ static void ManualSysCall_Init() noexcept
         }
     }
 
-    // NtProtectVirtualMemory
-    {
-        auto it = g_SyscallInfoMap.find("NtProtectVirtualMemory");
-        if (it != g_SyscallInfoMap.end()) {
-            pfnNtProtectVirtualMemory = ConstructIndirectSyscall<pNtProtectVirtualMemory>(
-                it->second.syscallNum, it->second.syscallAddr);
-            it->second.funcPtr = reinterpret_cast<void*>(pfnNtProtectVirtualMemory);
-        }
-    }
-
     // NtQueryInformationProcess
     {
         auto it = g_SyscallInfoMap.find("NtQueryInformationProcess");
@@ -461,6 +534,16 @@ static void ManualSysCall_Init() noexcept
             pfnNtUserSetWindowDisplayAffinity = ConstructIndirectSyscall<pNtUserSetWindowDisplayAffinity>(
                 it->second.syscallNum, it->second.syscallAddr);
             it->second.funcPtr = reinterpret_cast<void*>(pfnNtUserSetWindowDisplayAffinity);
+        }
+    }
+
+    // NtFreeVirtualMemory
+    {
+        auto it = g_SyscallInfoMap.find("NtFreeVirtualMemory");
+        if (it != g_SyscallInfoMap.end()) {
+            pfnNtFreeVirtualMemory = ConstructIndirectSyscall<pNtFreeVirtualMemory>(
+                it->second.syscallNum, it->second.syscallAddr);
+            it->second.funcPtr = reinterpret_cast<void*>(pfnNtFreeVirtualMemory);
         }
     }
 
