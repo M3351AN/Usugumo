@@ -82,6 +82,11 @@ typedef NTSTATUS(WINAPI* pNtQuerySystemInformation)(
 );
 static pNtQuerySystemInformation pfnNtQuerySystemInformation = nullptr;
 
+typedef BOOL(WINAPI* pNtUserSetWindowDisplayAffinity)(
+    HWND hWnd, DWORD dwAffinity
+);
+static pNtUserSetWindowDisplayAffinity pfnNtUserSetWindowDisplayAffinity = nullptr;
+
 /* 
 .text:0000000180162070 ; Exported entry 451. NtOpenProcess
 .text:0000000180162070 ; Exported entry 2098. ZwOpenProcess
@@ -296,83 +301,99 @@ static FuncPtr ConstructIndirectSyscall(ULONG syscallNum, uintptr_t syscallAddr)
     return reinterpret_cast<FuncPtr>(pMem.release());
 }
 
-static void ManualSysCall_Init() noexcept
+static void ParseModuleForSyscalls(HMODULE hModule) noexcept
 {
-    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
-    if (!hNtdll) {
+    if (!hModule) {
         return;
     }
-    
-    PBYTE pNtdllBase = reinterpret_cast<PBYTE>(hNtdll);
-    
-    PIMAGE_DOS_HEADER pDosHeader = reinterpret_cast<PIMAGE_DOS_HEADER>(pNtdllBase);
+
+    PBYTE pModuleBase = reinterpret_cast<PBYTE>(hModule);
+
+    PIMAGE_DOS_HEADER pDosHeader = reinterpret_cast<PIMAGE_DOS_HEADER>(pModuleBase);
     if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
         return;
     }
-    
-    PIMAGE_NT_HEADERS pNtHeaders = reinterpret_cast<PIMAGE_NT_HEADERS>(pNtdllBase + pDosHeader->e_lfanew);
+
+    PIMAGE_NT_HEADERS pNtHeaders = reinterpret_cast<PIMAGE_NT_HEADERS>(pModuleBase + pDosHeader->e_lfanew);
     if (pNtHeaders->Signature != IMAGE_NT_SIGNATURE) {
         return;
     }
-    
+
     IMAGE_DATA_DIRECTORY exportDir = pNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
     if (exportDir.VirtualAddress == 0 || exportDir.Size == 0) {
         return;
     }
-    
-    PIMAGE_EXPORT_DIRECTORY pExportDir = reinterpret_cast<PIMAGE_EXPORT_DIRECTORY>(pNtdllBase + exportDir.VirtualAddress);
-    
-    PDWORD pFuncNames = reinterpret_cast<PDWORD>(pNtdllBase + pExportDir->AddressOfNames);
-    PDWORD pFuncAddrs = reinterpret_cast<PDWORD>(pNtdllBase + pExportDir->AddressOfFunctions);
-    PWORD pFuncOrdinals = reinterpret_cast<PWORD>(pNtdllBase + pExportDir->AddressOfNameOrdinals);
-    
+
+    PIMAGE_EXPORT_DIRECTORY pExportDir = reinterpret_cast<PIMAGE_EXPORT_DIRECTORY>(pModuleBase + exportDir.VirtualAddress);
+
+    PDWORD pFuncNames = reinterpret_cast<PDWORD>(pModuleBase + pExportDir->AddressOfNames);
+    PDWORD pFuncAddrs = reinterpret_cast<PDWORD>(pModuleBase + pExportDir->AddressOfFunctions);
+    PWORD pFuncOrdinals = reinterpret_cast<PWORD>(pModuleBase + pExportDir->AddressOfNameOrdinals);
+
     for (DWORD i = 0; i < pExportDir->NumberOfNames; i++) {
-        const char* pFuncName = reinterpret_cast<const char*>(pNtdllBase + pFuncNames[i]);
-        
+        const char* pFuncName = reinterpret_cast<const char*>(pModuleBase + pFuncNames[i]);
         // Nt or Zw is 100% same in user mode, 
         // but we only care about Nt functions
         // skip just for performance
         // there are not "Zw only" functions in user mode
+        // but there are "Nt only" functions, yes
         if (strncmp(pFuncName, "Nt", 2) != 0 || strncmp(pFuncName, "Zw", 2) == 0) {
             continue;
         }
-        
+
         DWORD funcRVA = pFuncAddrs[pFuncOrdinals[i]];
         if (funcRVA == 0) {
             continue;
         }
-        
-        PBYTE pFuncBytes = pNtdllBase + funcRVA;
-        
+
+        PBYTE pFuncBytes = pModuleBase + funcRVA;
+
         if (IsFunctionHooked(pFuncBytes)) {
             // incase of hooked, skip this function
             // anyway, usermode EDR/AV/AC should cant hook these functions
             continue;
         }
-        
+
         // mov r10, rcx; mov eax, syscallNum
         if (pFuncBytes[0] != 0x4C || pFuncBytes[1] != 0x8B || pFuncBytes[2] != 0xD1 || pFuncBytes[3] != 0xB8) {
             continue;
         }
-        
+
         ULONG syscallNum = *reinterpret_cast<ULONG*>(pFuncBytes + 4);
         if (syscallNum == 0) {
             continue;
         }
-        
+
         uintptr_t syscallAddr = 0;
         if (!FindSyscallInstruction(pFuncBytes, kSNtFuncMaxSize, syscallAddr)) {
             continue;
         }
-        
+
         SyscallInfo info;
         info.syscallNum = syscallNum;
         info.syscallAddr = syscallAddr;
         info.funcPtr = nullptr;
-        
+
         g_SyscallInfoMap[pFuncName] = info;
     }
-    
+}
+
+static void ManualSysCall_Init() noexcept
+{
+    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
+    ParseModuleForSyscalls(hNtdll);
+
+    HMODULE hWin32u = GetModuleHandleW(L"win32u.dll");
+    if (!hWin32u) {
+        // If win32u.dll is not loaded, we will try to load it manually.
+        // for applications with window, this should be always loaded
+        hWin32u = LoadLibraryW(L"win32u.dll");
+        ParseModuleForSyscalls(hWin32u);
+        FreeLibrary(hWin32u);
+    } else {
+        ParseModuleForSyscalls(hWin32u);
+    }
+
     // NtOpenProcess
     {
         auto it = g_SyscallInfoMap.find("NtOpenProcess");
@@ -382,7 +403,7 @@ static void ManualSysCall_Init() noexcept
             it->second.funcPtr = reinterpret_cast<void*>(pfnNtOpenProcess);
         }
     }
-    
+
     // NtReadVirtualMemory
     {
         auto it = g_SyscallInfoMap.find("NtReadVirtualMemory");
@@ -392,7 +413,7 @@ static void ManualSysCall_Init() noexcept
             it->second.funcPtr = reinterpret_cast<void*>(pfnNtReadVirtualMemory);
         }
     }
-    
+
     // NtWriteVirtualMemory
     {
         auto it = g_SyscallInfoMap.find("NtWriteVirtualMemory");
@@ -402,7 +423,7 @@ static void ManualSysCall_Init() noexcept
             it->second.funcPtr = reinterpret_cast<void*>(pfnNtWriteVirtualMemory);
         }
     }
-    
+
     // NtProtectVirtualMemory
     {
         auto it = g_SyscallInfoMap.find("NtProtectVirtualMemory");
@@ -412,7 +433,7 @@ static void ManualSysCall_Init() noexcept
             it->second.funcPtr = reinterpret_cast<void*>(pfnNtProtectVirtualMemory);
         }
     }
-    
+
     // NtQueryInformationProcess
     {
         auto it = g_SyscallInfoMap.find("NtQueryInformationProcess");
@@ -422,7 +443,7 @@ static void ManualSysCall_Init() noexcept
             it->second.funcPtr = reinterpret_cast<void*>(pfnNtQueryInformationProcess);
         }
     }
-    
+
     // NtQuerySystemInformation
     {
         auto it = g_SyscallInfoMap.find("NtQuerySystemInformation");
@@ -432,8 +453,18 @@ static void ManualSysCall_Init() noexcept
             it->second.funcPtr = reinterpret_cast<void*>(pfnNtQuerySystemInformation);
         }
     }
-    
-    // fail openprocess, nosense to use other syscalls
+
+    // NtUserSetWindowDisplayAffinity
+    {
+        auto it = g_SyscallInfoMap.find("NtUserSetWindowDisplayAffinity");
+        if (it != g_SyscallInfoMap.end()) {
+            pfnNtUserSetWindowDisplayAffinity = ConstructIndirectSyscall<pNtUserSetWindowDisplayAffinity>(
+                it->second.syscallNum, it->second.syscallAddr);
+            it->second.funcPtr = reinterpret_cast<void*>(pfnNtUserSetWindowDisplayAffinity);
+        }
+    }
+
+    // fail openprocess, nosense to use other these syscalls
     if (!pfnNtOpenProcess) {
         pfnNtReadVirtualMemory = nullptr;
         pfnNtWriteVirtualMemory = nullptr;
@@ -441,6 +472,7 @@ static void ManualSysCall_Init() noexcept
         pfnNtQueryInformationProcess = nullptr;
         pfnNtQuerySystemInformation = nullptr;
     }
+
 }
 
 static bool g_ManualSysCallInited = []() noexcept {
@@ -640,7 +672,7 @@ class Native {
   }
 
   void AntiCapture(HWND window_handle, bool status = true) noexcept {
-    SetWindowDisplayAffinity(window_handle, status ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
+    pfnNtUserSetWindowDisplayAffinity(window_handle, status ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
   }
 
   ProcessHandle GetProcessHandle() const noexcept { return target_process_handle_; }
