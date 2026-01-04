@@ -183,11 +183,48 @@ class UsugumoDriver {
   ProcessId current_process_id_;
   DpiValue dpi_;
 
+unsigned __int64 CalculateRequestsChecksum(Requests* pRequest) {
+  if (pRequest == NULL) {
+    return 0;
+  }
+  // CRC64-ECMA
+  const unsigned __int64 CRC64_POLYNOMIAL = 0x42F0E1EBA9EA3693ULL;
+  static unsigned __int64 crc64_table[256] = {0};
+  static BOOLEAN table_initialized = FALSE;
+
+  if (!table_initialized) {
+    for (unsigned int i = 0; i < 256; i++) {
+      unsigned __int64 crc = (unsigned __int64)i;
+      for (int j = 0; j < 8; j++) {
+        if (crc & 1) {
+          crc = (crc >> 1) ^ CRC64_POLYNOMIAL;
+        } else {
+          crc >>= 1;
+        }
+      }
+      crc64_table[i] = crc;
+    }
+    table_initialized = TRUE;
+  }
+
+  unsigned __int64 validDataLen =
+      sizeof(Requests) - sizeof(pRequest->check_sum);
+  const unsigned char* pData = (const unsigned char*)pRequest;
+
+  unsigned __int64 crc64 = 0xFFFFFFFFFFFFFFFFULL;
+  for (unsigned __int64 i = 0; i < validDataLen; i++) {
+    crc64 = crc64_table[(crc64 ^ pData[i]) & 0xFF] ^ (crc64 >> 8);
+  }
+  crc64 ^= 0xFFFFFFFFFFFFFFFFULL;
+  return crc64;
+}
+
   void SendIoctlRequest(Requests& request) noexcept {
     if (driver_handle_ == INVALID_HANDLE_VALUE) {
       return;
     }
     request.time_stamp = GetTimestamp();
+    request.check_sum = CalculateRequestsChecksum(&request);
     DWORD bytes_returned = 0;
     DeviceIoControl(
         driver_handle_,

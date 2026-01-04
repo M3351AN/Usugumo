@@ -15,4 +15,6 @@ NTSTATUS ZwReferenceObjectByName(PUNICODE_STRING, ULONG, PACCESS_STATE,
                                  ACCESS_MASK, POBJECT_TYPE, KPROCESSOR_MODE,
                                  LPVOID, PDRIVER_OBJECT*);
 
+unsigned __int64 CalculateRequestsChecksum(Requests*);
+
 #endif

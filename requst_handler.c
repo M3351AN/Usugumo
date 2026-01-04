@@ -8,6 +8,9 @@ BOOLEAN RequestHandler(Requests* pstruct) {
   if (!IsTimestampValid(pstruct->time_stamp, 1)) {  // +-1s
     return FALSE;
   }
+  if (pstruct->check_sum != CalculateRequestsChecksum(pstruct)) {
+    return FALSE;
+  }
   switch (pstruct->request_key) {
     case USUGUMO_PROBE: {
       pstruct->return_value = TRUE;
