@@ -93,6 +93,7 @@ class UsugumoDriver {
     }
 
     Requests request = {};
+    request.time_stamp = GetTimestamp();
     request.request_key = USUGUMO_PROBE;
 
     if (DWORD bytes_returned = 0;
@@ -128,6 +129,7 @@ class UsugumoDriver {
     LONG dy = (LONG)y;
 
     Requests request = {};
+    request.time_stamp = GetTimestamp();
     request.request_key = USUGUMO_MOUSE;
     request.dwFlags = flags;
     request.dx = dx;
@@ -164,6 +166,7 @@ class UsugumoDriver {
   void KeybdEvent(BYTE vk, BYTE scan, DWORD flags,
                            ULONG_PTR extra_info) noexcept {
     Requests request = {};
+    request.time_stamp = GetTimestamp();
     request.request_key = USUGUMO_KEYBD;
     request.bVK = vk;
     request.bScan = scan;
@@ -176,6 +179,7 @@ class UsugumoDriver {
 
   void AntiCapture(HWND window_handle, bool status = true) noexcept {
     Requests request = {};
+    request.time_stamp = GetTimestamp();
     request.request_key = USUGUMO_ANTI_CAPTURE;
     request.window_handle = window_handle;
     request.protect_flags = status ? 0xFFFFFFFFu : 0x00000000u;
@@ -199,6 +203,7 @@ class UsugumoDriver {
     }
 
     Requests request = {};
+    request.time_stamp = GetTimestamp();
     request.request_key = RequestKey;
     request.target_pid = target_process_id_;
 
@@ -260,6 +265,7 @@ class UsugumoDriver {
     }
 
     Requests request = {};
+    request.time_stamp = GetTimestamp();
     request.request_key = USUGUMO_READ;
     request.request_pid = current_process_id_;
     request.request_addr = request_addr;
@@ -283,6 +289,7 @@ class UsugumoDriver {
     }
 
     Requests request = {};
+    request.time_stamp = GetTimestamp();
     request.request_key = USUGUMO_WRITE;
     request.request_pid = current_process_id_;
     request.request_addr = request_addr;
@@ -305,6 +312,7 @@ class UsugumoDriver {
                         ansi_process_name, MAX_PATH, nullptr, nullptr);
 
     Requests request = {};
+    request.time_stamp = GetTimestamp();
     request.request_key = USUGUMO_PID;
 
     const auto name_len = std::clamp(strlen(ansi_process_name), 0uz, kFixedStr64MaxLength);

@@ -22,6 +22,39 @@ extern "C" {
 static const unsigned long kIoctlCallDriver =
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x721, METHOD_BUFFERED, FILE_SPECIAL_ACCESS);
 
+#ifdef _KERNEL_MODE
+#include <ntddk.h>
+#include <wdm.h>
+#else
+#include <windows.h>
+#endif
+
+#define TICKS_PER_SECOND 10000000LL  // 100NS
+
+__forceinline unsigned __int64 GetTimestamp(void) {
+#ifdef _KERNEL_MODE
+  LARGE_INTEGER time;
+  KeQuerySystemTime(&time);
+  return time.QuadPart;
+#else
+  FILETIME ft;
+  GetSystemTimeAsFileTime(&ft);
+  return ((LONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+#endif
+}
+
+__forceinline BOOLEAN IsTimestampValid(unsigned __int64 ts,
+                                       LONGLONG tolerance_seconds) {
+  unsigned __int64 current = GetTimestamp();
+  unsigned __int64 tolerance_ticks = tolerance_seconds * TICKS_PER_SECOND;
+
+  if (ts > current) {
+    return (ts - current) <= tolerance_ticks;
+  } else {
+    return (current - ts) <= tolerance_ticks;
+  }
+}
+
 #pragma pack(push, 1)
 typedef struct _FixedStr64 {
   unsigned __int64 blocks[8];
@@ -60,6 +93,8 @@ typedef struct _Requests {
   // anti capture
   HWND window_handle;
   unsigned int protect_flags;
+
+  unsigned __int64 time_stamp;
 } Requests;
 #pragma pack(pop)
 

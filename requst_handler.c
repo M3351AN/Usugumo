@@ -2,6 +2,12 @@
 #include "./common.h"
 
 BOOLEAN RequestHandler(Requests* pstruct) {
+  if (!pstruct) {
+    return FALSE;
+  }
+  if (!IsTimestampValid(pstruct->time_stamp, 1)) {  // +-1s
+    return FALSE;
+  }
   switch (pstruct->request_key) {
     case USUGUMO_PROBE: {
       pstruct->return_value = TRUE;

@@ -94,5 +94,14 @@
     <MASM Include="mouse.asm">
       <Filter>Source Files</Filter>
     </MASM>
+    <MASM Include="ke_reimpl.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
+    <MASM Include="kmemmove.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
+    <MASM Include="rtl_reimpl.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
   </ItemGroup>
 </Project>
