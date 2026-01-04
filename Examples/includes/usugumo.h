@@ -93,17 +93,10 @@ class UsugumoDriver {
     }
 
     Requests request = {};
-    request.time_stamp = GetTimestamp();
     request.request_key = USUGUMO_PROBE;
 
-    if (DWORD bytes_returned = 0;
-        DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
-                        sizeof(request), &request, sizeof(request),
-                        &bytes_returned, nullptr)) {
-      return request.return_value != 0;
-    }
-
-    return false;
+    SendIoctlRequest(request);
+    return request.return_value != 0;
   }
 
   uint64_t GetDllSize(std::string_view dll_name) noexcept {
@@ -129,7 +122,6 @@ class UsugumoDriver {
     LONG dy = (LONG)y;
 
     Requests request = {};
-    request.time_stamp = GetTimestamp();
     request.request_key = USUGUMO_MOUSE;
     request.dwFlags = flags;
     request.dx = dx;
@@ -137,8 +129,7 @@ class UsugumoDriver {
     request.dwData = data;
     request.dwExtraInfo = extra_info;
 
-    DeviceIoControl(driver_handle_, kIoctlCallDriver, &request, sizeof(request),
-                    nullptr, 0, nullptr, nullptr);
+    SendIoctlRequest(request);
   }
 
   void MouseLeftDown() noexcept { MouseEvent(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0); }
@@ -166,26 +157,22 @@ class UsugumoDriver {
   void KeybdEvent(BYTE vk, BYTE scan, DWORD flags,
                            ULONG_PTR extra_info) noexcept {
     Requests request = {};
-    request.time_stamp = GetTimestamp();
     request.request_key = USUGUMO_KEYBD;
     request.bVK = vk;
     request.bScan = scan;
     request.dwFlags = flags;
     request.dwExtraInfo = extra_info;
 
-    DeviceIoControl(driver_handle_, kIoctlCallDriver, &request, sizeof(request),
-                    nullptr, 0, nullptr, nullptr);
+    SendIoctlRequest(request);
   }
 
   void AntiCapture(HWND window_handle, bool status = true) noexcept {
     Requests request = {};
-    request.time_stamp = GetTimestamp();
     request.request_key = USUGUMO_ANTI_CAPTURE;
     request.window_handle = window_handle;
     request.protect_flags = status ? 0xFFFFFFFFu : 0x00000000u;
 
-    DeviceIoControl(driver_handle_, kIoctlCallDriver, &request, sizeof(request),
-                    nullptr, 0, nullptr, nullptr);
+    SendIoctlRequest(request);
   }
 
   HANDLE GetDriverHandle() const noexcept { return  driver_handle_; }
@@ -196,6 +183,24 @@ class UsugumoDriver {
   ProcessId current_process_id_;
   DpiValue dpi_;
 
+  void SendIoctlRequest(Requests& request) noexcept {
+    if (driver_handle_ == INVALID_HANDLE_VALUE) {
+      return;
+    }
+    request.time_stamp = GetTimestamp();
+    DWORD bytes_returned = 0;
+    DeviceIoControl(
+        driver_handle_,
+        kIoctlCallDriver,
+        &request,
+        sizeof(request),
+        &request,
+        sizeof(request),
+        &bytes_returned,
+        nullptr
+    );
+  }
+
   template <uint64_t RequestKey>
   uint64_t GetDllInfo(std::string_view dll_name) noexcept {
     if (driver_handle_ == INVALID_HANDLE_VALUE) {
@@ -203,7 +208,6 @@ class UsugumoDriver {
     }
 
     Requests request = {};
-    request.time_stamp = GetTimestamp();
     request.request_key = RequestKey;
     request.target_pid = target_process_id_;
 
@@ -214,14 +218,8 @@ class UsugumoDriver {
     EncodeFixedStr64(dll_name, &fixed_str);
     request.name_str = fixed_str;
 
-    if (DWORD bytes_returned = 0;
-        DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
-                        sizeof(request), &request, sizeof(request),
-                        &bytes_returned, nullptr)) {
-      return request.return_value;
-    }
-
-    return 0;
+    SendIoctlRequest(request);
+    return request.return_value;
   }
 
   bool OpenDriverHandle() noexcept {
@@ -265,7 +263,6 @@ class UsugumoDriver {
     }
 
     Requests request = {};
-    request.time_stamp = GetTimestamp();
     request.request_key = USUGUMO_READ;
     request.request_pid = current_process_id_;
     request.request_addr = request_addr;
@@ -273,13 +270,8 @@ class UsugumoDriver {
     request.target_addr = target_addr;
     request.mem_size = size;
 
-    if (DWORD bytes_returned = 0;
-        DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
-                        sizeof(request), &request, sizeof(request),
-                        &bytes_returned, nullptr)) {
-      return request.return_value != 0;
-    }
-    return false;
+    SendIoctlRequest(request);
+    return request.return_value != 0;
   }
 
   bool WriteVirtualMemory(ProcessId target_pid, VirtualAddress target_addr,
@@ -289,7 +281,6 @@ class UsugumoDriver {
     }
 
     Requests request = {};
-    request.time_stamp = GetTimestamp();
     request.request_key = USUGUMO_WRITE;
     request.request_pid = current_process_id_;
     request.request_addr = request_addr;
@@ -297,13 +288,8 @@ class UsugumoDriver {
     request.target_addr = target_addr;
     request.mem_size = size;
 
-    if (DWORD bytes_returned = 0;
-        DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
-                        sizeof(request), &request, sizeof(request),
-                        &bytes_returned, nullptr)) {
-      return request.return_value != 0;
-    }
-    return false;
+    SendIoctlRequest(request);
+    return request.return_value != 0;
   }
 
   std::optional<DWORD> GetProcessIdByName(std::wstring_view process_name) noexcept {
@@ -312,7 +298,6 @@ class UsugumoDriver {
                         ansi_process_name, MAX_PATH, nullptr, nullptr);
 
     Requests request = {};
-    request.time_stamp = GetTimestamp();
     request.request_key = USUGUMO_PID;
 
     const auto name_len = std::clamp(strlen(ansi_process_name), 0uz, kFixedStr64MaxLength);
@@ -322,15 +307,9 @@ class UsugumoDriver {
     EncodeFixedStr64(ansi_process_name, &fixed_str);
     request.name_str = fixed_str;
 
-    if (DWORD bytes_returned = 0;
-        DeviceIoControl(driver_handle_, kIoctlCallDriver, &request,
-                        sizeof(request), &request, sizeof(request),
-                        &bytes_returned, nullptr)) {
-      const DWORD pid = static_cast<DWORD>(request.return_value);
-      return pid != 0 ? std::optional<DWORD>(pid) : std::nullopt;
-    }
-
-    return std::nullopt;
+    SendIoctlRequest(request);
+    const DWORD pid = static_cast<DWORD>(request.return_value);
+    return pid != 0 ? std::optional<DWORD>(pid) : std::nullopt;
   }
 };
 
