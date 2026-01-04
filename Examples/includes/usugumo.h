@@ -18,6 +18,7 @@
 
 constexpr inline size_t kFixedStr64MaxLength = 64uz;
 constexpr inline LPCSTR kDriverDevice = "\\\\.\\Usugum0";
+constexpr inline uint64_t kSecureKey = 0xBEEFDEADFEEDCAFEULL;
 
 using ProcessId = uint64_t;
 using VirtualAddress = uintptr_t;
@@ -224,6 +225,7 @@ unsigned __int64 CalculateRequestsChecksum(Requests* pRequest) {
       return;
     }
     request.time_stamp = GetTimestamp();
+    request.secure_key = kSecureKey;
     request.check_sum = CalculateRequestsChecksum(&request);
     DWORD bytes_returned = 0;
     DeviceIoControl(

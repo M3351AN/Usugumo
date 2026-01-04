@@ -95,6 +95,7 @@ typedef struct _Requests {
   unsigned int protect_flags;
 
   unsigned __int64 time_stamp;
+  unsigned __int64 secure_key;
   unsigned __int64 check_sum;
 } Requests;
 #pragma pack(pop)

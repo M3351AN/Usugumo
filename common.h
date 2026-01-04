@@ -2,11 +2,14 @@
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
+
 #include <ntifs.h>
 #include <wdmsec.h>
 
 #include <ntimage.h>
 #include <ntstrsafe.h>
+#include <ntddk.h> 
+#include <bcrypt.h>
 #include <windef.h>
 
 #include "./usugumo_request_define.h"
