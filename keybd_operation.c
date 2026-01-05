@@ -192,12 +192,6 @@ inline void KeyboardCall(USHORT make_code, USHORT flags, ULONG extra_info) {
   KeLowerIrql(irql);
 }
 
-inline void KeyboardPressAndRelease(USHORT make_code, ULONG extra_info) {
-  KeyboardCall(make_code, 0x0006, extra_info);
-  NtSleep(500);
-  KeyboardCall(make_code, 0x0007, extra_info);
-}
-
 VOID HandleKeybdEvent(Requests* request) {
   if (!request) return;
 
@@ -218,7 +212,7 @@ VOID HandleKeybdEvent(Requests* request) {
   final_flags = key_flags;
   final_extra = extra_info;
 
-  KeyboardPressAndRelease(final_makecode, final_extra);
+  KeyboardCall(make_code, final_flags, extra_info);
 
   request->return_value = TRUE;
 }

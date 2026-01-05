@@ -7,6 +7,11 @@
 
 #include "./defines.h"
 
+QWORD _KeAcquireSpinLockAtDpcLevel;
+QWORD _KeReleaseSpinLockFromDpcLevel;
+QWORD _IofCompleteRequest;
+QWORD _IoReleaseRemoveLockEx;
+
 NTKERNELAPI NTSTATUS
 IoCreateDriver(_In_ PUNICODE_STRING DriverName,
                _In_ PDRIVER_INITIALIZE InitializationFunction);

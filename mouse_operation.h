@@ -3,11 +3,6 @@
 #ifndef _MOUSE_OPERATION_H_
 #define _MOUSE_OPERATION_H_
 
-QWORD _KeAcquireSpinLockAtDpcLevel;
-QWORD _KeReleaseSpinLockFromDpcLevel;
-QWORD _IofCompleteRequest;
-QWORD _IoReleaseRemoveLockEx;
-
 VOID MouseClassServiceCallbackMeme(PDEVICE_OBJECT DeviceObject,
                                PMOUSE_INPUT_DATA InputDataStart,
                                PMOUSE_INPUT_DATA InputDataEnd,
