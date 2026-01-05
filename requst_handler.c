@@ -13,7 +13,8 @@ const UCHAR PUBLIC_KEY[CHECKSUM_SIZE] = {
 BOOLEAN VerifySecureKey(UINT64 SecureKey) {
   BCRYPT_ALG_HANDLE hAlg = NULL;
   BCRYPT_HASH_HANDLE hHash = NULL;
-  UCHAR localChecksum[CHECKSUM_SIZE] = {0};
+  UCHAR localChecksum[CHECKSUM_SIZE];
+  kmemset(localChecksum, 0, sizeof(localChecksum));
   NTSTATUS status = STATUS_SUCCESS;
   BOOLEAN bPass = FALSE;
 

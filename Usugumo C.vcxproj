@@ -150,7 +150,7 @@
   <ItemGroup>
     <MASM Include="calculate_request_checksum.asm" />
     <MASM Include="ke_reimpl.asm" />
-    <MASM Include="kmemmove.asm" />
+    <MASM Include="kmem.asm" />
     <MASM Include="mouse.asm" />
     <MASM Include="rtl_reimpl.asm" />
   </ItemGroup>

@@ -1,4 +1,13 @@
 ; Copyright (c) 2026 渟雲. All rights reserved.
+EXTERNDEF __cpu_features_init:PROC
+
+__isa_info_t STRUC
+    info    BYTE ?
+            BYTE 63 DUP(?)
+__isa_info_t ENDS
+
+EXTERN __isa_info:__isa_info_t
+
 .code
 
 kmemmove proc
@@ -209,5 +218,142 @@ loc_1406B71E6:
     movaps  xmmword ptr [rcx], xmm0
     ret
 kmemmove endp
+
+__kmemset_query proc
+
+var_38= xmmword ptr -38h
+
+push    r9
+push    r8
+push    rdx
+push    rcx
+push    rax
+sub     rsp, 30h
+movaps  [rsp+58h+var_38], xmm0
+call    __cpu_features_init
+movaps  xmm0, [rsp+58h+var_38]
+add     rsp, 30h
+pop     rax
+pop     rcx
+pop     rdx
+pop     r8
+pop     r9
+ret
+__kmemset_query endp
+
+__kmemset_repmovs proc
+push    rdi
+test    __isa_info.info, 1
+jz      short repmovs20
+
+repmovs10:
+mov     rdi, rcx
+add     r8, rcx
+movups  xmmword ptr [rcx], xmm0
+add     rdi, 40h ; '@'
+movups  xmmword ptr [rcx+10h], xmm0
+and     rdi, 0FFFFFFFFFFFFFFC0h
+movups  xmmword ptr [rcx+20h], xmm0
+sub     r8, rdi
+movups  xmmword ptr [rcx+30h], xmm0
+mov     rcx, r8
+mov     r9, rax
+movq    rax, xmm0
+rep stosb
+mov     rax, r9
+pop     rdi
+ret
+
+repmovs20:
+call    __kmemset_query
+jmp     short repmovs10
+__kmemset_repmovs endp
+
+kmemset proc
+mov     rax, rcx
+movzx   edx, dl
+mov     r9, 101010101010101h
+imul    rdx, r9
+movq    xmm0, rdx
+movlhps xmm0, xmm0
+cmp     r8, 40h ; '@'
+jb      short mset45
+
+mset10:
+test    __isa_info.info, 2
+jz      short mset20
+cmp     r8, 320h
+jnb     __kmemset_repmovs
+
+mset20:
+movups  xmmword ptr [rcx], xmm0
+add     r8, rcx
+add     rcx, 10h
+and     rcx, 0FFFFFFFFFFFFFFF0h
+sub     r8, rcx
+cmp     r8, 40h ; '@'
+jb      short mset46
+lea     rdx, [rcx+r8-10h]
+lea     r9, [rcx+r8-30h]
+and     r9, 0FFFFFFFFFFFFFFF0h
+shr     r8, 6
+
+mset30:
+movaps  xmmword ptr [rcx], xmm0
+movaps  xmmword ptr [rcx+10h], xmm0
+add     rcx, 40h ; '@'
+dec     r8
+movaps  xmmword ptr [rcx-20h], xmm0
+movaps  xmmword ptr [rcx-10h], xmm0
+jnz     short mset30
+movaps  xmmword ptr [r9], xmm0
+movaps  xmmword ptr [r9+10h], xmm0
+movaps  xmmword ptr [r9+20h], xmm0
+movups  xmmword ptr [rdx], xmm0
+ret
+align 10h
+
+mset45:
+cmp     r8, 10h
+jb      short mset47
+
+mset46:
+lea     r9, [r8+rcx-10h]
+and     r8, 20h
+movups  xmmword ptr [rcx], xmm0
+shr     r8, 1
+movups  xmmword ptr [r9], xmm0
+movups  xmmword ptr [rcx+r8], xmm0
+neg     r8
+movups  xmmword ptr [r9+r8], xmm0
+ret
+align 10h
+
+mset47:
+cmp     r8, 4
+jb      short mset48
+lea     r9, [r8+rcx-4]
+and     r8, 8
+mov     [rcx], edx
+shr     r8, 1
+mov     [r9], edx
+mov     [rcx+r8], edx
+neg     r8
+mov     [r9+r8], edx
+ret
+align 10h
+
+mset48:
+test    r8, r8
+jz      short mset50
+mov     [rcx], dl
+lea     r9, [rcx+r8-2]
+cmp     r8, 1
+jz      short mset50
+mov     [r9], dx
+
+mset50:
+ret
+kmemset endp
 
 END

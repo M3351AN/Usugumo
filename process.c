@@ -218,7 +218,8 @@ UINT64 GetDllAddress(Requests* in) {
     return 0;
   }
 
-  char decoded[65] = {0};
+  char decoded[65];
+  kmemset(decoded, 0, sizeof(decoded));
   DecodeFixedStr64(&in->name_str, decoded, in->name_length);
   PWSTR wStr = ConvertToPWSTR(decoded);
   if (!wStr) {
@@ -257,7 +258,8 @@ UINT64 GetDllSize(Requests* in) {
     return 0;
   }
 
-  char decoded[65] = {0};
+  char decoded[65];
+  kmemset(decoded, 0, sizeof(decoded));
   DecodeFixedStr64(&in->name_str, decoded, in->name_length);
   PWSTR wStr = ConvertToPWSTR(decoded);
   if (!wStr) {
@@ -312,7 +314,8 @@ UINT64 GetProcessIdByName(Requests* in) {
     }
   }
 
-  char targetName[65] = {0};
+  char targetName[65];
+  kmemset(targetName, 0, sizeof(targetName));
   DecodeFixedStr64(&in->name_str, targetName, in->name_length);
 
   PEPROCESS startProcess = NULL;
