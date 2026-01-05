@@ -69,7 +69,7 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
   return status;
 }
 
-NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject,
+NTSTATUS UsugumoEntry(_In_ PDRIVER_OBJECT DriverObject,
                      _In_ PUNICODE_STRING RegistryPath) {
   UNREFERENCED_PARAMETER(DriverObject);
   UNREFERENCED_PARAMETER(RegistryPath);
