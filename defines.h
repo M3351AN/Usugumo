@@ -118,14 +118,14 @@ typedef struct _KEYBOARD_INPUT_DATA {
   ULONG ExtraInformation;
 } KEYBOARD_INPUT_DATA, *PKEYBOARD_INPUT_DATA;
 
-typedef VOID (*MY_KEYBOARDCALLBACK)(PDEVICE_OBJECT DeviceObject,
+typedef VOID (*KeyboardClassServiceCallbackFn)(PDEVICE_OBJECT DeviceObject,
                                     PKEYBOARD_INPUT_DATA InputDataStart,
                                     PKEYBOARD_INPUT_DATA InputDataEnd,
                                     PULONG InputDataConsumed);
 
 typedef struct _KEYBOARD_OBJECT {
   PDEVICE_OBJECT keyboard_device;
-  MY_KEYBOARDCALLBACK service_callback;
+  KeyboardClassServiceCallbackFn service_callback;
   BOOLEAN use_keyboard;
 } KEYBOARD_OBJECT, *PKEYBOARD_OBJECT;
 
