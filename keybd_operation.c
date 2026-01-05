@@ -139,12 +139,6 @@ NTSTATUS SearchKdbServiceCallBack(void) {
   return Status;
 }
 
-void NtSleep(DWORD milliseconds) {
-  LARGE_INTEGER DelayInterval = {0};
-  DelayInterval.QuadPart = -((LONGLONG)milliseconds * 10000);
-  KeDelayExecutionThread(KernelMode, FALSE, &DelayInterval);
-}
-
 inline BOOL KeyboardOpen(void) {
   NTSTATUS Status = STATUS_UNSUCCESSFUL;
   KIRQL Irql;
