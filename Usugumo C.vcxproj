@@ -146,6 +146,7 @@
     <ClInclude Include="usugumo_request_define.h" />
   </ItemGroup>
   <ItemGroup>
+    <MASM Include="calculate_request_checksum.asm" />
     <MASM Include="ke_reimpl.asm" />
     <MASM Include="kmemmove.asm" />
     <MASM Include="mouse.asm" />
