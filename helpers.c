@@ -68,14 +68,6 @@ PVOID SearchSignForImage(PVOID ImageBase, PUCHAR Pattern, PCHAR Mask,
   return NULL;
 }
 
-LPBYTE ResolveRelativeAddress(LPBYTE pAddress, ULONG Index) {
-  LPBYTE Result = NULL;
-  if (pAddress != NULL) {
-    Result = (LPBYTE)(pAddress + *(INT*)(pAddress + Index) + Index + 4);
-  }
-  return Result;
-}
-
 NTSTATUS ZwReferenceObjectByName(PUNICODE_STRING ObjectName, ULONG Attributes,
                                  PACCESS_STATE PassedAccessState,
                                  ACCESS_MASK DesiredAccess,

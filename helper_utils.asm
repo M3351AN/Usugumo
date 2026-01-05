@@ -63,4 +63,18 @@ loc_exit:
     ret
 CalculateRequestsChecksum endp
 
+ResolveRelativeAddress proc
+xor     eax, eax
+test    rcx, rcx
+jz      short loc_fin
+mov     eax, edx
+movsxd  rdx, dword ptr [rax+rcx]
+add     rax, 4
+add     rax, rdx
+add     rax, rcx
+
+loc_fin:
+ret
+ResolveRelativeAddress endp
+
 END
