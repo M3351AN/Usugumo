@@ -191,21 +191,11 @@ VOID HandleKeybdEvent(Requests* request) {
   if (!request) return;
 
   DWORD dwFlags = request->dwFlags;
-  USHORT make_code = request->bVK;
-  USHORT key_flags = request->bScan;
   ULONG extra_info = (ULONG)request->dwExtraInfo;
 
-  USHORT final_makecode = 0;
-  USHORT final_flags = 0;
-  ULONG final_extra = 0;
+  USHORT make_code = request->bVK ? request->bVK : request->bScan;
 
-  if (dwFlags & 0x0001) final_makecode |= make_code;
-  if (dwFlags & 0x0002) final_flags |= key_flags;
-  if (dwFlags & 0x0004) final_extra |= extra_info;
-
-  final_makecode = make_code;
-  final_flags = key_flags;
-  final_extra = extra_info;
+  USHORT final_flags = dwFlags & 0x0002 ? 0x0007 : 0x0006;
 
   KeyboardCall(make_code, final_flags, extra_info);
 
