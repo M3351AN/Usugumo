@@ -27,7 +27,7 @@ BOOLEAN VerifySecureKey(UINT64 SecureKey) {
     status = BCryptFinishHash(hHash, localChecksum, CHECKSUM_SIZE, 0);
 
   if (NT_SUCCESS(status)) {
-    bPass = (RtlCompareMemory(localChecksum, PUBLIC_KEY,
+    bPass = (RtlCompareMemoryMeme(localChecksum, PUBLIC_KEY,
                               CHECKSUM_SIZE) == CHECKSUM_SIZE);
   }
 

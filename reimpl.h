@@ -20,4 +20,7 @@ KIRQL KeGetCurrentIrqlMeme(void);
 PIMAGE_NT_HEADERS RtlImageNtHeaderMeme(PVOID Base);
 
 SIZE_T MmSizeOfMdlMeme(PVOID Base, SIZE_T Length);
+
+SIZE_T RtlCompareMemoryMeme(const void*, const void*, SIZE_T);
+
 #endif
