@@ -193,9 +193,23 @@ VOID HandleKeybdEvent(Requests* request) {
   DWORD dwFlags = request->dwFlags;
   ULONG extra_info = (ULONG)request->dwExtraInfo;
 
-  USHORT make_code = request->bVK ? request->bVK : request->bScan;
+  // NOTE: untested.
+  if (dwFlags & 0x0004) {
+    WCHAR unicode_char = (WCHAR)request->bVK;
+    KeyboardCall((USHORT)unicode_char, 0x0006, extra_info);
+    KeyboardCall((USHORT)unicode_char, 0x0007, extra_info);
+
+    request->return_value = TRUE;
+    return;
+  }
+
+  USHORT make_code = dwFlags & 0x0008 ? request->bScan : request->bVK;
 
   USHORT final_flags = dwFlags & 0x0002 ? 0x0007 : 0x0006;
+
+  if (dwFlags & 0x0001) {
+    final_flags |= 0x0001;
+  }
 
   KeyboardCall(make_code, final_flags, extra_info);
 
