@@ -99,3 +99,57 @@ NTSTATUS ZwReferenceObjectByName(PUNICODE_STRING ObjectName, ULONG Attributes,
 
   return Status;
 }
+
+NTSTATUS GetMachineGuid(WCHAR* guid_buf, size_t buf_len) {
+  if (!guid_buf || buf_len < 64) {
+    return STATUS_INVALID_PARAMETER;
+  }
+
+  UNICODE_STRING key_path = RTL_CONSTANT_STRING(
+      L"\\Registry\\Machine\\SOFTWARE\\Microsoft\\Cryptography");
+  UNICODE_STRING value_name = RTL_CONSTANT_STRING(L"MachineGuid");
+  HANDLE hKey = NULL;
+  NTSTATUS status = STATUS_SUCCESS;
+  ULONG data_len = 0;
+  PKEY_VALUE_PARTIAL_INFORMATION pInfo = NULL;
+
+  OBJECT_ATTRIBUTES obj_attr;
+  InitializeObjectAttributes(
+      &obj_attr,
+      &key_path,
+      OBJ_CASE_INSENSITIVE,
+      NULL,
+      NULL
+  );
+
+  status = ZwOpenKey(&hKey, KEY_READ, &obj_attr);
+  if (!NT_SUCCESS(status)) {
+    return status;
+  }
+
+  status = ZwQueryValueKey(hKey, &value_name, KeyValuePartialInformation, NULL,
+                           0, &data_len);
+  if (status != STATUS_BUFFER_TOO_SMALL) {
+    ZwClose(hKey);
+    return status;
+  }
+
+  pInfo = (PKEY_VALUE_PARTIAL_INFORMATION)ExAllocatePool2(POOL_FLAG_PAGED,
+                                                          data_len, 'Usug');
+  if (!pInfo) {
+    ZwClose(hKey);
+    return STATUS_INSUFFICIENT_RESOURCES;
+  }
+
+  status = ZwQueryValueKey(hKey, &value_name, KeyValuePartialInformation, pInfo,
+                           data_len, &data_len);
+  if (NT_SUCCESS(status)) {
+    size_t copy_len = min((size_t)data_len, buf_len - 1);
+    kmemmove(guid_buf, pInfo->Data, copy_len * sizeof(WCHAR));
+    guid_buf[copy_len] = L'\0';
+  }
+
+  if (pInfo) ExFreePool(pInfo);
+  ZwClose(hKey);
+  return status;
+}

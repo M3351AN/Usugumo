@@ -17,4 +17,6 @@ NTSTATUS ZwReferenceObjectByName(PUNICODE_STRING, ULONG, PACCESS_STATE,
 
 unsigned __int64 CalculateRequestsChecksum(Requests*);
 
+NTSTATUS GetMachineGuid(WCHAR*, SIZE_T);
+
 #endif

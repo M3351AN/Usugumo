@@ -44,9 +44,7 @@ class UsugumoDriver {
   UsugumoDriver(const UsugumoDriver&) = delete;
   UsugumoDriver& operator=(const UsugumoDriver&) = delete;
 
-  UsugumoDriver(UsugumoDriver&& other) noexcept {
-    *this = std::move(other);
-  }
+  UsugumoDriver(UsugumoDriver&& other) noexcept { *this = std::move(other); }
 
   UsugumoDriver& operator=(UsugumoDriver&& other) noexcept {
     if (this != &other) {
@@ -108,12 +106,14 @@ class UsugumoDriver {
     return GetDllInfo<USUGUMO_MODULE_BASE>(dll_name);
   }
 
-  bool ReadMemoryKm(VirtualAddress address, void* buffer, MemorySize size) noexcept {
+  bool ReadMemoryKm(VirtualAddress address, void* buffer,
+                    MemorySize size) noexcept {
     return ReadVirtualMemory(target_process_id_, address,
                              reinterpret_cast<VirtualAddress>(buffer), size);
   }
 
-  bool WriteMemoryKm(VirtualAddress address, const void* buffer, MemorySize size) noexcept {
+  bool WriteMemoryKm(VirtualAddress address, const void* buffer,
+                     MemorySize size) noexcept {
     return WriteVirtualMemory(target_process_id_, address,
                               reinterpret_cast<VirtualAddress>(buffer), size);
   }
@@ -133,7 +133,9 @@ class UsugumoDriver {
     SendIoctlRequest(request);
   }
 
-  void MouseLeftDown() noexcept { MouseEvent(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0); }
+  void MouseLeftDown() noexcept {
+    MouseEvent(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+  }
 
   void MouseLeftUp() noexcept { MouseEvent(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0); }
 
@@ -156,7 +158,7 @@ class UsugumoDriver {
   }
 
   void KeybdEvent(BYTE vk, BYTE scan, DWORD flags,
-                           ULONG_PTR extra_info) noexcept {
+                  ULONG_PTR extra_info) noexcept {
     Requests request = {};
     request.request_key = USUGUMO_KEYBD;
     request.bVK = vk;
@@ -176,49 +178,51 @@ class UsugumoDriver {
     SendIoctlRequest(request);
   }
 
-  HANDLE GetDriverHandle() const noexcept { return  driver_handle_; }
+  HANDLE GetDriverHandle() const noexcept { return driver_handle_; }
   ProcessId GetProcessId() const noexcept { return target_process_id_; }
+
  private:
   HANDLE driver_handle_;
   ProcessId target_process_id_;
   ProcessId current_process_id_;
   DpiValue dpi_;
+  char driver_device_path_[256] = {0};
 
-unsigned __int64 CalculateRequestsChecksum(Requests* pRequest) {
-  if (pRequest == NULL) {
-    return 0;
-  }
-  // CRC64-ECMA
-  const unsigned __int64 CRC64_POLYNOMIAL = 0x42F0E1EBA9EA3693ULL;
-  static unsigned __int64 crc64_table[256] = {0};
-  static BOOLEAN table_initialized = FALSE;
-
-  if (!table_initialized) {
-    for (unsigned int i = 0; i < 256; i++) {
-      unsigned __int64 crc = (unsigned __int64)i;
-      for (int j = 0; j < 8; j++) {
-        if (crc & 1) {
-          crc = (crc >> 1) ^ CRC64_POLYNOMIAL;
-        } else {
-          crc >>= 1;
-        }
-      }
-      crc64_table[i] = crc;
+  unsigned __int64 CalculateRequestsChecksum(Requests* pRequest) {
+    if (pRequest == NULL) {
+      return 0;
     }
-    table_initialized = TRUE;
-  }
+    // CRC64-ECMA
+    const unsigned __int64 CRC64_POLYNOMIAL = 0x42F0E1EBA9EA3693ULL;
+    static unsigned __int64 crc64_table[256] = {0};
+    static BOOLEAN table_initialized = FALSE;
 
-  unsigned __int64 validDataLen =
-      sizeof(Requests) - sizeof(pRequest->check_sum);
-  const unsigned char* pData = (const unsigned char*)pRequest;
+    if (!table_initialized) {
+      for (unsigned int i = 0; i < 256; i++) {
+        unsigned __int64 crc = (unsigned __int64)i;
+        for (int j = 0; j < 8; j++) {
+          if (crc & 1) {
+            crc = (crc >> 1) ^ CRC64_POLYNOMIAL;
+          } else {
+            crc >>= 1;
+          }
+        }
+        crc64_table[i] = crc;
+      }
+      table_initialized = TRUE;
+    }
 
-  unsigned __int64 crc64 = 0xFFFFFFFFFFFFFFFFULL;
-  for (unsigned __int64 i = 0; i < validDataLen; i++) {
-    crc64 = crc64_table[(crc64 ^ pData[i]) & 0xFF] ^ (crc64 >> 8);
+    unsigned __int64 validDataLen =
+        sizeof(Requests) - sizeof(pRequest->check_sum);
+    const unsigned char* pData = (const unsigned char*)pRequest;
+
+    unsigned __int64 crc64 = 0xFFFFFFFFFFFFFFFFULL;
+    for (unsigned __int64 i = 0; i < validDataLen; i++) {
+      crc64 = crc64_table[(crc64 ^ pData[i]) & 0xFF] ^ (crc64 >> 8);
+    }
+    crc64 ^= 0xFFFFFFFFFFFFFFFFULL;
+    return crc64;
   }
-  crc64 ^= 0xFFFFFFFFFFFFFFFFULL;
-  return crc64;
-}
 
   void SendIoctlRequest(Requests& request) noexcept {
     if (driver_handle_ == INVALID_HANDLE_VALUE) {
@@ -228,16 +232,8 @@ unsigned __int64 CalculateRequestsChecksum(Requests* pRequest) {
     request.secure_key = kSecureKey;
     request.check_sum = CalculateRequestsChecksum(&request);
     DWORD bytes_returned = 0;
-    DeviceIoControl(
-        driver_handle_,
-        kIoctlCallDriver,
-        &request,
-        sizeof(request),
-        &request,
-        sizeof(request),
-        &bytes_returned,
-        nullptr
-    );
+    DeviceIoControl(driver_handle_, kIoctlCallDriver, &request, sizeof(request),
+                    &request, sizeof(request), &bytes_returned, nullptr);
   }
 
   template <uint64_t RequestKey>
@@ -250,7 +246,8 @@ unsigned __int64 CalculateRequestsChecksum(Requests* pRequest) {
     request.request_key = RequestKey;
     request.target_pid = target_process_id_;
 
-    const auto name_len = std::clamp(dll_name.size(), 0uz, kFixedStr64MaxLength);
+    const auto name_len =
+        std::clamp(dll_name.size(), 0uz, kFixedStr64MaxLength);
     request.name_length = name_len;
 
     FixedStr64 fixed_str;
@@ -261,12 +258,43 @@ unsigned __int64 CalculateRequestsChecksum(Requests* pRequest) {
     return request.return_value;
   }
 
+  BOOLEAN GetMachineGuid(char* id_buf, size_t buf_len) {
+    if (!id_buf || buf_len < 64) return FALSE;
+
+    HKEY hKey = NULL;
+    WCHAR wszId[64] = {0};
+    DWORD dwDataLen = sizeof(wszId);
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Cryptography",
+                      0, KEY_READ, &hKey) != ERROR_SUCCESS) {
+      return FALSE;
+    }
+
+    if (RegQueryValueExW(hKey, L"MachineGuid", NULL, NULL, (LPBYTE)wszId,
+                         &dwDataLen) != ERROR_SUCCESS) {
+      RegCloseKey(hKey);
+      return FALSE;
+    }
+
+    WideCharToMultiByte(CP_ACP, 0, wszId, -1, id_buf, (int)buf_len, NULL, NULL);
+    RegCloseKey(hKey);
+    return TRUE;
+  }
+
   bool OpenDriverHandle() noexcept {
     if (driver_handle_ != INVALID_HANDLE_VALUE) {
       return true;
     }
 
-    driver_handle_ = CreateFileA(kDriverDevice, GENERIC_READ, 0, nullptr,
+    char guid_buf[64] = {0};
+    if (!GetMachineGuid(guid_buf, ARRAYSIZE(guid_buf))) {
+      return false;
+    }
+
+    sprintf_s(driver_device_path_, ARRAYSIZE(driver_device_path_),
+              "\\\\.\\%sUsugum0", guid_buf);
+
+    driver_handle_ = CreateFileA(driver_device_path_, GENERIC_READ, 0, nullptr,
                                  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     return driver_handle_ != INVALID_HANDLE_VALUE;
   }
@@ -290,13 +318,15 @@ unsigned __int64 CalculateRequestsChecksum(Requests* pRequest) {
       const size_t block_index = i / 8uz;
       const size_t pos_in_block = i % 8uz;
       const int shift = 8 * (7 - static_cast<int>(pos_in_block));
-      const uint64_t char_val = static_cast<uint64_t>(static_cast<unsigned char>(str[i]));
+      const uint64_t char_val =
+          static_cast<uint64_t>(static_cast<unsigned char>(str[i]));
       fixed_str->blocks[block_index] |= (char_val << shift);
     }
   }
 
   bool ReadVirtualMemory(ProcessId target_pid, VirtualAddress target_addr,
-                         VirtualAddress request_addr, MemorySize size) noexcept {
+                         VirtualAddress request_addr,
+                         MemorySize size) noexcept {
     if (target_pid == 0 || target_addr == 0 || size == 0) {
       return false;
     }
@@ -314,7 +344,8 @@ unsigned __int64 CalculateRequestsChecksum(Requests* pRequest) {
   }
 
   bool WriteVirtualMemory(ProcessId target_pid, VirtualAddress target_addr,
-                          VirtualAddress request_addr, MemorySize size) noexcept {
+                          VirtualAddress request_addr,
+                          MemorySize size) noexcept {
     if (target_pid == 0 || target_addr == 0 || size == 0) {
       return false;
     }
@@ -331,15 +362,18 @@ unsigned __int64 CalculateRequestsChecksum(Requests* pRequest) {
     return request.return_value != 0;
   }
 
-  std::optional<DWORD> GetProcessIdByName(std::wstring_view process_name) noexcept {
+  std::optional<DWORD> GetProcessIdByName(
+      std::wstring_view process_name) noexcept {
     char ansi_process_name[MAX_PATH] = {0};
-    WideCharToMultiByte(CP_ACP, 0, process_name.data(), static_cast<int>(process_name.size()),
+    WideCharToMultiByte(CP_ACP, 0, process_name.data(),
+                        static_cast<int>(process_name.size()),
                         ansi_process_name, MAX_PATH, nullptr, nullptr);
 
     Requests request = {};
     request.request_key = USUGUMO_PID;
 
-    const auto name_len = std::clamp(strlen(ansi_process_name), 0uz, kFixedStr64MaxLength);
+    const auto name_len =
+        std::clamp(strlen(ansi_process_name), 0uz, kFixedStr64MaxLength);
     request.name_length = name_len;
 
     FixedStr64 fixed_str;

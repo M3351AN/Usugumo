@@ -1,12 +1,14 @@
 // Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
+UNICODE_STRING g_symbolic_link_name = {0};
 
 VOID DriverUnload(_In_ struct _DRIVER_OBJECT* DriverObject) {
   UNREFERENCED_PARAMETER(DriverObject);
   if (DriverObject->DeviceObject) {
-    UNICODE_STRING symbolic_link_name =
-        RTL_CONSTANT_STRING(L"\\DosDevices\\Global\\Usugum0");
-    IoDeleteSymbolicLink(&symbolic_link_name);
+    if (g_symbolic_link_name.Buffer != NULL) {
+      IoDeleteSymbolicLink(&g_symbolic_link_name);
+      ExFreePool(g_symbolic_link_name.Buffer);
+    }
     IoDeleteDevice(DriverObject->DeviceObject);
   }
 }
@@ -35,19 +37,26 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
                      L"\\Device\\%04X", RtlRandomEx(&ramdon_seed));
   RtlInitUnicodeString(&device_name, random_device_name_buf);
 
+  WCHAR guid_buf[64] = {0};
+  NTSTATUS status = GetMachineGuid(guid_buf, ARRAYSIZE(guid_buf));
+  if (status != STATUS_SUCCESS) return status;
+
+  WCHAR sym_link_buf[256] = {0};
+  RtlStringCbPrintfW(sym_link_buf, sizeof(sym_link_buf),
+                     L"\\DosDevices\\Global\\%sUsugum0", guid_buf);
+  RtlInitUnicodeString(&g_symbolic_link_name, sym_link_buf);
+
   UNICODE_STRING sddl_string = RTL_CONSTANT_STRING(SDDL_STRING);
-  UNICODE_STRING symbolic_link_name =
-      RTL_CONSTANT_STRING(L"\\DosDevices\\Global\\Usugum0");
 
   PDEVICE_OBJECT device_object;
 
-  NTSTATUS status = IoCreateDeviceSecure(
+  status = IoCreateDeviceSecure(
       DriverObject, 0, &device_name, FILE_DEVICE_UNKNOWN,
       FILE_DEVICE_SECURE_OPEN, FALSE, &sddl_string, NULL, &device_object);
 
   if (status != STATUS_SUCCESS) return status;
 
-  status = IoCreateSymbolicLink(&symbolic_link_name, &device_name);
+  status = IoCreateSymbolicLink(&g_symbolic_link_name, &device_name);
   if (status != STATUS_SUCCESS) return status;
 
   KeyboardSpinLockInit();
