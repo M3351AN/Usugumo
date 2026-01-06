@@ -17,7 +17,7 @@
 #include "../../usugumo_request_define.h"
 
 constexpr inline size_t kFixedStr64MaxLength = 64uz;
-constexpr inline LPCSTR kDriverDevice = "\\\\.\\Usugum0";
+constexpr inline LPCSTR kDriverDevice = "\\\\.\\%sUsugum0";
 constexpr inline uint64_t kSecureKey = 0xBEEFDEADFEEDCAFEULL;
 
 using ProcessId = uint64_t;
@@ -292,7 +292,7 @@ class UsugumoDriver {
     }
 
     sprintf_s(driver_device_path_, ARRAYSIZE(driver_device_path_),
-              "\\\\.\\%sUsugum0", guid_buf);
+        kDriverDevice, guid_buf);
 
     driver_handle_ = CreateFileA(driver_device_path_, GENERIC_READ, 0, nullptr,
                                  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
