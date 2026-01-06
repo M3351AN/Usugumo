@@ -176,6 +176,26 @@ class UsugumoDriver {
     request.protect_flags = status ? 0xFFFFFFFFu : 0x00000000u;
 
     SendIoctlRequest(request);
+
+    static std::unordered_map<HWND, LONG_PTR> old_ex_style;
+    // user-mode operations
+    if (old_ex_style.find(window_handle) == old_ex_style.end()) {
+        old_ex_style[window_handle] = GetWindowLongPtr(window_handle, GWL_EXSTYLE);
+    }
+
+    if (!status) {
+        SetWindowLongPtr(window_handle, GWL_EXSTYLE, old_ex_style[window_handle]);
+    }
+    else {
+        LONG_PTR ex_style = GetWindowLongPtr(window_handle, GWL_EXSTYLE);
+
+        ex_style |= WS_EX_TOOLWINDOW;
+        ex_style &= ~WS_EX_APPWINDOW;
+        SetWindowLongPtr(window_handle, GWL_EXSTYLE, ex_style);
+    }
+    // force redraw
+    SetWindowPos(window_handle, NULL, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
   }
 
   HANDLE GetDriverHandle() const noexcept { return driver_handle_; }
