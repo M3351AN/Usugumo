@@ -13,6 +13,7 @@
 #include <optional>
 #include <string_view>
 #include <vector>
+#include <unordered_map>
 
 #include "../../usugumo_request_define.h"
 
@@ -94,7 +95,7 @@ class UsugumoDriver {
     Requests request = {};
     request.request_key = USUGUMO_PROBE;
 
-    SendIoctlRequest(request);
+    SendRequest(request);
     return request.return_value != 0;
   }
 
@@ -130,7 +131,7 @@ class UsugumoDriver {
     request.dwData = data;
     request.dwExtraInfo = extra_info;
 
-    SendIoctlRequest(request);
+    SendRequest(request);
   }
 
   void MouseLeftDown() noexcept {
@@ -166,7 +167,7 @@ class UsugumoDriver {
     request.dwFlags = flags;
     request.dwExtraInfo = extra_info;
 
-    SendIoctlRequest(request);
+    SendRequest(request);
   }
 
   void AntiCapture(HWND window_handle, bool status = true) noexcept {
@@ -175,10 +176,9 @@ class UsugumoDriver {
     request.window_handle = window_handle;
     request.protect_flags = status ? 0xFFFFFFFFu : 0x00000000u;
 
-    SendIoctlRequest(request);
-
-    static std::unordered_map<HWND, LONG_PTR> old_ex_style;
+    SendRequest(request);
     // user-mode operations
+    static std::unordered_map<HWND, LONG_PTR> old_ex_style;
     if (old_ex_style.find(window_handle) == old_ex_style.end()) {
         old_ex_style[window_handle] = GetWindowLongPtr(window_handle, GWL_EXSTYLE);
     }
@@ -188,12 +188,10 @@ class UsugumoDriver {
     }
     else {
         LONG_PTR ex_style = GetWindowLongPtr(window_handle, GWL_EXSTYLE);
-
         ex_style |= WS_EX_TOOLWINDOW;
         ex_style &= ~WS_EX_APPWINDOW;
         SetWindowLongPtr(window_handle, GWL_EXSTYLE, ex_style);
     }
-    // force redraw
     SetWindowPos(window_handle, NULL, 0, 0, 0, 0,
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
   }
@@ -244,16 +242,19 @@ class UsugumoDriver {
     return crc64;
   }
 
-  void SendIoctlRequest(Requests& request) noexcept {
+  void SendRequest(Requests& request) noexcept {
     if (driver_handle_ == INVALID_HANDLE_VALUE) {
       return;
     }
     request.time_stamp = GetTimestamp();
     request.secure_key = kSecureKey;
     request.check_sum = CalculateRequestsChecksum(&request);
-    DWORD bytes_returned = 0;
-    DeviceIoControl(driver_handle_, kIoctlCallDriver, &request, sizeof(request),
-                    &request, sizeof(request), &bytes_returned, nullptr);
+    
+    DWORD dwWritten = 0, dwRead = 0;
+    WriteFile(driver_handle_, &request, sizeof(Requests), &dwWritten, nullptr);
+    if (dwWritten == sizeof(Requests)) {
+      ReadFile(driver_handle_, &request, sizeof(Requests), &dwRead, nullptr);
+    }
   }
 
   template <uint64_t RequestKey>
@@ -274,7 +275,7 @@ class UsugumoDriver {
     EncodeFixedStr64(dll_name, &fixed_str);
     request.name_str = fixed_str;
 
-    SendIoctlRequest(request);
+    SendRequest(request);
     return request.return_value;
   }
 
@@ -314,8 +315,10 @@ class UsugumoDriver {
     sprintf_s(driver_device_path_, ARRAYSIZE(driver_device_path_),
         kDriverDevice, guid_buf);
 
-    driver_handle_ = CreateFileA(driver_device_path_, GENERIC_READ, 0, nullptr,
-                                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    driver_handle_ = CreateFileA(driver_device_path_, 
+        GENERIC_READ | GENERIC_WRITE, 
+        0, nullptr, OPEN_EXISTING, 
+        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_NO_BUFFERING, nullptr);
     return driver_handle_ != INVALID_HANDLE_VALUE;
   }
 
@@ -359,7 +362,7 @@ class UsugumoDriver {
     request.target_addr = target_addr;
     request.mem_size = size;
 
-    SendIoctlRequest(request);
+    SendRequest(request);
     return request.return_value != 0;
   }
 
@@ -378,7 +381,7 @@ class UsugumoDriver {
     request.target_addr = target_addr;
     request.mem_size = size;
 
-    SendIoctlRequest(request);
+    SendRequest(request);
     return request.return_value != 0;
   }
 
@@ -400,7 +403,7 @@ class UsugumoDriver {
     EncodeFixedStr64(ansi_process_name, &fixed_str);
     request.name_str = fixed_str;
 
-    SendIoctlRequest(request);
+    SendRequest(request);
     const DWORD pid = static_cast<DWORD>(request.return_value);
     return pid != 0 ? std::optional<DWORD>(pid) : std::nullopt;
   }

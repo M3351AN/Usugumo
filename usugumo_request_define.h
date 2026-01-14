@@ -97,7 +97,7 @@ typedef struct _Requests {
   unsigned __int64 time_stamp;
   unsigned __int64 secure_key;
   unsigned __int64 check_sum;
-} Requests;
+} Requests, *PRequests;
 #pragma pack(pop)
 
 #ifdef __cplusplus

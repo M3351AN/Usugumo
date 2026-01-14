@@ -1,6 +1,6 @@
 ﻿# Usugumo
 
-A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc operations, handling user-mode process requests via ioctl
+A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc operations, handling user-mode process requests via DIRECT_IO IRP
 
 > [!WARNING]
 > This project IS NOT designed to combat AC/AV/EDR or sth like that.
@@ -13,14 +13,14 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc o
 
 ## Features
 
-- Handling user-mode process requests via ioctl
+- Handling user-mode process requests via DIRECT_IO IRP
 - Kernel-mode RPM/WPM
 - Kernel-mode fetch module info(base, size)
 - Kernel-mode get PID via name
 - Kernel-mode mouse input
 - Kernel-mode keyboard input
 - Kernel-mode anti capture
-  
+
 ## KnownIssues
 
 - Currently only works on x64 windows (other arch, no quiero)
