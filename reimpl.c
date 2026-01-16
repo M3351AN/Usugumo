@@ -92,7 +92,11 @@ MiDoMappedCopy(_In_ PEPROCESS SourceProcess, _In_ PVOID SourceAddress,
     if (RemainingSize < CurrentSize) CurrentSize = RemainingSize;
 
     KeStackAttachProcess((PRKPROCESS)SourceProcess, &ApcState);
-
+    if (!MmIsAddressValid(CurrentAddress)) {
+      Status = STATUS_INVALID_ADDRESS;
+      KeUnstackDetachProcess(&ApcState);
+      goto Exit;
+    }
     MmInitializeMdl(Mdl, CurrentAddress, CurrentSize);
     __try {
       MmProbeAndLockPages(Mdl, PreviousMode, IoReadAccess);
@@ -115,7 +119,11 @@ MiDoMappedCopy(_In_ PEPROCESS SourceProcess, _In_ PVOID SourceAddress,
     }
 
     KeStackAttachProcess((PRKPROCESS)TargetProcess, &ApcState);
-
+    if (!MmIsAddressValid(CurrentTargetAddress)) {
+      Status = STATUS_INVALID_ADDRESS;
+      KeUnstackDetachProcess(&ApcState);
+      goto Exit;
+    }
     __try {
       kmemmove(CurrentTargetAddress, MdlAddress, CurrentSize);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
