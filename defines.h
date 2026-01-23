@@ -29,6 +29,25 @@ typedef ULONG_PTR QWORD;
 #define MOUSE_MOVE_ABSOLUTE 0x0001
 #define MOUSE_VIRTUAL_DESKTOP 0x0002
 
+#define MDL_HDR_SIZE                                                          \
+  (FIELD_OFFSET(MDL, MdlFlags) + sizeof(ULONG) + FIELD_OFFSET(MDL, StartVa) - \
+   FIELD_OFFSET(MDL, Next))
+
+#define MDL_POOL_SIZE 16
+#define MDL_MAX_BUFFER_SIZE 0x80000  // 512kb
+
+typedef struct _MDL_POOL_ITEM {
+  BOOLEAN IsAvailable;
+  PMDL Mdl;
+  SIZE_T MaxBufferSize;
+} MDL_POOL_ITEM, *PMDL_POOL_ITEM;
+
+typedef struct _MDL_POOL {
+  KSPIN_LOCK Lock;
+  MDL_POOL_ITEM Items[MDL_POOL_SIZE];
+  SIZE_T MaxSingleMdlSize;
+} MDL_POOL, *PMDL_POOL;
+
 typedef struct _PEB_LDR_DATA {
   ULONG Length;
   UCHAR Initialized;

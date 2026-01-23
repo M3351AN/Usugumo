@@ -1,7 +1,7 @@
 // Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
 
-#define MI_MAPPED_COPY_PAGES 14
+MDL_POOL g_MdlPool = {0};
 
 __int64 _kascii_stricmp(const char* a1, const char* a2) {
   int v4;  // r8d
@@ -46,123 +46,229 @@ int kwcsicmp(const wchar_t* Str1, const wchar_t* Str2) {
   return v6 - v7;
 }
 
+NTSTATUS MdlPoolInitialize() {
+  NTSTATUS status = STATUS_SUCCESS;
+
+  KeInitializeSpinLock(&g_MdlPool.Lock);
+  g_MdlPool.MaxSingleMdlSize = MDL_MAX_BUFFER_SIZE;
+
+  for (INT i = 0; i < MDL_POOL_SIZE; i++) {
+    g_MdlPool.Items[i].Mdl =
+        IoAllocateMdl(NULL,
+                      (ULONG)MDL_MAX_BUFFER_SIZE,
+                      FALSE,
+                      FALSE,
+                      NULL
+        );
+
+    if (!g_MdlPool.Items[i].Mdl) {
+      status = STATUS_INSUFFICIENT_RESOURCES;
+      goto Cleanup;
+    }
+
+    g_MdlPool.Items[i].IsAvailable = TRUE;
+    g_MdlPool.Items[i].MaxBufferSize = MDL_MAX_BUFFER_SIZE;
+  }
+
+  return status;
+
+Cleanup:
+  for (INT i = 0; i < MDL_POOL_SIZE; i++) {
+    if (g_MdlPool.Items[i].Mdl) {
+      IoFreeMdl(g_MdlPool.Items[i].Mdl);
+      g_MdlPool.Items[i].Mdl = NULL;
+    }
+    g_MdlPool.Items[i].IsAvailable = FALSE;
+  }
+  return status;
+}
+
+PMDL MdlPoolAcquire(SIZE_T BufferSize) {
+  if (BufferSize == 0 || BufferSize > g_MdlPool.MaxSingleMdlSize)
+    return NULL;
+
+  KIRQL oldIrql = 0;
+  PMDL mdl = NULL;
+
+  KeAcquireSpinLock(&g_MdlPool.Lock, &oldIrql);
+
+  for (INT i = 0; i < MDL_POOL_SIZE; i++) {
+    if (g_MdlPool.Items[i].IsAvailable &&
+        g_MdlPool.Items[i].MaxBufferSize >= BufferSize) {
+      g_MdlPool.Items[i].IsAvailable = FALSE;
+      mdl = g_MdlPool.Items[i].Mdl;
+      break;
+    }
+  }
+
+  KeReleaseSpinLock(&g_MdlPool.Lock, oldIrql);
+
+  return mdl;
+}
+
+VOID MdlPoolRelease(PMDL Mdl) {
+  if (!Mdl) return;
+
+  KIRQL oldIrql = 0;
+
+  KeAcquireSpinLock(&g_MdlPool.Lock, &oldIrql);
+
+  for (INT i = 0; i < MDL_POOL_SIZE; i++) {
+    if (g_MdlPool.Items[i].Mdl == Mdl) {
+      Mdl->Next = NULL;
+      Mdl->Size = MDL_HDR_SIZE + (CSHORT)g_MdlPool.Items[i].MaxBufferSize;
+      Mdl->MdlFlags = 0;
+      Mdl->StartVa = NULL;
+      Mdl->ByteOffset = 0;
+      Mdl->ByteCount = 0;
+
+      g_MdlPool.Items[i].IsAvailable = TRUE;
+      break;
+    }
+  }
+
+  KeReleaseSpinLock(&g_MdlPool.Lock, oldIrql);
+}
+
+VOID MdlPoolDestroy() {
+  for (INT i = 0; i < MDL_POOL_SIZE; i++) {
+    if (g_MdlPool.Items[i].Mdl) {
+      IoFreeMdl(g_MdlPool.Items[i].Mdl);
+      g_MdlPool.Items[i].Mdl = NULL;
+    }
+    g_MdlPool.Items[i].IsAvailable = FALSE;
+  }
+}
+
 NTSTATUS
 MiDoMappedCopy(_In_ PEPROCESS SourceProcess, _In_ PVOID SourceAddress,
                _In_ PEPROCESS TargetProcess, _Out_ PVOID TargetAddress,
                _In_ SIZE_T BufferSize, _In_ KPROCESSOR_MODE PreviousMode,
                _Out_ PSIZE_T ReturnSize) {
-  PMDL Mdl = NULL;
-  SIZE_T TotalSize = 0;
-  SIZE_T CurrentSize = 0;
-  SIZE_T RemainingSize = 0;
-  BOOLEAN PagesLocked = FALSE;
-  PVOID CurrentAddress = SourceAddress;
-  PVOID CurrentTargetAddress = TargetAddress;
-  PVOID MdlAddress = NULL;
   KAPC_STATE ApcState;
   NTSTATUS Status = STATUS_SUCCESS;
-  SIZE_T MdlRequiredSize = 0;
+  PMDL SourceMdl = NULL;
+  PMDL TargetMdl = NULL;
+  PVOID SourceMappedAddr = NULL;
+  PVOID TargetMappedAddr = NULL;
+  BOOLEAN bSourceMdlFromPool = FALSE;
+  BOOLEAN bTargetMdlFromPool = FALSE;
 
-  PAGED_CODE();
-
-  MdlRequiredSize =
-      MmSizeOfMdlMeme(SourceAddress, MI_MAPPED_COPY_PAGES * PAGE_SIZE);
-  if (MdlRequiredSize == 0 ||
-      MdlRequiredSize > (MI_MAPPED_COPY_PAGES * PAGE_SIZE * 2)) {
-    Status = STATUS_INVALID_PARAMETER;
-    goto Exit;
+  if (ReturnSize != NULL) {
+    *ReturnSize = 0;
   }
 
-  Mdl = (PMDL)ExAllocatePool2(
-      POOL_FLAG_NON_PAGED | POOL_FLAG_UNINITIALIZED,
-      MdlRequiredSize, 'sFtN');
+  if (SourceProcess == NULL || SourceAddress == NULL || TargetProcess == NULL ||
+      TargetAddress == NULL || BufferSize == 0) {
+    return STATUS_INVALID_PARAMETER;
+  }
 
-  if (Mdl == NULL) {
+  SourceMdl = MdlPoolAcquire(BufferSize);
+  if (SourceMdl) {
+    bSourceMdlFromPool = TRUE;
+    MmInitializeMdl(SourceMdl, SourceAddress, (ULONG)BufferSize);
+  } else {
+    KeStackAttachProcess((PRKPROCESS)SourceProcess, &ApcState);
+    SourceMdl =
+        IoAllocateMdl(SourceAddress, (ULONG)BufferSize, FALSE, FALSE, NULL);
+    KeUnstackDetachProcess(&ApcState);
+
+    if (SourceMdl == NULL) {
+      Status = STATUS_INSUFFICIENT_RESOURCES;
+      goto Exit;
+    }
+  }
+
+  KeStackAttachProcess((PRKPROCESS)SourceProcess, &ApcState);
+  __try {
+    MmProbeAndLockPages(SourceMdl, PreviousMode, IoReadAccess);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    Status = GetExceptionCode();
+    if (bSourceMdlFromPool)
+      MdlPoolRelease(SourceMdl);
+    else
+      IoFreeMdl(SourceMdl);
+    SourceMdl = NULL;
+    KeUnstackDetachProcess(&ApcState);
+    goto Exit;
+  }
+  KeUnstackDetachProcess(&ApcState);
+
+  SourceMappedAddr = MmMapLockedPagesSpecifyCache(
+      SourceMdl, PreviousMode, MmNonCached, NULL, FALSE, NormalPagePriority);
+  if (SourceMappedAddr == NULL) {
     Status = STATUS_INSUFFICIENT_RESOURCES;
     goto Exit;
   }
 
-  TotalSize = MI_MAPPED_COPY_PAGES * PAGE_SIZE;
-  if (BufferSize <= TotalSize) TotalSize = BufferSize;
-
-  CurrentSize = TotalSize;
-  RemainingSize = BufferSize;
-
-  while (RemainingSize > 0) {
-    if (RemainingSize < CurrentSize) CurrentSize = RemainingSize;
-
-    KeStackAttachProcess((PRKPROCESS)SourceProcess, &ApcState);
-    if (!MmIsAddressValid(CurrentAddress)) {
-      Status = STATUS_INVALID_ADDRESS;
-      KeUnstackDetachProcess(&ApcState);
-      goto Exit;
-    }
-    MmInitializeMdl(Mdl, CurrentAddress, CurrentSize);
-    __try {
-      MmProbeAndLockPages(Mdl, PreviousMode, IoReadAccess);
-      PagesLocked = TRUE;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-      Status = GetExceptionCode();
-      PagesLocked =
-          FALSE;
-      KeUnstackDetachProcess(&ApcState);
-      goto Exit;
-    }
-
+  TargetMdl = MdlPoolAcquire(BufferSize);
+  if (TargetMdl) {
+    bTargetMdlFromPool = TRUE;
+    MmInitializeMdl(TargetMdl, TargetAddress, (ULONG)BufferSize);
+  } else {
+    KeStackAttachProcess((PRKPROCESS)TargetProcess, &ApcState);
+    TargetMdl =
+        IoAllocateMdl(TargetAddress, (ULONG)BufferSize, FALSE, FALSE, NULL);
     KeUnstackDetachProcess(&ApcState);
 
-    MdlAddress = MmMapLockedPagesSpecifyCache(Mdl, KernelMode, MmCached, NULL,
-                                              FALSE, HighPagePriority);
-    if (!MdlAddress) {
+    if (TargetMdl == NULL) {
       Status = STATUS_INSUFFICIENT_RESOURCES;
       goto Exit;
     }
+  }
 
-    KeStackAttachProcess((PRKPROCESS)TargetProcess, &ApcState);
-    if (!MmIsAddressValid(CurrentTargetAddress)) {
-      Status = STATUS_INVALID_ADDRESS;
-      KeUnstackDetachProcess(&ApcState);
-      goto Exit;
-    }
-    __try {
-      kmemmove(CurrentTargetAddress, MdlAddress, CurrentSize);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-      Status = GetExceptionCode();
-      KeUnstackDetachProcess(&ApcState);
-      goto Exit;
-    }
-
+  KeStackAttachProcess((PRKPROCESS)TargetProcess, &ApcState);
+  __try {
+    MmProbeAndLockPages(TargetMdl, PreviousMode, IoWriteAccess);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    Status = GetExceptionCode();
+    if (bTargetMdlFromPool)
+      MdlPoolRelease(TargetMdl);
+    else
+      IoFreeMdl(TargetMdl);
+    TargetMdl = NULL;
     KeUnstackDetachProcess(&ApcState);
+    goto Exit;
+  }
+  KeUnstackDetachProcess(&ApcState);
 
-    MmUnmapLockedPages(MdlAddress, Mdl);
-    MdlAddress = NULL;
-    MmUnlockPages(Mdl);
-    PagesLocked = FALSE;
+  TargetMappedAddr = MmMapLockedPagesSpecifyCache(
+      TargetMdl, PreviousMode, MmNonCached, NULL, FALSE, NormalPagePriority);
+  if (TargetMappedAddr == NULL) {
+    Status = STATUS_INSUFFICIENT_RESOURCES;
+    goto Exit;
+  }
 
-    RemainingSize -= CurrentSize;
-    CurrentAddress = (PVOID)((ULONG_PTR)CurrentAddress + CurrentSize);
-    CurrentTargetAddress =
-        (PVOID)((ULONG_PTR)CurrentTargetAddress + CurrentSize);
+  kmemmove(TargetMappedAddr, SourceMappedAddr, BufferSize);
+
+  if (ReturnSize != NULL) {
+    *ReturnSize = BufferSize;
   }
 
 Exit:
-  if (MdlAddress != NULL) {
-    MmUnmapLockedPages(MdlAddress, Mdl);
-    MdlAddress = NULL;
+  if (TargetMappedAddr != NULL) {
+    MmUnmapLockedPages(TargetMappedAddr, TargetMdl);
+    TargetMappedAddr = NULL;
   }
-
-  if (PagesLocked) {
-    MmUnlockPages(Mdl);
-    PagesLocked = FALSE;
+  if (TargetMdl != NULL) {
+    MmUnlockPages(TargetMdl);
+    if (bTargetMdlFromPool)
+      MdlPoolRelease(TargetMdl);
+    else
+      IoFreeMdl(TargetMdl);
+    TargetMdl = NULL;
   }
-
-  if (Mdl != NULL) {
-    ExFreePoolWithTag(Mdl, 'sFtN');
-    Mdl = NULL;
+  if (SourceMappedAddr != NULL) {
+    MmUnmapLockedPages(SourceMappedAddr, SourceMdl);
+    SourceMappedAddr = NULL;
   }
-
-  if (Status == STATUS_SUCCESS && ReturnSize != NULL) {
-    *ReturnSize = BufferSize;
+  if (SourceMdl != NULL) {
+    MmUnlockPages(SourceMdl);
+    if (bSourceMdlFromPool)
+      MdlPoolRelease(SourceMdl);
+    else
+      IoFreeMdl(SourceMdl);
+    SourceMdl = NULL;
   }
 
   return Status;
@@ -192,11 +298,4 @@ DriverCopyVirtualMemory(IN PEPROCESS SourceProcess, IN PVOID SourceAddress,
                           TargetAddress, BufferSize, PreviousMode, ReturnSize);
 
   return Status;
-}
-
-SIZE_T MmSizeOfMdlMeme(PVOID Base, SIZE_T Length) {
-  UINT_PTR base_ptr_val = (UINT_PTR)Base;
-  unsigned __int16 base_low_12bit = (unsigned __int16)(base_ptr_val & 0xFFF);
-
-    return 8 * ((((unsigned __int16)base_low_12bit + Length + 4095) >> 12) + 48);
 }

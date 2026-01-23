@@ -127,7 +127,7 @@ NTSTATUS GetMachineGuid(WCHAR* guid_buf, size_t buf_len) {
   }
 
   pInfo = (PKEY_VALUE_PARTIAL_INFORMATION)ExAllocatePool2(POOL_FLAG_PAGED,
-                                                          data_len, 'Usug');
+                                                          data_len, 'File');
   if (!pInfo) {
     ZwClose(hKey);
     return STATUS_INSUFFICIENT_RESOURCES;
