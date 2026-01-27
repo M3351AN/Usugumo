@@ -10,6 +10,7 @@
 #include <string_view>
 #include <memory>
 #include <unordered_map>
+#include <type_traits>
 
 #include "./mouse_input_injection.h"
 #include "./keybd_input_injection.h"
@@ -41,8 +42,6 @@ struct SyscallInfo {
     uintptr_t syscallAddr;
     void* funcPtr;
 };
-
-static std::unordered_map<std::string, SyscallInfo> g_SyscallInfoMap;
 
 typedef NTSTATUS(WINAPI* pNtAllocateVirtualMemory)(
     HANDLE ProcessHandle,
@@ -240,6 +239,49 @@ struct _SYSTEM_PROCESS_INFORMATION {
     LARGE_INTEGER OtherTransferCount;
 };
 
+#define XXH_ROTL64(x, r) ((x) << (r)) | ((x) >> (64 - (r)))
+
+inline constexpr std::uint32_t xxh3_32_core(const char* data, std::size_t len, std::uint32_t seed) noexcept {
+  constexpr std::uint64_t P1 = 0x9E3779B185EBCA87ULL;
+  constexpr std::uint64_t P2 = 0xC2B2AE3D27D4EB4FULL;
+  constexpr std::uint64_t P3 = 0x165667B19E3779F9ULL;
+  constexpr std::uint64_t P4 = 0x85EBCA77C2B2AE63ULL;
+
+  std::uint64_t h = (static_cast<std::uint64_t>(seed) * P3) + static_cast<std::uint64_t>(len) + P4;
+
+  for (std::size_t i = 0; i < len; ++i) {
+    std::uint64_t byte_val = static_cast<std::uint64_t>(static_cast<unsigned char>(data[i]));
+    std::uint64_t mix_val = h + (byte_val * P2);
+    mix_val = XXH_ROTL64(mix_val, 31);
+    mix_val *= P1;
+
+    h ^= mix_val;
+    h = XXH_ROTL64(h, 27) * P1 + P4;
+  }
+
+  h ^= static_cast<std::uint64_t>(len);
+  h *= P1;
+  h ^= h >> 33;
+  h *= P1;
+  h ^= h >> 29;
+
+  return static_cast<std::uint32_t>(h) ^ static_cast<std::uint32_t>(h >> 32);
+}
+
+inline consteval std::uint32_t xxh3_32(const char* data, std::size_t len, std::uint32_t seed = 0) noexcept {
+  return xxh3_32_core(data, len, seed);
+}
+
+inline std::uint32_t xxh3_32_rt(const char* data, std::size_t len, std::uint32_t seed = 0) noexcept {
+  return xxh3_32_core(data, len, seed);
+}
+
+#define HASH_STR(s) xxh3_32(s, sizeof(s) - 1)
+
+#undef XXH_ROTL64
+
+static std::unordered_map<uint32_t, SyscallInfo> g_SyscallInfoMap;
+
 using Address = uintptr_t;
 using SizeType = size_t;
 using ProcessId = DWORD;
@@ -433,7 +475,8 @@ static void ParseModuleForSyscalls(HMODULE hModule) noexcept
         info.syscallAddr = syscallAddr;
         info.funcPtr = nullptr;
 
-        g_SyscallInfoMap[pFuncName] = info;
+        uint32_t funcHash = xxh3_32_rt(pFuncName, strlen(pFuncName));
+        g_SyscallInfoMap[funcHash] = info;
     }
 }
 
@@ -455,7 +498,7 @@ static void ManualSysCall_Init() noexcept
 
     // NtAllocateVirtualMemory and NtProtectVirtualMemory
     {
-        auto it = g_SyscallInfoMap.find("NtAllocateVirtualMemory");
+        auto it = g_SyscallInfoMap.find(HASH_STR("NtAllocateVirtualMemory"));
         if (it != g_SyscallInfoMap.end()) {
             pfnNtAllocateVirtualMemory = ConstructIndirectSyscall<pNtAllocateVirtualMemory>(
                 it->second.syscallNum, it->second.syscallAddr);
@@ -464,7 +507,7 @@ static void ManualSysCall_Init() noexcept
     }
 
     {
-        auto it = g_SyscallInfoMap.find("NtProtectVirtualMemory");
+        auto it = g_SyscallInfoMap.find(HASH_STR("NtProtectVirtualMemory"));
         if (it != g_SyscallInfoMap.end()) {
             pfnNtProtectVirtualMemory = ConstructIndirectSyscall<pNtProtectVirtualMemory>(
                 it->second.syscallNum, it->second.syscallAddr);
@@ -479,7 +522,7 @@ static void ManualSysCall_Init() noexcept
 
     // NtOpenProcess
     {
-        auto it = g_SyscallInfoMap.find("NtOpenProcess");
+        auto it = g_SyscallInfoMap.find(HASH_STR("NtOpenProcess"));
         if (it != g_SyscallInfoMap.end()) {
             pfnNtOpenProcess = ConstructIndirectSyscall<_NtOpenProcess>(
                 it->second.syscallNum, it->second.syscallAddr);
@@ -489,7 +532,7 @@ static void ManualSysCall_Init() noexcept
 
     // NtReadVirtualMemory
     {
-        auto it = g_SyscallInfoMap.find("NtReadVirtualMemory");
+        auto it = g_SyscallInfoMap.find(HASH_STR("NtReadVirtualMemory"));
         if (it != g_SyscallInfoMap.end()) {
             pfnNtReadVirtualMemory = ConstructIndirectSyscall<pNtReadVirtualMemory>(
                 it->second.syscallNum, it->second.syscallAddr);
@@ -499,7 +542,7 @@ static void ManualSysCall_Init() noexcept
 
     // NtWriteVirtualMemory
     {
-        auto it = g_SyscallInfoMap.find("NtWriteVirtualMemory");
+        auto it = g_SyscallInfoMap.find(HASH_STR("NtWriteVirtualMemory"));
         if (it != g_SyscallInfoMap.end()) {
             pfnNtWriteVirtualMemory = ConstructIndirectSyscall<pNtWriteVirtualMemory>(
                 it->second.syscallNum, it->second.syscallAddr);
@@ -509,7 +552,7 @@ static void ManualSysCall_Init() noexcept
 
     // NtQueryInformationProcess
     {
-        auto it = g_SyscallInfoMap.find("NtQueryInformationProcess");
+        auto it = g_SyscallInfoMap.find(HASH_STR("NtQueryInformationProcess"));
         if (it != g_SyscallInfoMap.end()) {
             pfnNtQueryInformationProcess = ConstructIndirectSyscall<pNtQueryInformationProcess>(
                 it->second.syscallNum, it->second.syscallAddr);
@@ -519,7 +562,7 @@ static void ManualSysCall_Init() noexcept
 
     // NtQuerySystemInformation
     {
-        auto it = g_SyscallInfoMap.find("NtQuerySystemInformation");
+        auto it = g_SyscallInfoMap.find(HASH_STR("NtQuerySystemInformation"));
         if (it != g_SyscallInfoMap.end()) {
             pfnNtQuerySystemInformation = ConstructIndirectSyscall<pNtQuerySystemInformation>(
                 it->second.syscallNum, it->second.syscallAddr);
@@ -529,7 +572,7 @@ static void ManualSysCall_Init() noexcept
 
     // NtUserSetWindowDisplayAffinity
     {
-        auto it = g_SyscallInfoMap.find("NtUserSetWindowDisplayAffinity");
+        auto it = g_SyscallInfoMap.find(HASH_STR("NtUserSetWindowDisplayAffinity"));
         if (it != g_SyscallInfoMap.end()) {
             pfnNtUserSetWindowDisplayAffinity = ConstructIndirectSyscall<pNtUserSetWindowDisplayAffinity>(
                 it->second.syscallNum, it->second.syscallAddr);
@@ -539,7 +582,7 @@ static void ManualSysCall_Init() noexcept
 
     // NtFreeVirtualMemory
     {
-        auto it = g_SyscallInfoMap.find("NtFreeVirtualMemory");
+        auto it = g_SyscallInfoMap.find(HASH_STR("NtFreeVirtualMemory"));
         if (it != g_SyscallInfoMap.end()) {
             pfnNtFreeVirtualMemory = ConstructIndirectSyscall<pNtFreeVirtualMemory>(
                 it->second.syscallNum, it->second.syscallAddr);
@@ -562,6 +605,8 @@ static bool g_ManualSysCallInited = []() noexcept {
     ManualSysCall_Init();
     return true;
 }();
+
+#undef HASH_STR
 
 inline static OBJECT_ATTRIBUTES InitObjectAttributes(
     PUNICODE_STRING name, ULONG attributes, HANDLE hRoot,
