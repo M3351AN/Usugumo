@@ -491,7 +491,6 @@ static void ManualSysCall_Init() noexcept
         // for applications with window, this should be always loaded
         hWin32u = LoadLibraryW(L"win32u.dll");
         ParseModuleForSyscalls(hWin32u);
-        FreeLibrary(hWin32u);
     } else {
         ParseModuleForSyscalls(hWin32u);
     }
