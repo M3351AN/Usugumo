@@ -97,10 +97,13 @@
     <MASM Include="ke_reimpl.asm">
       <Filter>Source Files</Filter>
     </MASM>
-    <MASM Include="kmemmove.asm">
+    <MASM Include="rtl_reimpl.asm">
       <Filter>Source Files</Filter>
     </MASM>
-    <MASM Include="rtl_reimpl.asm">
+    <MASM Include="helper_utils.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
+    <MASM Include="kmem.asm">
       <Filter>Source Files</Filter>
     </MASM>
   </ItemGroup>
