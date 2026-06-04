@@ -7,7 +7,7 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc o
 > 
 > And no matter what purpose you use it for, I DO NOT guarantee anything about it and assume ALL RISKS at your own risk
 > 
-> Unless strictly tested and appropriately modified, in principle, DO NOT directly use any code from this project for production environments
+> 
 
 ---
 
