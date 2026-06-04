@@ -621,8 +621,8 @@ inline static OBJECT_ATTRIBUTES InitObjectAttributes(
   return object;
 }
 
-inline static ProcessHandle NtOpenProcess(DWORD dwDesiredAccess, BOOL bInheritHandle,
-                                   ProcessId dwProcessId) noexcept {
+inline static ProcessHandle NtOpenProcess(DWORD dwDesiredAccess,
+    ProcessId dwProcessId) noexcept {
   ProcessHandle hProcess = 0;
   CLIENT_ID clientId = {(PVOID)(ULONG_PTR)dwProcessId, NULL};
   OBJECT_ATTRIBUTES objAttr = InitObjectAttributes(NULL, 0, NULL, NULL);
@@ -683,7 +683,7 @@ class Native {
                   DWORD desired_access = PROCESS_ALL_ACCESS) noexcept {
     target_process_id_ = static_cast<ProcessId>(process_id);
     target_process_handle_ =
-        NtOpenProcess(desired_access, FALSE, target_process_id_);
+        NtOpenProcess(desired_access, target_process_id_);
     return target_process_handle_ != nullptr;
   }
 
