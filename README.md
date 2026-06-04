@@ -6,8 +6,6 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc o
 > This project IS NOT designed to combat AC/AV/EDR or sth like that.
 > 
 > And no matter what purpose you use it for, I DO NOT guarantee anything about it and assume ALL RISKS at your own risk
-> 
-> 
 
 ---
 
@@ -36,9 +34,7 @@ There‘s also an alternative example that utilizes Native API, which is not a b
 
 ## License
 
-This project is licensed under [**TOSSUCU License 2025.9**](LICENSE).
-
-For most development purposes, it can be considered a variant of MIT or BSD.
+This project is licensed under [**BSD-3-Clause**](LICENSE).
 
 ## Credits
 
