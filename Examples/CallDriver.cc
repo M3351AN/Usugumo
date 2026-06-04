@@ -255,7 +255,7 @@ int main() {
 #ifdef USING_USUGUMO
     printf("Driver handle created 0x%p\n", op.GetDriverHandle());
 #else
-    printf("Process handle created 0x%p\n", op.GetProcessHandle());
+    printf("Process handle created 0x%p\n", op.GetTargetProcessHandle());
 #endif
     std::string targetProcessNameNarrow(TARGET_PROCESS_NAME.begin(), TARGET_PROCESS_NAME.end());
     uint64_t base_address = 0;

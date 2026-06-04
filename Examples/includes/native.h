@@ -822,8 +822,8 @@ class Native {
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
   }
 
-  ProcessHandle GetProcessHandle() const noexcept { return target_process_handle_; }
-  ProcessId GetProcessId() const noexcept { return target_process_id_; }
+  ProcessHandle GetTargetProcessHandle() const noexcept { return target_process_handle_; }
+  ProcessId GetTargetProcessId() const noexcept { return target_process_id_; }
 
  private:
   ProcessHandle target_process_handle_;
