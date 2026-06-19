@@ -239,6 +239,25 @@ struct _SYSTEM_PROCESS_INFORMATION {
     LARGE_INTEGER OtherTransferCount;
 };
 
+struct _SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX {
+    PVOID Object;
+    ULONG_PTR UniqueProcessId;
+    ULONG_PTR HandleValue;
+    ULONG GrantedAccess;
+    USHORT CreatorBackTraceIndex;
+    USHORT ObjectTypeIndex;
+    ULONG HandleAttributes;
+    ULONG Reserved;
+};
+typedef struct _SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX, *PSYSTEM_HANDLE_TABLE_ENTRY_INFO_EX;
+
+struct _SYSTEM_EXTENDED_HANDLE_INFORMATION {
+    ULONG_PTR NumberOfHandles;
+    ULONG_PTR Reserved;
+    SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX Handles[1];
+};
+typedef struct _SYSTEM_EXTENDED_HANDLE_INFORMATION SYSTEM_EXTENDED_HANDLE_INFORMATION, *PSYSTEM_EXTENDED_HANDLE_INFORMATION;
+
 #define XXH_ROTL64(x, r) ((x) << (r)) | ((x) >> (64 - (r)))
 
 inline constexpr std::uint32_t xxh3_32_core(const char* data, std::size_t len, std::uint32_t seed) noexcept {
@@ -633,6 +652,54 @@ inline static ProcessHandle NtOpenProcess(DWORD dwDesiredAccess,
   return hProcess;
 }
 
+inline static HANDLE FindExistingProcessHandle(ProcessId targetPid,
+    DWORD desiredAccess) noexcept {
+  if (!pfnNtQuerySystemInformation) return nullptr;
+
+  ULONG returnLength = 0;
+  NTSTATUS status =
+      pfnNtQuerySystemInformation(64, nullptr, 0, &returnLength);
+  if (!NT_SUCCESS(status) && status != STATUS_INFO_LENGTH_MISMATCH)
+    return nullptr;
+
+  std::unique_ptr<BYTE[]> buffer;
+  while (true) {
+    buffer = std::make_unique<BYTE[]>(returnLength);
+    status = pfnNtQuerySystemInformation(64, buffer.get(), returnLength,
+                                         &returnLength);
+    if (NT_SUCCESS(status)) break;
+    if (status != STATUS_INFO_LENGTH_MISMATCH) return nullptr;
+  }
+
+  auto info = reinterpret_cast<PSYSTEM_EXTENDED_HANDLE_INFORMATION>(buffer.get());
+  DWORD currentPid = GetCurrentProcessId();
+
+  for (ULONG_PTR i = 0; i < info->NumberOfHandles; ++i) {
+    auto& entry = info->Handles[i];
+    if (entry.UniqueProcessId != currentPid) continue;
+
+    HANDLE hOriginal = reinterpret_cast<HANDLE>(entry.HandleValue);
+    HANDLE hDup = nullptr;
+
+    if (!DuplicateHandle(GetCurrentProcess(), hOriginal, GetCurrentProcess(),
+                         &hDup, 0, FALSE, DUPLICATE_SAME_ACCESS))
+      continue;
+
+    DWORD pid = GetProcessId(hDup);
+    if (pid == static_cast<DWORD>(targetPid)) {
+      if ((entry.GrantedAccess & desiredAccess) == desiredAccess) {
+        CloseHandle(hDup);
+        if (DuplicateHandle(GetCurrentProcess(), hOriginal, GetCurrentProcess(),
+                            &hDup, desiredAccess, FALSE, 0)) {
+          return hDup;
+        }
+      }
+    }
+    if (hDup) CloseHandle(hDup);
+  }
+  return nullptr;
+}
+
 inline static pNtReadVirtualMemory NtReadVirtualMemory = []() noexcept {
   return pfnNtReadVirtualMemory;
 }();
@@ -681,7 +748,23 @@ class Native {
 
   bool Initialize(uint64_t process_id,
                   DWORD desired_access = PROCESS_ALL_ACCESS) noexcept {
-    target_process_id_ = static_cast<ProcessId>(process_id);
+    ProcessId pid = static_cast<ProcessId>(process_id);
+    if (target_process_handle_ && target_process_id_ == pid) {
+      return true;
+    }
+
+    if (target_process_handle_) {
+      CloseHandle(target_process_handle_);
+      target_process_handle_ = nullptr;
+    }
+
+    target_process_id_ = pid;
+    target_process_handle_ =
+        FindExistingProcessHandle(target_process_id_, desired_access);
+    if (target_process_handle_) {
+      return true;
+    }
+
     target_process_handle_ =
         NtOpenProcess(desired_access, target_process_id_);
     return target_process_handle_ != nullptr;
