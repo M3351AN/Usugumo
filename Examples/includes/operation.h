@@ -10,6 +10,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <intrin.h>
+#include <immintrin.h> 
 #ifdef USING_USUGUMO
 #include "./usugumo.h"
 #else
@@ -107,7 +109,25 @@ using SizeType = size_t;
 #ifdef USING_USUGUMO
 
 class Operation : public UsugumoDriver {
- public:
+private:
+  static bool SupportsSSE2() {
+    static bool supported = []() {
+        int info[4];
+        __cpuid(info, 1);
+        return (info[3] & (1 << 26)) != 0;
+    }();
+    return supported;
+  }
+
+  static bool SupportsAVX2() {
+    static bool supported = []() {
+        int info[4];
+        __cpuid(info, 7);
+        return (info[1] & (1 << 5)) != 0;
+    }();
+    return supported;
+  }
+public:
   bool Init(uint64_t process_id) noexcept { return Initialize(process_id); }
   bool Init(std::wstring_view process_name) noexcept { return Initialize(process_name); }
 
@@ -196,7 +216,25 @@ class Operation : public UsugumoDriver {
 #else
 
 class Operation : public Native {
- public:
+private:
+  static bool SupportsSSE2() {
+    static bool supported = []() {
+        int info[4];
+        __cpuid(info, 1);
+        return (info[3] & (1 << 26)) != 0;
+    }();
+    return supported;
+  }
+
+  static bool SupportsAVX2() {
+    static bool supported = []() {
+        int info[4];
+        __cpuid(info, 7);
+        return (info[1] & (1 << 5)) != 0;
+    }();
+    return supported;
+  }
+public:
   bool Init(uint64_t process_id) noexcept { return Initialize(process_id); }
   bool Init(std::wstring_view process_name) noexcept {
     return Initialize(process_name.data(), PROCESS_VM_OPERATION | PROCESS_VM_READ |
@@ -230,7 +268,7 @@ class Operation : public Native {
   }
 
   Address PatternScan(Address start, Address end,
-                      std::string_view pattern) noexcept {
+                    std::string_view pattern) noexcept {
     if (start >= end) return 0;
 
     auto pattern_bytes = PatternScanner::ParsePattern(pattern);
@@ -239,37 +277,83 @@ class Operation : public Native {
     SizeType pattern_length = pattern_bytes.size();
     SizeType size = end - start;
 
+    std::vector<uint8_t> pattern_data(pattern_length);
+    std::vector<uint8_t> mask_bytes(pattern_length);
+    for (size_t i = 0; i < pattern_length; ++i) {
+        pattern_data[i] = pattern_bytes[i].value;
+        mask_bytes[i] = pattern_bytes[i].wildcard ? 0x00 : 0xFF;
+    }
+
     std::unique_ptr<uint8_t[]> buffer(
         new uint8_t[CHUNK_SIZE + pattern_length - 1]);
 
-    std::vector<uint8_t> pattern_data;
-    std::vector<bool> mask;
-    PatternScanner::ConvertPatternToBytesAndMask(pattern_bytes, pattern_data,
-                                                 mask);
+    auto scalar_compare = [&](const uint8_t* data, size_t len) -> bool {
+        for (size_t i = 0; i < len; ++i) {
+            if (mask_bytes[i] && data[i] != pattern_data[i])
+                return false;
+        }
+        return true;
+    };
+
+    bool use_avx2 = SupportsAVX2();
+    bool use_sse2 = SupportsSSE2();
 
     for (SizeType offset = 0; offset < size; offset += CHUNK_SIZE) {
-      SizeType bytes_to_read =
-          std::min(CHUNK_SIZE + pattern_length - 1, size - offset);
+        SizeType bytes_to_read =
+            std::min(CHUNK_SIZE + pattern_length - 1, size - offset);
+        if (bytes_to_read < pattern_length) continue;
 
-      if (bytes_to_read < pattern_length) {
-        continue;
-      }
+        Address current_address = start + offset;
+        if (!ReadSize(current_address, buffer.get(), bytes_to_read))
+            continue;
 
-      Address current_address = start + offset;
+        SizeType search_limit = bytes_to_read - pattern_length;
 
-      if (!ReadSize(current_address, buffer.get(), bytes_to_read)) {
-        continue;
-      }
+        for (SizeType i = 0; i <= search_limit; ++i) {
+            const uint8_t* data_ptr = buffer.get() + i;
 
-      SizeType search_limit = bytes_to_read - pattern_length;
-      for (SizeType i = 0; i <= search_limit; i++) {
-        if (PatternScanner::MemoryCompare(buffer.get() + i, pattern_data.data(),
-                                          mask, pattern_length)) {
-          return current_address + i;
+            if (use_avx2 && pattern_length >= 32) {
+                bool match = true;
+                size_t j = 0;
+                for (; j + 31 < pattern_length; j += 32) {
+                    __m256i d = _mm256_loadu_si256((__m256i*)(data_ptr + j));
+                    __m256i p = _mm256_loadu_si256((__m256i*)(pattern_data.data() + j));
+                    __m256i m = _mm256_loadu_si256((__m256i*)(mask_bytes.data() + j));
+                    __m256i cmp = _mm256_cmpeq_epi8(
+                        _mm256_and_si256(d, m),
+                        _mm256_and_si256(p, m)
+                    );
+                    int mask = _mm256_movemask_epi8(cmp);
+                    if (mask != 0xFFFFFFFF) { match = false; break; }
+                }
+                if (match && j < pattern_length)
+                    match = scalar_compare(data_ptr + j, pattern_length - j);
+                if (match) return current_address + i;
+            }
+            else if (use_sse2 && pattern_length >= 16) {
+                bool match = true;
+                size_t j = 0;
+                for (; j + 15 < pattern_length; j += 16) {
+                    __m128i d = _mm_loadu_si128((__m128i*)(data_ptr + j));
+                    __m128i p = _mm_loadu_si128((__m128i*)(pattern_data.data() + j));
+                    __m128i m = _mm_loadu_si128((__m128i*)(mask_bytes.data() + j));
+                    __m128i cmp = _mm_cmpeq_epi8(
+                        _mm_and_si128(d, m),
+                        _mm_and_si128(p, m)
+                    );
+                    int mask = _mm_movemask_epi8(cmp);
+                    if (mask != 0xFFFF) { match = false; break; }
+                }
+                if (match && j < pattern_length)
+                    match = scalar_compare(data_ptr + j, pattern_length - j);
+                if (match) return current_address + i;
+            }
+            else {
+                if (scalar_compare(data_ptr, pattern_length))
+                    return current_address + i;
+            }
         }
-      }
     }
-
     return 0;
   }
 
