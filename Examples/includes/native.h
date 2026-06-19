@@ -62,6 +62,20 @@ typedef NTSTATUS(WINAPI* pNtFreeVirtualMemory)(
     HANDLE ProcessHandle, LPVOID lpAddress, SIZE_T dwSize, DWORD dwFreeType);
 static pNtFreeVirtualMemory pfnNtFreeVirtualMemory = nullptr;
 
+typedef NTSTATUS(NTAPI* pNtDuplicateObject)(
+    HANDLE SourceProcessHandle,
+    HANDLE SourceHandle,
+    HANDLE TargetProcessHandle,
+    PHANDLE TargetHandle,
+    ACCESS_MASK DesiredAccess,
+    ULONG HandleAttributes,
+    ULONG Options);
+static pNtDuplicateObject pfnNtDuplicateObject = nullptr;
+
+typedef NTSTATUS(NTAPI* pNtClose)(
+    HANDLE Handle);
+static pNtClose pfnNtClose = nullptr;
+
 
 typedef NTSTATUS(NTAPI* _NtOpenProcess)(PHANDLE ProcessHandle,
                                         ACCESS_MASK DesiredAccess,
@@ -608,6 +622,26 @@ static void ManualSysCall_Init() noexcept
         }
     }
 
+    // NtDuplicateObject
+    {
+        auto it = g_SyscallInfoMap.find(HASH_STR("NtDuplicateObject"));
+        if (it != g_SyscallInfoMap.end()) {
+            pfnNtDuplicateObject = ConstructIndirectSyscall<pNtDuplicateObject>(
+                it->second.syscallNum, it->second.syscallAddr);
+            it->second.funcPtr = reinterpret_cast<void*>(pfnNtDuplicateObject);
+        }
+    }
+
+    // NtClose
+    {
+        auto it = g_SyscallInfoMap.find(HASH_STR("NtClose"));
+        if (it != g_SyscallInfoMap.end()) {
+            pfnNtClose = ConstructIndirectSyscall<pNtClose>(
+                it->second.syscallNum, it->second.syscallAddr);
+            it->second.funcPtr = reinterpret_cast<void*>(pfnNtClose);
+        }
+    }
+
     // fail openprocess, nosense to use other these syscalls
     if (!pfnNtOpenProcess) {
         pfnNtReadVirtualMemory = nullptr;
@@ -654,7 +688,8 @@ inline static ProcessHandle NtOpenProcess(DWORD dwDesiredAccess,
 
 inline static HANDLE FindExistingProcessHandle(ProcessId targetPid,
     DWORD desiredAccess) noexcept {
-  if (!pfnNtQuerySystemInformation) return nullptr;
+  if (!pfnNtQuerySystemInformation || !pfnNtDuplicateObject || !pfnNtClose)
+    return nullptr;
 
   ULONG returnLength = 0;
   NTSTATUS status =
@@ -681,21 +716,27 @@ inline static HANDLE FindExistingProcessHandle(ProcessId targetPid,
     HANDLE hOriginal = reinterpret_cast<HANDLE>(entry.HandleValue);
     HANDLE hDup = nullptr;
 
-    if (!DuplicateHandle(GetCurrentProcess(), hOriginal, GetCurrentProcess(),
-                         &hDup, 0, FALSE, DUPLICATE_SAME_ACCESS))
-      continue;
+    status = pfnNtDuplicateObject(GetCurrentProcess(), hOriginal,
+                                  GetCurrentProcess(), &hDup, 0, 0,
+                                  DUPLICATE_SAME_ACCESS);
+    if (!NT_SUCCESS(status)) continue;
 
-    DWORD pid = GetProcessId(hDup);
-    if (pid == static_cast<DWORD>(targetPid)) {
+    _PROCESS_BASIC_INFORMATION pbi = {};
+    ULONG retLen = 0;
+    status = pfnNtQueryInformationProcess(hDup, ProcessBasicInformation, &pbi,
+                                          sizeof(pbi), &retLen);
+    if (NT_SUCCESS(status) && static_cast<DWORD>(pbi.UniqueProcessId) == static_cast<DWORD>(targetPid)) {
       if ((entry.GrantedAccess & desiredAccess) == desiredAccess) {
-        CloseHandle(hDup);
-        if (DuplicateHandle(GetCurrentProcess(), hOriginal, GetCurrentProcess(),
-                            &hDup, desiredAccess, FALSE, 0)) {
+        pfnNtClose(hDup);
+        status = pfnNtDuplicateObject(GetCurrentProcess(), hOriginal,
+                                      GetCurrentProcess(), &hDup,
+                                      desiredAccess, 0, 0);
+        if (NT_SUCCESS(status)) {
           return hDup;
         }
       }
     }
-    if (hDup) CloseHandle(hDup);
+    if (hDup) pfnNtClose(hDup);
   }
   return nullptr;
 }
@@ -722,7 +763,10 @@ class Native {
 
   ~Native() noexcept {
     if (target_process_handle_) {
-      CloseHandle(target_process_handle_);
+      if (pfnNtClose)
+        pfnNtClose(target_process_handle_);
+      else
+        CloseHandle(target_process_handle_);
     }
   }
 
@@ -754,7 +798,10 @@ class Native {
     }
 
     if (target_process_handle_) {
-      CloseHandle(target_process_handle_);
+      if (pfnNtClose)
+        pfnNtClose(target_process_handle_);
+      else
+        CloseHandle(target_process_handle_);
       target_process_handle_ = nullptr;
     }
 
