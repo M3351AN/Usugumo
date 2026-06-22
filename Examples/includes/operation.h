@@ -106,10 +106,7 @@ constexpr inline size_t CHUNK_SIZE = 4096uz;
 using Address = uintptr_t;
 using SizeType = size_t;
 
-#ifdef USING_USUGUMO
-
-class Operation : public UsugumoDriver {
-private:
+namespace {
   static bool SupportsSSE2() {
     static bool supported = []() {
         int info[4];
@@ -127,6 +124,10 @@ private:
     }();
     return supported;
   }
+}
+#ifdef USING_USUGUMO
+
+class Operation : public UsugumoDriver {
 public:
   bool Init(uint64_t process_id) noexcept { return Initialize(process_id); }
   bool Init(std::wstring_view process_name) noexcept { return Initialize(process_name); }
@@ -216,30 +217,16 @@ public:
 #else
 
 class Operation : public Native {
-private:
-  static bool SupportsSSE2() {
-    static bool supported = []() {
-        int info[4];
-        __cpuid(info, 1);
-        return (info[3] & (1 << 26)) != 0;
-    }();
-    return supported;
-  }
-
-  static bool SupportsAVX2() {
-    static bool supported = []() {
-        int info[4];
-        __cpuid(info, 7);
-        return (info[1] & (1 << 5)) != 0;
-    }();
-    return supported;
-  }
 public:
-  bool Init(uint64_t process_id) noexcept { return Initialize(process_id); }
-  bool Init(std::wstring_view process_name) noexcept {
-    return Initialize(process_name.data(), PROCESS_VM_OPERATION | PROCESS_VM_READ |
-                                        PROCESS_VM_WRITE |
-                                        PROCESS_QUERY_INFORMATION);
+  bool Init(uint64_t process_id, DWORD desired_access =
+     PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE |
+     PROCESS_QUERY_LIMITED_INFORMATION) noexcept { 
+    return Initialize(process_id, desired_access); 
+  }
+  bool Init(std::wstring_view process_name, DWORD desired_access =
+     PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE |
+     PROCESS_QUERY_LIMITED_INFORMATION) noexcept {
+    return Initialize(process_name.data(), desired_access);
   }
 
   template <typename T>
