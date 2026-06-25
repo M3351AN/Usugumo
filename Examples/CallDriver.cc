@@ -20,12 +20,12 @@ constexpr inline DWORD THREAD_WAIT_TIMEOUT = 1000u;
 constexpr inline DWORD DESTROY_WINDOW_TIMEOUT = 5000u;
 constexpr inline UINT WINDOW_WIDTH = 200u;
 constexpr inline UINT WINDOW_HEIGHT = 150u;
-constexpr inline Address TEST_MEMORY_ADDR = 0xDEAD0000ULL;
 constexpr inline uint64_t TEST_WRITE_VALUE = 0x1919810ULL;
 constexpr inline std::string_view WINDOW_CLASS_NAME = "TestWindowClass";
 constexpr inline std::string_view WINDOW_TITLE = "Test";
 constexpr inline std::wstring_view TARGET_PROCESS_NAME = L"Target.exe";
-constexpr inline std::string_view SCAN_PATTERN = "AA BB CC DD ?? ?? ?? ?? 11 22 33 44";
+// only for my build, you should make your own pattern
+constexpr inline std::string_view TARGET_PATTERN = "48 8B 15 ? ? ? ? 48 89 C1";
 
 struct HandleDeleter {
     void operator()(HANDLE h) const noexcept {
@@ -274,23 +274,51 @@ int main() {
     
     printf("Module base: 0x%llX, size: 0x%llX\n", base_address, module_size);
 
-    Address found = op.PatternScanSize(base_address, module_size, SCAN_PATTERN.data());
-    printf("Pattern '%s' found at: 0x%llX\n", SCAN_PATTERN.data(), found);
+    Address pattern_addr = op.PatternScanSize(base_address, module_size, TARGET_PATTERN.data());
+    if (pattern_addr == 0) {
+        printf("Failed to find target pattern\n");
+        windowData.windowRunning = false;
+        DWORD threadId = GetThreadId(reinterpret_cast<HANDLE>(windowThread.get()));
+        if (threadId != 0) {
+            PostThreadMessage(threadId, WM_QUIT, 0, 0);
+        }
+        WaitForSingleObject(windowThread.get(), THREAD_WAIT_TIMEOUT);
+        system("pause");
+        return 1;
+    }
+    printf("Target pattern found at: 0x%llX\n", pattern_addr);
+
+    int32_t disp32 = 0;
+    if (!op.Read<int32_t>(pattern_addr + 3, &disp32)) {
+        printf("Failed to read displacement\n");
+        windowData.windowRunning = false;
+        DWORD threadId = GetThreadId(reinterpret_cast<HANDLE>(windowThread.get()));
+        if (threadId != 0) {
+            PostThreadMessage(threadId, WM_QUIT, 0, 0);
+        }
+        WaitForSingleObject(windowThread.get(), THREAD_WAIT_TIMEOUT);
+        system("pause");
+        return 1;
+    }
+
+    // here hard coded, you should using hde64 or zydis to decode the instruction length
+    Address resolved_addr = pattern_addr + 7 + disp32;
+    printf("Resolved target address: 0x%llX\n", resolved_addr);
 
     uint64_t target_var = 0;
-    if (!op.Read<uint64_t>(TEST_MEMORY_ADDR, &target_var)) {
+    if (!op.Read<uint64_t>(resolved_addr, &target_var)) {
         printf("Failed to read memory\n");
     } else {
-        printf("Read target_var = 0x%llX at 0x%llX\n", target_var, TEST_MEMORY_ADDR);
+        printf("Read target_var = 0x%llX at 0x%llX\n", target_var, resolved_addr);
     }
     
-    if (!op.Write<uint64_t>(TEST_MEMORY_ADDR, TEST_WRITE_VALUE, sizeof(uint64_t))) {
+    if (!op.Write<uint64_t>(resolved_addr, TEST_WRITE_VALUE, sizeof(uint64_t))) {
         printf("Failed to write memory\n");
     } else {
-        printf("Written 0x%llX to 0x%llX\n", TEST_WRITE_VALUE, TEST_MEMORY_ADDR);
+        printf("Written 0x%llX to 0x%llX\n", TEST_WRITE_VALUE, resolved_addr);
     }
     
-    if (op.Read<uint64_t>(TEST_MEMORY_ADDR, &target_var)) {
+    if (op.Read<uint64_t>(resolved_addr, &target_var)) {
         printf("Read back target_var = 0x%llX\n", target_var);
     }
     
