@@ -107,15 +107,6 @@ using Address = uintptr_t;
 using SizeType = size_t;
 
 namespace {
-  static bool SupportsSSE2() {
-    static bool supported = []() {
-        int info[4];
-        __cpuid(info, 1);
-        return (info[3] & (1 << 26)) != 0;
-    }();
-    return supported;
-  }
-
   static bool SupportsAVX2() {
     static bool supported = []() {
         int info[4];
@@ -283,7 +274,6 @@ public:
     };
 
     bool use_avx2 = SupportsAVX2();
-    bool use_sse2 = SupportsSSE2();
 
     for (SizeType offset = 0; offset < size; offset += CHUNK_SIZE) {
         SizeType bytes_to_read =
@@ -317,7 +307,7 @@ public:
                     match = scalar_compare(data_ptr + j, pattern_length - j);
                 if (match) return current_address + i;
             }
-            else if (use_sse2 && pattern_length >= 16) {
+            else if (pattern_length >= 16) {
                 bool match = true;
                 size_t j = 0;
                 for (; j + 15 < pattern_length; j += 16) {
