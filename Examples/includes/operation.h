@@ -19,7 +19,16 @@
 #endif
 
 class PatternScanner {
- public:
+private:
+  static bool SupportsAVX2() {
+    static bool supported = []() {
+      int info[4];
+      __cpuid(info, 7);
+      return (info[1] & (1 << 5)) != 0;
+    }();
+    return supported;
+  }
+public:
   struct PatternByte {
     uint8_t value;
     bool wildcard;
@@ -80,23 +89,54 @@ class PatternScanner {
   }
 
   static void ConvertPatternToBytesAndMask(
-      const std::vector<PatternByte>& pattern,
-      std::vector<uint8_t>& pattern_bytes, std::vector<bool>& mask) noexcept {
+    const std::vector<PatternByte>& pattern,
+    std::vector<uint8_t>& pattern_bytes,
+    std::vector<uint8_t>& mask_bytes) noexcept {
     pattern_bytes.clear();
-    mask.clear();
+    mask_bytes.clear();
+    pattern_bytes.reserve(pattern.size());
+    mask_bytes.reserve(pattern.size());
 
     for (const auto& pb : pattern) {
-      pattern_bytes.push_back(pb.value);
-      mask.push_back(!pb.wildcard);
+        pattern_bytes.push_back(pb.value);
+        mask_bytes.push_back(pb.wildcard ? 0x00 : 0xFF);
     }
   }
 
   static bool MemoryCompare(const uint8_t* data, const uint8_t* pattern,
-                            const std::vector<bool>& mask, size_t length) noexcept {
-    for (size_t i = 0; i < length; i++) {
-      if (mask[i] && data[i] != pattern[i]) {
-        return false;
-      }
+                          const uint8_t* mask, size_t length) noexcept {
+    if (length == 0) return true;
+
+    bool use_avx2 = SupportsAVX2();
+    size_t i = 0;
+
+    if (use_avx2 && length >= 32) {
+        for (; i + 31 < length; i += 32) {
+            __m256i d = _mm256_loadu_si256((__m256i*)(data + i));
+            __m256i p = _mm256_loadu_si256((__m256i*)(pattern + i));
+            __m256i m = _mm256_loadu_si256((__m256i*)(mask + i));
+            __m256i cmp = _mm256_cmpeq_epi8(
+                _mm256_and_si256(d, m),
+                _mm256_and_si256(p, m)
+            );
+            int mask_res = _mm256_movemask_epi8(cmp);
+            if (mask_res != 0xFFFFFFFF) return false;
+        }
+    } else if (length >= 16) {
+        for (; i + 15 < length; i += 16) {
+            __m128i d = _mm_loadu_si128((__m128i*)(data + i));
+            __m128i p = _mm_loadu_si128((__m128i*)(pattern + i));
+            __m128i m = _mm_loadu_si128((__m128i*)(mask + i));
+            __m128i cmp = _mm_cmpeq_epi8(
+                _mm_and_si128(d, m),
+                _mm_and_si128(p, m)
+            );
+            int mask_res = _mm_movemask_epi8(cmp);
+            if (mask_res != 0xFFFF) return false;
+        }
+    }
+    for (; i < length; ++i) {
+        if (mask[i] && data[i] != pattern[i]) return false;
     }
     return true;
   }
@@ -106,16 +146,6 @@ constexpr inline size_t CHUNK_SIZE = 4096uz;
 using Address = uintptr_t;
 using SizeType = size_t;
 
-namespace {
-  static bool SupportsAVX2() {
-    static bool supported = []() {
-        int info[4];
-        __cpuid(info, 7);
-        return (info[1] & (1 << 5)) != 0;
-    }();
-    return supported;
-  }
-}
 #ifdef USING_USUGUMO
 
 class Operation : public UsugumoDriver {
@@ -149,7 +179,7 @@ public:
   }
 
   Address PatternScan(Address start, Address end,
-                      std::string_view pattern) noexcept {
+                    std::string_view pattern) noexcept {
     if (start >= end) return 0;
 
     auto pattern_bytes = PatternScanner::ParsePattern(pattern);
@@ -158,32 +188,36 @@ public:
     SizeType pattern_length = pattern_bytes.size();
     SizeType size = end - start;
 
+    std::vector<uint8_t> pattern_data(pattern_length);
+    std::vector<uint8_t> mask_data(pattern_length);
+    for (size_t i = 0; i < pattern_length; ++i) {
+        pattern_data[i] = pattern_bytes[i].value;
+        mask_data[i] = pattern_bytes[i].wildcard ? 0x00 : 0xFF;
+    }
+
     std::unique_ptr<uint8_t[]> buffer(
         new uint8_t[CHUNK_SIZE + pattern_length - 1]);
 
-    std::vector<uint8_t> pattern_data;
-    std::vector<bool> mask;
-    PatternScanner::ConvertPatternToBytesAndMask(pattern_bytes, pattern_data,
-                                                 mask);
-
     for (SizeType offset = 0; offset < size; offset += CHUNK_SIZE) {
-      SizeType bytes_to_read =
-          std::min(CHUNK_SIZE + pattern_length - 1, size - offset);
-      Address current_address = start + offset;
+        SizeType bytes_to_read =
+            std::min(CHUNK_SIZE + pattern_length - 1, size - offset);
+        if (bytes_to_read < pattern_length) continue;
 
-      if (!ReadSize(current_address, buffer.get(), bytes_to_read)) {
-        continue;
-      }
+        Address current_address = start + offset;
+        if (!ReadSize(current_address, buffer.get(), bytes_to_read))
+            continue;
 
-      SizeType search_limit = bytes_to_read - pattern_length;
-      for (SizeType i = 0; i <= search_limit; i++) {
-        if (PatternScanner::MemoryCompare(buffer.get() + i, pattern_data.data(),
-                                          mask, pattern_length)) {
-          return current_address + i;
+        SizeType search_limit = bytes_to_read - pattern_length;
+        for (SizeType i = 0; i <= search_limit; ++i) {
+            if (PatternScanner::MemoryCompare(
+                    buffer.get() + i,
+                    pattern_data.data(),
+                    mask_data.data(),
+                    pattern_length)) {
+                return current_address + i;
+            }
         }
-      }
     }
-
     return 0;
   }
 
@@ -256,24 +290,14 @@ public:
     SizeType size = end - start;
 
     std::vector<uint8_t> pattern_data(pattern_length);
-    std::vector<uint8_t> mask_bytes(pattern_length);
+    std::vector<uint8_t> mask_data(pattern_length);
     for (size_t i = 0; i < pattern_length; ++i) {
         pattern_data[i] = pattern_bytes[i].value;
-        mask_bytes[i] = pattern_bytes[i].wildcard ? 0x00 : 0xFF;
+        mask_data[i] = pattern_bytes[i].wildcard ? 0x00 : 0xFF;
     }
 
     std::unique_ptr<uint8_t[]> buffer(
         new uint8_t[CHUNK_SIZE + pattern_length - 1]);
-
-    auto scalar_compare = [&](const uint8_t* data, size_t len) -> bool {
-        for (size_t i = 0; i < len; ++i) {
-            if (mask_bytes[i] && data[i] != pattern_data[i])
-                return false;
-        }
-        return true;
-    };
-
-    bool use_avx2 = SupportsAVX2();
 
     for (SizeType offset = 0; offset < size; offset += CHUNK_SIZE) {
         SizeType bytes_to_read =
@@ -285,49 +309,13 @@ public:
             continue;
 
         SizeType search_limit = bytes_to_read - pattern_length;
-
         for (SizeType i = 0; i <= search_limit; ++i) {
-            const uint8_t* data_ptr = buffer.get() + i;
-
-            if (use_avx2 && pattern_length >= 32) {
-                bool match = true;
-                size_t j = 0;
-                for (; j + 31 < pattern_length; j += 32) {
-                    __m256i d = _mm256_loadu_si256((__m256i*)(data_ptr + j));
-                    __m256i p = _mm256_loadu_si256((__m256i*)(pattern_data.data() + j));
-                    __m256i m = _mm256_loadu_si256((__m256i*)(mask_bytes.data() + j));
-                    __m256i cmp = _mm256_cmpeq_epi8(
-                        _mm256_and_si256(d, m),
-                        _mm256_and_si256(p, m)
-                    );
-                    int mask = _mm256_movemask_epi8(cmp);
-                    if (mask != 0xFFFFFFFF) { match = false; break; }
-                }
-                if (match && j < pattern_length)
-                    match = scalar_compare(data_ptr + j, pattern_length - j);
-                if (match) return current_address + i;
-            }
-            else if (pattern_length >= 16) {
-                bool match = true;
-                size_t j = 0;
-                for (; j + 15 < pattern_length; j += 16) {
-                    __m128i d = _mm_loadu_si128((__m128i*)(data_ptr + j));
-                    __m128i p = _mm_loadu_si128((__m128i*)(pattern_data.data() + j));
-                    __m128i m = _mm_loadu_si128((__m128i*)(mask_bytes.data() + j));
-                    __m128i cmp = _mm_cmpeq_epi8(
-                        _mm_and_si128(d, m),
-                        _mm_and_si128(p, m)
-                    );
-                    int mask = _mm_movemask_epi8(cmp);
-                    if (mask != 0xFFFF) { match = false; break; }
-                }
-                if (match && j < pattern_length)
-                    match = scalar_compare(data_ptr + j, pattern_length - j);
-                if (match) return current_address + i;
-            }
-            else {
-                if (scalar_compare(data_ptr, pattern_length))
-                    return current_address + i;
+            if (PatternScanner::MemoryCompare(
+                    buffer.get() + i,
+                    pattern_data.data(),
+                    mask_data.data(),
+                    pattern_length)) {
+                return current_address + i;
             }
         }
     }
