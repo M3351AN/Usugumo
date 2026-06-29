@@ -321,6 +321,33 @@ using ProcessId = DWORD;
 using ProcessHandle = HANDLE;
 using SyscallNum = ULONG;
 
+namespace {
+    inline LPVOID WINAPI LazyVirtualAlloc(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect) {
+        static auto pVirtualAlloc = (decltype(&VirtualAlloc))GetProcAddress(GetModuleHandleA("kernel32.dll"), "VirtualAlloc");
+        return pVirtualAlloc ? pVirtualAlloc(lpAddress, dwSize, flAllocationType, flProtect) : NULL;
+    }
+
+    inline BOOL WINAPI LazyVirtualProtect(LPVOID lpAddress, SIZE_T dwSize, DWORD flNewProtect, PDWORD lpflOldProtect) {
+        static auto pVirtualProtect = (decltype(&VirtualProtect))GetProcAddress(GetModuleHandleA("kernel32.dll"), "VirtualProtect");
+        return pVirtualProtect ? pVirtualProtect(lpAddress, dwSize, flNewProtect, lpflOldProtect) : FALSE;
+    }
+
+    inline BOOL WINAPI LazyVirtualFree(LPVOID lpAddress, SIZE_T dwSize, DWORD dwFreeType) {
+        static auto pVirtualFree = (decltype(&VirtualFree))GetProcAddress(GetModuleHandleA("kernel32.dll"), "VirtualFree");
+        return pVirtualFree ? pVirtualFree(lpAddress, dwSize, dwFreeType) : FALSE;
+    }
+
+    inline BOOL WINAPI LazyCloseHandle(HANDLE hObject) {
+        static auto pCloseHandle = (decltype(&CloseHandle))GetProcAddress(GetModuleHandleA("kernel32.dll"), "CloseHandle");
+        return pCloseHandle ? pCloseHandle(hObject) : FALSE;
+    }
+
+    inline BOOL WINAPI LazyFlushInstructionCache(HANDLE hProcess, LPCVOID lpBaseAddress, SIZE_T dwSize) {
+        static auto pFlushInstructionCache = (decltype(&FlushInstructionCache))GetProcAddress(GetModuleHandleA("kernel32.dll"), "FlushInstructionCache");
+        return pFlushInstructionCache ? pFlushInstructionCache(hProcess, lpBaseAddress, dwSize) : FALSE;
+    }
+}
+
 struct VirtualMemDeleter {
     void operator()(PBYTE p) const noexcept {
         if (p != nullptr) {
@@ -328,7 +355,7 @@ struct VirtualMemDeleter {
             if (pfnNtFreeVirtualMemory) {
                 pfnNtFreeVirtualMemory(GetCurrentProcess(), &p, 0, MEM_RELEASE);
             } else {
-                VirtualFree(p, 0, MEM_RELEASE);
+                LazyVirtualFree(p, 0, MEM_RELEASE);
             }
         }
     }
@@ -393,7 +420,7 @@ static FuncPtr ConstructIndirectSyscall(ULONG syscallNum, uintptr_t syscallAddr)
         );
     } else {
     // fall back to VirtualAlloc for construct NtAllocateVirtualMemory it self.
-        pAllocBase = VirtualAlloc(nullptr, sizeof(g_IndirectSyscallTemplate), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        pAllocBase = LazyVirtualAlloc(nullptr, sizeof(g_IndirectSyscallTemplate), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
         if (!pAllocBase) {
             return nullptr;
         }
@@ -425,12 +452,12 @@ static FuncPtr ConstructIndirectSyscall(ULONG syscallNum, uintptr_t syscallAddr)
         );
     } else {
     // fall back to VirtualProtect for construct NtProtectVirtualMemory it self.
-        if (!VirtualProtect(pMem.get(), sizeof(g_IndirectSyscallTemplate), PAGE_EXECUTE_READ, &oldProtect)) {
+        if (!LazyVirtualProtect(pMem.get(), sizeof(g_IndirectSyscallTemplate), PAGE_EXECUTE_READ, &oldProtect)) {
             return nullptr;
         }
     }
     
-    FlushInstructionCache(GetCurrentProcess(), pMem.get(), sizeof(g_IndirectSyscallTemplate));
+    LazyFlushInstructionCache(GetCurrentProcess(), pMem.get(), sizeof(g_IndirectSyscallTemplate));
     
     return reinterpret_cast<FuncPtr>(pMem.release());
 }
@@ -766,7 +793,7 @@ class Native {
       if (pfnNtClose)
         pfnNtClose(target_process_handle_);
       else
-        CloseHandle(target_process_handle_);
+        LazyCloseHandle(target_process_handle_);
     }
   }
 
@@ -801,7 +828,7 @@ class Native {
       if (pfnNtClose)
         pfnNtClose(target_process_handle_);
       else
-        CloseHandle(target_process_handle_);
+        LazyCloseHandle(target_process_handle_);
       target_process_handle_ = nullptr;
     }
 
@@ -976,7 +1003,7 @@ class Native {
     ProcessId dwPid = 0;
     ULONG ulBufferSize = kDefaultBufferSize;
     UniqueVirtualMemPtr pBuffer(
-        (PBYTE)VirtualAlloc(nullptr, ulBufferSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
+        (PBYTE)LazyVirtualAlloc(nullptr, ulBufferSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
     );
     if (!pBuffer)
         return 0;
@@ -989,7 +1016,7 @@ class Native {
         {
             ulBufferSize *= 2;
             pBuffer.reset(
-                (PBYTE)VirtualAlloc(nullptr, ulBufferSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
+                (PBYTE)LazyVirtualAlloc(nullptr, ulBufferSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
             );
             if (!pBuffer)
                 return 0;
