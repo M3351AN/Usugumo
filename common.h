@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
@@ -12,7 +12,7 @@
 #include <bcrypt.h>
 #include <windef.h>
 
-#include "./usugumo_request_define.h"
+#include "includes/usugumo_request_define.h"
 #include "./defines.h"
 
 #include "./reimpl.h"

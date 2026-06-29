@@ -77,9 +77,6 @@
     <ClInclude Include="helpers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="usugumo_request_define.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="anti_capture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -87,6 +84,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="keybd_operation.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\usugumo_request_define.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

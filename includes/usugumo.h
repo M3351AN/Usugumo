@@ -15,7 +15,7 @@
 #include <vector>
 #include <unordered_map>
 
-#include "../../usugumo_request_define.h"
+#include "./usugumo_request_define.h"
 
 constexpr inline size_t kFixedStr64MaxLength = 64uz;
 constexpr inline LPCSTR kDriverDevice = "\\\\.\\%sUsugum0";

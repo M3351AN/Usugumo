@@ -1,7 +1,8 @@
-// Copyright (c) 2026 渟雲. All rights reserved.
+﻿// Copyright (c) 2026 渟雲. All rights reserved.
 #pragma once
 #ifndef _HELPERS_H_
 #define _HELPERS_H_
+#include "includes/usugumo_request_define.h"
 
 VOID DecodeFixedStr64(const FixedStr64*, char*, SIZE_T);
 

@@ -125,6 +125,7 @@
   <ItemGroup>
     <ClCompile Include="anti_capture.c" />
     <ClCompile Include="dispatches.c" />
+    <ClInclude Include="includes\usugumo_request_define.h" />
     <ClInclude Include="keybd_operation.h" />
     <ClCompile Include="keybd_operation.c" />
     <ClCompile Include="process.c" />
@@ -145,7 +146,6 @@
     <ClInclude Include="mouse_operation.h" />
     <ClInclude Include="reimpl.h" />
     <ClInclude Include="request_handler.h" />
-    <ClInclude Include="usugumo_request_define.h" />
   </ItemGroup>
   <ItemGroup>
     <MASM Include="helper_utils.asm" />

@@ -1,7 +1,8 @@
-// Copyright (c) 2026 渟雲. All rights reserved.
+﻿// Copyright (c) 2026 渟雲. All rights reserved.
 #pragma once
 #ifndef _MOUSE_OPERATION_H_
 #define _MOUSE_OPERATION_H_
+#include "includes/usugumo_request_define.h"
 
 VOID MouseClassServiceCallbackMeme(PDEVICE_OBJECT DeviceObject,
                                PMOUSE_INPUT_DATA InputDataStart,
