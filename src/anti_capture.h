@@ -2,7 +2,7 @@
 #pragma once
 #ifndef _ANTI_CAPTURE_H_
 #define _ANTI_CAPTURE_H_
-#include "includes/usugumo_request_define.h"
+#include "../includes/usugumo_request_define.h"
 
 BOOLEAN InitGreProtectSpriteContent();
 

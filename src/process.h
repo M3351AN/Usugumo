@@ -2,7 +2,7 @@
 #pragma once
 #ifndef _FUNCTIONS_H_
 #define _FUNCTIONS_H_
-#include "includes/usugumo_request_define.h"
+#include "../includes/usugumo_request_define.h"
 
 BOOLEAN ReadVM(Requests*);
 

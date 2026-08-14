@@ -2,7 +2,7 @@
 #pragma once
 #ifndef _HELPERS_H_
 #define _HELPERS_H_
-#include "includes/usugumo_request_define.h"
+#include "../includes/usugumo_request_define.h"
 
 VOID DecodeFixedStr64(const FixedStr64*, char*, SIZE_T);
 
