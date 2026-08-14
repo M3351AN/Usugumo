@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
@@ -22,6 +22,7 @@
 #include "./mouse_operation.h"
 #include "./keybd_operation.h"
 #include "./process.h"
+#include "./pmem.h"
 #include "./anti_capture.h"
 #include "./request_handler.h"
 

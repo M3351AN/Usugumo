@@ -30,6 +30,9 @@
     <ClCompile Include="src\dispatches.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\pmem.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\process.c">
       <Filter>Source Files</Filter>
     </ClCompile>

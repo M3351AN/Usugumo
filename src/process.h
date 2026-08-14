@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 #pragma once
 #ifndef _FUNCTIONS_H_
 #define _FUNCTIONS_H_
@@ -13,5 +13,7 @@ UINT64 GetDllAddress(Requests*);
 UINT64 GetDllSize(Requests*);
 
 UINT64 GetProcessIdByName(Requests*);
+
+BOOLEAN InitOffsetsByVersion(void);
 
 #endif

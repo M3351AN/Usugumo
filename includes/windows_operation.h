@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 #pragma once
 #ifndef _OPERATION_H_
 #define _OPERATION_H_

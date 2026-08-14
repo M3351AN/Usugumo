@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 #pragma once
 #ifndef _HELPERS_H_
 #define _HELPERS_H_

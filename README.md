@@ -1,4 +1,4 @@
-﻿# Usugumo
+# Usugumo
 
 A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc operations, handling user-mode process requests via DIRECT_IO IRP
 

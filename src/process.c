@@ -1,78 +1,6 @@
 // Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
 
-NTSTATUS MmCopyProtectVirtualMemory(PEPROCESS fromProcess, PVOID fromAddress,
-                                    PEPROCESS toProcess, PVOID toAddress,
-                                    SIZE_T bufferSize,
-                                    KPROCESSOR_MODE previousMode,
-                                    PSIZE_T bytesCopied) {
-  if (!fromProcess || !fromAddress || !toProcess || !toAddress ||
-      !bytesCopied || bufferSize == 0) {
-    return STATUS_INVALID_PARAMETER;
-  }
-  if (KeGetCurrentIrqlMeme() > PASSIVE_LEVEL) {
-    return STATUS_INVALID_DEVICE_REQUEST;
-  }
-
-  NTSTATUS status = STATUS_SUCCESS;
-  KAPC_STATE apcState = {0};
-  ULONG oldProtect = 0;
-  PVOID alignedAddress = NULL;
-  SIZE_T alignedSize = 0;
-  BOOLEAN protectionChanged = FALSE;
-  BOOLEAN attached = FALSE;
-
-  *bytesCopied = 0;
-
-  if (PsGetProcessExitStatus(fromProcess) != STATUS_PENDING) {
-    return STATUS_PROCESS_IS_TERMINATING;
-  }
-
-  if (PsGetProcessExitStatus(toProcess) != STATUS_PENDING) {
-    return STATUS_PROCESS_IS_TERMINATING;
-  }
-
-  __try {
-    ULONG_PTR start = (ULONG_PTR)toAddress;
-    ULONG_PTR end = start + bufferSize;
-    if (end < start) {
-      status = STATUS_INVALID_PARAMETER;
-      __leave;
-    }
-
-    KeStackAttachProcess(toProcess, &apcState);
-    attached = TRUE;
-
-    alignedAddress = (PVOID)(start & ~(PAGE_SIZE - 1));
-    alignedSize =
-        ((end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)) - (ULONG_PTR)alignedAddress;
-
-    status = ZwProtectVirtualMemory(NtCurrentProcess(), &alignedAddress,
-                                    &alignedSize, PAGE_READWRITE, &oldProtect);
-    if (!NT_SUCCESS(status)) {
-      __leave;
-    }
-    protectionChanged = TRUE;
-
-    status = DriverCopyVirtualMemory(fromProcess, fromAddress, toProcess, toAddress,
-                                 bufferSize, previousMode, bytesCopied);
-
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
-    status = STATUS_ACCESS_VIOLATION;
-  }
-
-  if (protectionChanged) {
-    ULONG tempProtect;
-    ZwProtectVirtualMemory(NtCurrentProcess(), &alignedAddress, &alignedSize,
-                           oldProtect, &tempProtect);
-  }
-
-  if (attached) {
-    KeUnstackDetachProcess(&apcState);
-  }
-
-  return status;
-}
 
 BOOLEAN ReadVM(Requests* in) {
   if (KeGetCurrentIrqlMeme() > PASSIVE_LEVEL) {
@@ -101,11 +29,10 @@ BOOLEAN ReadVM(Requests* in) {
     return FALSE;
   }
 
-  SIZE_T memsize = 0;
   __try {
-    status = DriverCopyVirtualMemory(from_process, (void*)in->target_addr,
-                                 to_process, (void*)in->request_addr,
-                                 in->mem_size, KernelMode, &memsize);
+    status = CopyVirtualMemory(from_process, (UINT64)in->target_addr,
+                               to_process, (UINT64)in->request_addr,
+                               in->mem_size);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     status = STATUS_ACCESS_VIOLATION;
   }
@@ -142,11 +69,10 @@ BOOLEAN WriteVM(Requests* in) {
     return FALSE;
   }
 
-  SIZE_T memsize = 0;
   __try {
-    status = MmCopyProtectVirtualMemory(from_process, (void*)in->request_addr,
-                                        to_process, (void*)in->target_addr,
-                                        in->mem_size, KernelMode, &memsize);
+    status = CopyVirtualMemory(from_process, (UINT64)in->request_addr,
+                               to_process, (UINT64)in->target_addr,
+                               in->mem_size);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     status = STATUS_ACCESS_VIOLATION;
   }
@@ -283,6 +209,7 @@ UINT64 GetDllSize(Requests* in) {
 }
 
 ULONG g_ActiveProcessLinksOffset = 0;
+ULONG g_UserDirectoryTableBaseOffset = 0;
 
 BOOLEAN InitOffsetsByVersion() {
   RTL_OSVERSIONINFOW ver = {0};
@@ -296,6 +223,13 @@ BOOLEAN InitOffsetsByVersion() {
       g_ActiveProcessLinksOffset = 0x1d8;
     } else {
       g_ActiveProcessLinksOffset = 0x448;
+    }
+    if (ver.dwBuildNumber >= 19041) {
+      g_UserDirectoryTableBaseOffset = 0x388;
+    } else if (ver.dwBuildNumber >= 18362) {
+      g_UserDirectoryTableBaseOffset = 0x280;
+    } else {
+      g_UserDirectoryTableBaseOffset = 0x278;
     }
     return TRUE;
   }
