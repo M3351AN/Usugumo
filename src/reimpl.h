@@ -1,4 +1,4 @@
-// Copyright (c) 2026 渟雲. All rights reserved.
+﻿// Copyright (c) 2026 渟雲. All rights reserved.
 #pragma once
 #ifndef _REIMPL_H_
 #define _REIMPL_H_
@@ -16,5 +16,9 @@ KIRQL KeGetCurrentIrqlMeme(void);
 PIMAGE_NT_HEADERS RtlImageNtHeaderMeme(PVOID Base);
 
 SIZE_T RtlCompareMemoryMeme(const void*, const void*, SIZE_T);
+
+PPEB PsGetProcessPebTrick(PEPROCESS);
+
+PCHAR PsGetProcessImageFileNameTrick(PEPROCESS);
 
 #endif

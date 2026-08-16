@@ -1,4 +1,4 @@
-// Copyright (c) 2026 渟雲. All rights reserved.
+﻿// Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
 
 __int64 _kascii_stricmp(const char* a1, const char* a2) {
@@ -44,3 +44,67 @@ int kwcsicmp(const wchar_t* Str1, const wchar_t* Str2) {
   return v6 - v7;
 }
 
+ULONG g_PebOffset = 0;
+
+ULONG GetPebOffset() {
+  if (g_PebOffset != 0) return g_PebOffset;
+
+  UNICODE_STRING routineName = RTL_CONSTANT_STRING(L"PsGetProcessPeb");
+
+  PUCHAR pFunc = (PUCHAR)MmGetSystemRoutineAddress(&routineName);
+  if (!pFunc) {
+    return 0;
+  }
+
+  // 48 8B 81 ?? ?? ?? ?? mov     rax, [rcx+2E0h]
+  for (int i = 0; i < 0x10; i++) {
+    if (pFunc[i] == 0x48 && pFunc[i + 1] == 0x8B && pFunc[i + 2] == 0x81) {
+      ULONG offset = *(PULONG)(pFunc + i + 3);
+      // just guessing the range
+      if (offset > 0x10 && offset <= 0x1000) {
+        g_PebOffset = offset;
+        return offset;
+      }
+    }
+  }
+
+  return 0;
+}
+
+PPEB PsGetProcessPebTrick(PEPROCESS Process) {
+  ULONG offset = GetPebOffset();
+  return *(PPEB*)((PUCHAR)Process + offset);
+}
+
+ULONG g_ImageFileNameOffset = 0;
+
+ULONG GetImageFileNameOffset() {
+  if (g_ImageFileNameOffset != 0) return g_ImageFileNameOffset;
+
+  UNICODE_STRING routineName = RTL_CONSTANT_STRING(L"PsGetProcessImageFileName");
+
+  PUCHAR pFunc = (PUCHAR)MmGetSystemRoutineAddress(&routineName);
+  if (!pFunc) {
+    return 0;
+  }
+
+  // 48 8D 81 ?? ?? ?? ?? lea     rax, [rcx+338h]
+  for (int i = 0; i < 0x10; i++) {
+    if (pFunc[i] == 0x48 && pFunc[i + 1] == 0x8D && pFunc[i + 2] == 0x81) {
+      ULONG offset = *(PULONG)(pFunc + i + 3);
+      // just guessing the range
+      if (offset > 0x10 && offset <= 0x1000) {
+        g_ImageFileNameOffset = offset;
+        return offset;
+      }
+    }
+  }
+
+  return 0;
+}
+
+PCHAR PsGetProcessImageFileNameTrick(PEPROCESS Process) {
+  if (!Process) return NULL;
+  ULONG offset = GetImageFileNameOffset();
+  return (PCHAR)((PUCHAR)Process + offset);
+}

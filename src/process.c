@@ -1,4 +1,4 @@
-// Copyright (c) 2026 渟雲. All rights reserved.
+﻿// Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
 
 
@@ -95,7 +95,7 @@ UINT64 GetModuleBasex64(PEPROCESS proc, UNICODE_STRING module_name,
 
   UINT64 result = 0;
   __try {
-    pPeb = (PPEB)PsGetProcessPeb(proc);
+    pPeb = (PPEB)PsGetProcessPebTrick(proc);
     if (!pPeb) {
       KeUnstackDetachProcess(&state);
       return 0;
@@ -267,7 +267,7 @@ UINT64 GetProcessIdByName(Requests* in) {
     PCHAR imageName = NULL;
 
     __try {
-      imageName = PsGetProcessImageFileName(currentProcess);
+      imageName = PsGetProcessImageFileNameTrick(currentProcess);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
       break;
     }
