@@ -137,7 +137,6 @@
     <ClCompile Include="src\mouse_operation.c" />
     <ClCompile Include="src\reimpl.c" />
     <ClCompile Include="src\requst_handler.c" />
-    <ClCompile Include="src\sha256.c" />
     <ClCompile Include="src\random.c" />
     <ClCompile Include="src\Usugumo.c" />
   </ItemGroup>
@@ -152,7 +151,6 @@
     <ClInclude Include="src\mouse_operation.h" />
     <ClInclude Include="src\reimpl.h" />
     <ClInclude Include="src\request_handler.h" />
-    <ClInclude Include="src\sha256.h" />
     <ClInclude Include="src\random.h" />
   </ItemGroup>
   <ItemGroup>

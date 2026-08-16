@@ -1,6 +1,6 @@
-// Copyright (c) 2026 渟雲. All rights reserved.
+﻿// Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
-#include "./sha256.h"
+
 #define CHECKSUM_SIZE SHA256_DIGEST_SIZE
 
 // 0xBEEFDEADFEEDCAFE
