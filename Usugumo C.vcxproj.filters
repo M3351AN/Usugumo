@@ -51,6 +51,9 @@
     <ClCompile Include="src\helpers.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\imports.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\anti_capture.c">
       <Filter>Source Files</Filter>
     </ClCompile>

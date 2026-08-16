@@ -19,9 +19,9 @@ inline BOOL MouseOpen(void) {
     NTSTATUS status = STATUS_UNSUCCESSFUL;
     size_t driver_idx = 0;
 
-    status = ObReferenceObjectByName(&class_string, OBJ_CASE_INSENSITIVE, NULL,
-                                     0, *IoDriverObjectType, KernelMode, NULL,
-                                     (PVOID*)&class_driver_object);
+    status = _ObReferenceObjectByName(&class_string, OBJ_CASE_INSENSITIVE, NULL,
+                                      0, *_IoDriverObjectType, KernelMode, NULL,
+                                      (PVOID*)&class_driver_object);
     if (!NT_SUCCESS(status)) {
       gMouseObject.use_mouse = 0;
       return FALSE;
@@ -29,9 +29,9 @@ inline BOOL MouseOpen(void) {
 
     for (driver_idx = 0; driver_idx < ARRAYSIZE(mouse_driver_names);
          driver_idx++) {
-      status = ObReferenceObjectByName(
+      status = _ObReferenceObjectByName(
           &mouse_driver_names[driver_idx], OBJ_CASE_INSENSITIVE, NULL, 0,
-          *IoDriverObjectType, KernelMode, NULL, (PVOID*)&hid_driver_object);
+          *_IoDriverObjectType, KernelMode, NULL, (PVOID*)&hid_driver_object);
       if (NT_SUCCESS(status)) {
         break;
       }

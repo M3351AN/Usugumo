@@ -5,7 +5,7 @@ NTSTATUS DefaultDispatch(PDEVICE_OBJECT device_obj, PIRP irp) {
   UNREFERENCED_PARAMETER(irp);
   irp->IoStatus.Status = STATUS_SUCCESS;
   irp->IoStatus.Information = 0;
-  IoCompleteRequest(irp, IO_NO_INCREMENT);
+  _IofCompleteRequest(irp, IO_NO_INCREMENT);
   return STATUS_SUCCESS;
 }
 
@@ -20,7 +20,7 @@ NTSTATUS WriteDispatch(PDEVICE_OBJECT device_obj, PIRP irp) {
   PMDL pMdl = irp->MdlAddress;
   if (pMdl == NULL) {
     irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
-    IoCompleteRequest(irp, IO_NO_INCREMENT);
+    _IofCompleteRequest(irp, IO_NO_INCREMENT);
     return irp->IoStatus.Status;
   }
 
@@ -28,7 +28,7 @@ NTSTATUS WriteDispatch(PDEVICE_OBJECT device_obj, PIRP irp) {
       (PRequests)MmGetSystemAddressForMdlSafe(pMdl, NormalPagePriority);
   if (pRequest == NULL) {
     irp->IoStatus.Status = STATUS_INSUFFICIENT_RESOURCES;
-    IoCompleteRequest(irp, IO_NO_INCREMENT);
+    _IofCompleteRequest(irp, IO_NO_INCREMENT);
     return irp->IoStatus.Status;
   }
 
@@ -43,7 +43,7 @@ NTSTATUS WriteDispatch(PDEVICE_OBJECT device_obj, PIRP irp) {
     irp->IoStatus.Status = STATUS_BUFFER_TOO_SMALL;
   }
 
-  IoCompleteRequest(irp, IO_NO_INCREMENT);
+  _IofCompleteRequest(irp, IO_NO_INCREMENT);
   return irp->IoStatus.Status;
 }
 
@@ -58,7 +58,7 @@ NTSTATUS ReadDispatch(PDEVICE_OBJECT device_obj, PIRP irp) {
   PMDL pMdl = irp->MdlAddress;
   if (pMdl == NULL) {
     irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
-    IoCompleteRequest(irp, IO_NO_INCREMENT);
+    _IofCompleteRequest(irp, IO_NO_INCREMENT);
     return irp->IoStatus.Status;
   }
 
@@ -66,7 +66,7 @@ NTSTATUS ReadDispatch(PDEVICE_OBJECT device_obj, PIRP irp) {
       (PRequests)MmGetSystemAddressForMdlSafe(pMdl, NormalPagePriority);
   if (pRequest == NULL) {
     irp->IoStatus.Status = STATUS_INSUFFICIENT_RESOURCES;
-    IoCompleteRequest(irp, IO_NO_INCREMENT);
+    _IofCompleteRequest(irp, IO_NO_INCREMENT);
     return irp->IoStatus.Status;
   }
 
@@ -77,6 +77,6 @@ NTSTATUS ReadDispatch(PDEVICE_OBJECT device_obj, PIRP irp) {
     irp->IoStatus.Status = STATUS_BUFFER_TOO_SMALL;
   }
 
-  IoCompleteRequest(irp, IO_NO_INCREMENT);
+  _IofCompleteRequest(irp, IO_NO_INCREMENT);
   return irp->IoStatus.Status;
 }

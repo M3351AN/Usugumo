@@ -134,6 +134,7 @@
     <ClCompile Include="src\process.c" />
     <ClCompile Include="src\pmem.c" />
     <ClCompile Include="src\helpers.c" />
+    <ClCompile Include="src\imports.c" />
     <ClCompile Include="src\mouse_operation.c" />
     <ClCompile Include="src\reimpl.c" />
     <ClCompile Include="src\requst_handler.c" />

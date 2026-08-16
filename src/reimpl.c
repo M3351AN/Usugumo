@@ -104,7 +104,6 @@ ULONG GetImageFileNameOffset() {
 }
 
 PCHAR PsGetProcessImageFileNameTrick(PEPROCESS Process) {
-  if (!Process) return NULL;
   ULONG offset = GetImageFileNameOffset();
   return (PCHAR)((PUCHAR)Process + offset);
 }

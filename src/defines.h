@@ -135,10 +135,4 @@ typedef struct _KEYBOARD_OBJECT {
 
 typedef BOOL(__fastcall *GreProtectSpriteContentFn)(PVOID, HWND, INT, UINT);
 
-typedef NTSTATUS(NTAPI* fn_ObReferenceObjectByName)(PUNICODE_STRING, ULONG,
-                                                    PACCESS_STATE, ACCESS_MASK,
-                                                    POBJECT_TYPE,
-                                                    KPROCESSOR_MODE, LPVOID,
-                                                    PDRIVER_OBJECT*);
-
 #endif

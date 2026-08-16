@@ -111,7 +111,7 @@ NTSTATUS SearchKdbServiceCallBack(void) {
 
   for (i = 0; i < ARRAYSIZE(DeviceName); i++) {
     Status = ZwReferenceObjectByName(&DeviceName[i], OBJ_CASE_INSENSITIVE, NULL,
-                                     0, *IoDriverObjectType, KernelMode, NULL,
+                                     0, *_IoDriverObjectType, KernelMode, NULL,
                                      (PDRIVER_OBJECT*)&DriverObject);
     if (NT_SUCCESS(Status)) {
       break;
@@ -120,7 +120,7 @@ NTSTATUS SearchKdbServiceCallBack(void) {
 
   if (DriverObject != NULL) {
     Status = ZwReferenceObjectByName(&ClassName, OBJ_CASE_INSENSITIVE, NULL, 0,
-                                     *IoDriverObjectType, KernelMode, NULL,
+                                     *_IoDriverObjectType, KernelMode, NULL,
                                      (PDRIVER_OBJECT*)&ClassObject);
     if (NT_SUCCESS(Status)) {
       DeviceObject = DriverObject->DeviceObject;

@@ -18,14 +18,6 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
                     _In_ PUNICODE_STRING RegistryPath) {
   UNREFERENCED_PARAMETER(DriverObject);
   UNREFERENCED_PARAMETER(RegistryPath);
-  /* Microsoft compiler is sometimes retarded, thats why we have to do this non
-   * sense */
-  /* It would otherwise generate wrapper functions around, and it would cause
-   * system BSOD */
-  _KeAcquireSpinLockAtDpcLevel = (QWORD)KeAcquireSpinLockAtDpcLevel;
-  _KeReleaseSpinLockFromDpcLevel = (QWORD)KeReleaseSpinLockFromDpcLevel;
-  _IofCompleteRequest = (QWORD)IofCompleteRequest;
-  _IoReleaseRemoveLockEx = (QWORD)IoReleaseRemoveLockEx;
 
   RandomEngineInit();
 
@@ -87,8 +79,12 @@ NTSTATUS UsugumoEntry(_In_ PDRIVER_OBJECT DriverObject,
                       _In_ PUNICODE_STRING RegistryPath) {
   UNREFERENCED_PARAMETER(DriverObject);
   UNREFERENCED_PARAMETER(RegistryPath);
+
+  NTSTATUS status = ResolveImports();
+  if (!NT_SUCCESS(status)) return status;
+
 #pragma warning(disable : 6387)
   // So it's kdmapper able
-  return IoCreateDriver(NULL, DriverInit);
+  return _IoCreateDriver(NULL, DriverInit);
 #pragma warning(default : 6387)
 }

@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
 
 static const ULONG kSha256K[64] = {
@@ -193,14 +193,7 @@ NTSTATUS ZwReferenceObjectByName(PUNICODE_STRING ObjectName, ULONG Attributes,
                                  POBJECT_TYPE ObjectType,
                                  KPROCESSOR_MODE AccessMode,
                                  LPVOID ParseContext, PDRIVER_OBJECT* Object) {
-  static fn_ObReferenceObjectByName _ObReferenceObjectByName = NULL;
   NTSTATUS Status = STATUS_UNSUCCESSFUL;
-
-  if (_ObReferenceObjectByName == NULL) {
-    UNICODE_STRING FuncName = RTL_CONSTANT_STRING(L"ObReferenceObjectByName");
-    _ObReferenceObjectByName =
-        (fn_ObReferenceObjectByName)MmGetSystemRoutineAddress(&FuncName);
-  }
 
   if (_ObReferenceObjectByName != NULL) {
     Status = _ObReferenceObjectByName(ObjectName, Attributes, PassedAccessState,
