@@ -1,4 +1,4 @@
-// Copyright (c) 2026 渟雲. All rights reserved.
+﻿// Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
 UNICODE_STRING g_symbolic_link_name = {0};
 
@@ -52,9 +52,9 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
   UNICODE_STRING sddl_string = RTL_CONSTANT_STRING(SDDL_STRING);
   PDEVICE_OBJECT device_object;
 
-  status = IoCreateDeviceSecure(DriverObject, 0, &device_name,
-                                FILE_DEVICE_UNKNOWN, FILE_DEVICE_SECURE_OPEN,
-                                FALSE, &sddl_string, NULL, &device_object);
+  status = WdmlibIoCreateDeviceSecure(
+      DriverObject, 0, &device_name, FILE_DEVICE_UNKNOWN,
+      FILE_DEVICE_SECURE_OPEN, FALSE, &sddl_string, NULL, &device_object);
 
   if (status != STATUS_SUCCESS) return status;
 
@@ -88,6 +88,8 @@ NTSTATUS UsugumoEntry(_In_ PDRIVER_OBJECT DriverObject,
                       _In_ PUNICODE_STRING RegistryPath) {
   UNREFERENCED_PARAMETER(DriverObject);
   UNREFERENCED_PARAMETER(RegistryPath);
+#pragma warning(disable : 6387)
   // So it's kdmapper able
   return IoCreateDriver(NULL, DriverInit);
+#pragma warning(default : 6387)
 }

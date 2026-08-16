@@ -39,6 +39,9 @@
     <ClCompile Include="src\requst_handler.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\sha256.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\mouse_operation.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -87,6 +90,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\keybd_operation.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\sha256.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="includes\usugumo_request_define.h">

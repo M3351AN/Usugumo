@@ -9,7 +9,6 @@
 #include <ntimage.h>
 #include <ntstrsafe.h>
 #include <ntddk.h> 
-#include <bcrypt.h>
 #include <windef.h>
 
 #include "../includes/usugumo_request_define.h"

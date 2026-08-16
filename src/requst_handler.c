@@ -1,7 +1,7 @@
 // Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
-#define CHECKSUM_ALGORITHM BCRYPT_SHA256_ALGORITHM
-#define CHECKSUM_SIZE 32
+#include "./sha256.h"
+#define CHECKSUM_SIZE SHA256_DIGEST_SIZE
 
 // 0xBEEFDEADFEEDCAFE
 const UCHAR PUBLIC_KEY[CHECKSUM_SIZE] = {
@@ -11,31 +11,13 @@ const UCHAR PUBLIC_KEY[CHECKSUM_SIZE] = {
 };
 
 BOOLEAN VerifySecureKey(UINT64 SecureKey) {
-  BCRYPT_ALG_HANDLE hAlg = NULL;
-  BCRYPT_HASH_HANDLE hHash = NULL;
   UCHAR localChecksum[CHECKSUM_SIZE];
   kmemset(localChecksum, 0, sizeof(localChecksum));
-  NTSTATUS status = STATUS_SUCCESS;
-  BOOLEAN bPass = FALSE;
 
-  status = BCryptOpenAlgorithmProvider(&hAlg, CHECKSUM_ALGORITHM, NULL, 0);
-  if (NT_SUCCESS(status))
-    status = BCryptCreateHash(hAlg, &hHash, NULL, 0, NULL, 0, 0);
+  Sha256(&SecureKey, sizeof(UINT64), localChecksum);
 
-  if (NT_SUCCESS(status))
-    status = BCryptHashData(hHash, (PBYTE)&SecureKey, sizeof(UINT64), 0);
-  if (NT_SUCCESS(status))
-    status = BCryptFinishHash(hHash, localChecksum, CHECKSUM_SIZE, 0);
-
-  if (NT_SUCCESS(status)) {
-    bPass = (RtlCompareMemoryMeme(localChecksum, PUBLIC_KEY,
-                              CHECKSUM_SIZE) == CHECKSUM_SIZE);
-  }
-
-  if (hHash) BCryptDestroyHash(hHash);
-  if (hAlg) BCryptCloseAlgorithmProvider(hAlg, 0);
-
-  return bPass;
+  return (RtlCompareMemoryMeme(localChecksum, PUBLIC_KEY,
+                               CHECKSUM_SIZE) == CHECKSUM_SIZE);
 }
 
 BOOLEAN RequestHandler(Requests* pstruct) {

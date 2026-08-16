@@ -37,8 +37,10 @@ There‘s also an alternative example that utilizes Native API, which is not a b
 This project is licensed under [**BSD-3-Clause**](LICENSE).
 
 ## Credits
+Even without code copy as is
 
 - [ekknod/MouseClassServiceCallbackMeme](https://github.com/ekknod/MouseClassServiceCallbackMeme/)
 - [reactos](https://github.com/reactos/reactos/) BSD Licensed part
 - [danielkrupinski/Osiris](https://github.com/danielkrupinski/Osiris/)
 - [oakboat/GsDriver-ring3](https://github.com/oakboat/GsDriver-ring3/)
+- [hashcat-legacy](https://github.com/hashcat/hashcat-legacy)
