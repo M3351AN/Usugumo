@@ -1,5 +1,6 @@
 ﻿// Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
+#include "./random.h"
 UNICODE_STRING g_symbolic_link_name = {0};
 
 VOID DriverUnload(_In_ struct _DRIVER_OBJECT* DriverObject) {
@@ -26,16 +27,14 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
   _IofCompleteRequest = (QWORD)IofCompleteRequest;
   _IoReleaseRemoveLockEx = (QWORD)IoReleaseRemoveLockEx;
 
-  LARGE_INTEGER perf_counter;
-  KeQueryPerformanceCounter(&perf_counter);
-  ULONG ramdon_seed =
-      (ULONG)perf_counter.LowPart ^ (ULONG)perf_counter.HighPart;
+  RandomEngineInit();
+
   WCHAR random_device_name_buf[256];
   kmemset(random_device_name_buf, 0, sizeof(random_device_name_buf));
   UNICODE_STRING device_name;
   RtlStringCbPrintfW(random_device_name_buf,
                      sizeof(random_device_name_buf) / sizeof(WCHAR),
-                     L"\\Device\\%04X", RtlRandomEx(&ramdon_seed));
+                     L"\\Device\\%04X", (ULONG)RandomEngineNext());
   RtlInitUnicodeString(&device_name, random_device_name_buf);
 
   WCHAR guid_buf[64];
