@@ -71,6 +71,7 @@ extern fn_ExFreePoolWithTag _ExFreePoolWithTag;
 
 extern POBJECT_TYPE* _IoDriverObjectType;
 extern PLIST_ENTRY _PsLoadedModuleList;
+extern USHORT _NtBuildNumber;
 
 NTSTATUS ResolveImports(VOID);
 

@@ -236,25 +236,28 @@ ULONG g_ActiveProcessLinksOffset = 0;
 ULONG g_UserDirectoryTableBaseOffset = 0;
 
 BOOLEAN InitOffsetsByVersion() {
-  RTL_OSVERSIONINFOW ver = {0};
-  ver.dwOSVersionInfoSize = sizeof(ver);
-  if (!NT_SUCCESS(RtlGetVersion(&ver))) {
-    return FALSE;
-  }
+  g_ActiveProcessLinksOffset = 0x448;
+  g_UserDirectoryTableBaseOffset = 0x278;
 
-  if (ver.dwMajorVersion == 10 && ver.dwMinorVersion == 0) {
-    if (ver.dwBuildNumber >= 26000) {
-      g_ActiveProcessLinksOffset = 0x1d8;
-    } else {
-      g_ActiveProcessLinksOffset = 0x448;
-    }
-    if (ver.dwBuildNumber >= 19041) {
-      g_UserDirectoryTableBaseOffset = 0x388;
-    } else if (ver.dwBuildNumber >= 18362) {
-      g_UserDirectoryTableBaseOffset = 0x280;
-    } else {
-      g_UserDirectoryTableBaseOffset = 0x278;
-    }
+  if (_NtBuildNumber >= 26000) {
+    g_ActiveProcessLinksOffset = 0x1d8;
+    g_UserDirectoryTableBaseOffset = 0x388;
+    return TRUE;
+  } else if (_NtBuildNumber >= 22000) {
+    g_ActiveProcessLinksOffset = 0x448;
+    g_UserDirectoryTableBaseOffset = 0x388;
+    return TRUE;
+  } else if (_NtBuildNumber >= 19041) {
+    g_ActiveProcessLinksOffset = 0x448;
+    g_UserDirectoryTableBaseOffset = 0x388;
+    return TRUE;
+  } else if (_NtBuildNumber >= 18362) {
+    g_ActiveProcessLinksOffset = 0x448;
+    g_UserDirectoryTableBaseOffset = 0x280;
+    return TRUE;
+  } else if (_NtBuildNumber >= 10240) {
+    g_ActiveProcessLinksOffset = 0x448;
+    g_UserDirectoryTableBaseOffset = 0x278;
     return TRUE;
   }
   return FALSE;

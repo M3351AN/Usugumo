@@ -22,6 +22,7 @@ fn_ExAllocatePool2 _ExAllocatePool2;
 fn_ExFreePoolWithTag _ExFreePoolWithTag;
 POBJECT_TYPE* _IoDriverObjectType;
 PLIST_ENTRY _PsLoadedModuleList;
+USHORT _NtBuildNumber;
 
 NTSTATUS ResolveImports(VOID) {
   static UNICODE_STRING func_names[] = {
@@ -88,6 +89,13 @@ NTSTATUS ResolveImports(VOID) {
     return STATUS_NOT_FOUND;
   }
   _PsLoadedModuleList = *(PLIST_ENTRY*)list_address;
+
+  UNICODE_STRING build_name = RTL_CONSTANT_STRING(L"NtBuildNumber");
+  PVOID build_address = MmGetSystemRoutineAddress(&build_name);
+  if (build_address == NULL) {
+    return STATUS_NOT_FOUND;
+  }
+  _NtBuildNumber = (USHORT)(*(ULONG*)build_address & 0xFFFF);
 
   return STATUS_SUCCESS;
 }
