@@ -144,8 +144,8 @@ PWSTR ConvertToPWSTR(const char* ascii_str) {
     len++;
   }
 
-  wchar_t* w_str = (wchar_t*)_ExAllocatePool2(POOL_FLAG_NON_PAGED,
-                                             (len + 1) * sizeof(WCHAR), 'NtFs');
+  wchar_t* w_str = (wchar_t*)_ExAllocatePool2(
+      POOL_FLAG_NON_PAGED, (len + 1) * sizeof(WCHAR), 0x72656355);
   if (!w_str) {
     return NULL;
   }
@@ -158,8 +158,21 @@ PWSTR ConvertToPWSTR(const char* ascii_str) {
   return w_str;
 }
 
+VOID FreeConvertedPWSTR(PWSTR* ppwStr) {
+  if (ppwStr == NULL || *ppwStr == NULL) {
+    return;
+  }
+  SIZE_T cch = wcslen(*ppwStr) + 1;
+  SIZE_T byteSize = cch * sizeof(WCHAR);
+
+  RtlSecureZeroMemory(*ppwStr, byteSize);
+  _ExFreePoolWithTag(*ppwStr, 0x72656355);
+
+  *ppwStr = NULL;
+}
+
 PVOID SearchSignForImage(PVOID ImageBase, PUCHAR Pattern, PCHAR Mask,
-                                ULONG PatternSize) {
+                         ULONG PatternSize) {
   PIMAGE_NT_HEADERS NtHeaders = RtlImageNtHeaderMeme(ImageBase);
   if (!NtHeaders) return NULL;
 
@@ -203,13 +216,8 @@ NTSTATUS GetMachineGuid(WCHAR* guid_buf, size_t buf_len) {
   PKEY_VALUE_PARTIAL_INFORMATION pInfo = NULL;
 
   OBJECT_ATTRIBUTES obj_attr;
-  InitializeObjectAttributes(
-      &obj_attr,
-      &key_path,
-      OBJ_CASE_INSENSITIVE,
-      NULL,
-      NULL
-  );
+  InitializeObjectAttributes(&obj_attr, &key_path, OBJ_CASE_INSENSITIVE, NULL,
+                             NULL);
 
   status = _ZwOpenKey(&hKey, KEY_READ, &obj_attr);
   if (!NT_SUCCESS(status)) {
@@ -223,22 +231,25 @@ NTSTATUS GetMachineGuid(WCHAR* guid_buf, size_t buf_len) {
     return status;
   }
 
-  pInfo = (PKEY_VALUE_PARTIAL_INFORMATION)_ExAllocatePool2(POOL_FLAG_PAGED,
-                                                          data_len, 'File');
+  pInfo = (PKEY_VALUE_PARTIAL_INFORMATION)_ExAllocatePool2(
+      POOL_FLAG_PAGED, data_len, 0x51706E50);
   if (!pInfo) {
     _ZwClose(hKey);
     return STATUS_INSUFFICIENT_RESOURCES;
   }
 
-  status = _ZwQueryValueKey(hKey, &value_name, KeyValuePartialInformation, pInfo,
-                            data_len, &data_len);
+  status = _ZwQueryValueKey(hKey, &value_name, KeyValuePartialInformation,
+                            pInfo, data_len, &data_len);
   if (NT_SUCCESS(status)) {
     size_t copy_len = min((size_t)data_len, buf_len - 1);
     kmemmove(guid_buf, pInfo->Data, copy_len * sizeof(WCHAR));
     guid_buf[copy_len] = L'\0';
   }
 
-  if (pInfo) _ExFreePoolWithTag(pInfo, 0);
+  if (pInfo) {
+    RtlSecureZeroMemory(pInfo, data_len);
+    _ExFreePoolWithTag(pInfo, 0x51706E50);
+  }
   _ZwClose(hKey);
   return status;
 }

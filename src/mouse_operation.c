@@ -106,6 +106,7 @@ VOID MouseRelease(void) {
     gMouseObject.hid_driver_object = NULL;
   }
   gMouseObject.use_mouse = 0;
+  RtlSecureZeroMemory(&gMouseObject, sizeof(gMouseObject));
 }
 
 inline void MouseCall(long x, long y, unsigned short button_flags,

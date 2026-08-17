@@ -7,12 +7,19 @@ VOID DriverUnload(_In_ struct _DRIVER_OBJECT* DriverObject) {
   UNREFERENCED_PARAMETER(DriverObject);
   MouseRelease();
   KeyboardRelease();
+  if (g_symbolic_link_name.Buffer != NULL) {
+    _IoDeleteSymbolicLink(&g_symbolic_link_name);
+    RtlSecureZeroMemory(g_symbolic_link_name.Buffer,
+                        g_symbolic_link_name.MaximumLength);
+    _ExFreePoolWithTag(g_symbolic_link_name.Buffer, 0);
+    g_symbolic_link_name.Buffer = NULL;
+    g_symbolic_link_name.Length = 0;
+    g_symbolic_link_name.MaximumLength = 0;
+  }
+
   if (DriverObject->DeviceObject) {
-    if (g_symbolic_link_name.Buffer != NULL) {
-      _IoDeleteSymbolicLink(&g_symbolic_link_name);
-      _ExFreePoolWithTag(g_symbolic_link_name.Buffer, 0);
-    }
     _IoDeleteDevice(DriverObject->DeviceObject);
+    DriverObject->DeviceObject = NULL;
   }
 }
 

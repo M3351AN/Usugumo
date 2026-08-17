@@ -163,6 +163,7 @@ UINT64 GetDllAddress(Requests* in) {
   DecodeFixedStr64(&in->name_str, decoded, in->name_length);
   PWSTR wStr = ConvertToPWSTR(decoded);
   if (!wStr) {
+    FreeConvertedPWSTR(&wStr);
     _ObfDereferenceObject(source_process);
     return 0;
   }
@@ -173,7 +174,7 @@ UINT64 GetDllAddress(Requests* in) {
 
   base_address = GetModuleBasex64(source_process, moduleName, FALSE);
 
-  _ExFreePoolWithTag(wStr, 'NtFs');
+  FreeConvertedPWSTR(&wStr);
   _ObfDereferenceObject(source_process);
   return base_address;
 }
@@ -199,6 +200,7 @@ UINT64 GetDllSize(Requests* in) {
   DecodeFixedStr64(&in->name_str, decoded, in->name_length);
   PWSTR wStr = ConvertToPWSTR(decoded);
   if (!wStr) {
+    FreeConvertedPWSTR(&wStr);
     _ObfDereferenceObject(source_process);
     return 0;
   }
@@ -209,7 +211,7 @@ UINT64 GetDllSize(Requests* in) {
 
   module_size = GetModuleBasex64(source_process, moduleName, TRUE);
 
-  _ExFreePoolWithTag(wStr, 'NtFs');
+  FreeConvertedPWSTR(&wStr);
   _ObfDereferenceObject(source_process);
   return module_size;
 }

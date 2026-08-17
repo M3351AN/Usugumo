@@ -197,7 +197,7 @@ NTSTATUS CopyVirtualMemory(PEPROCESS FromProcess, UINT64 FromAddress,
 
 Cleanup:
   RtlSecureZeroMemory(scratch, PMEM_PAGE_SIZE);
-  _ExFreePoolWithTag(scratch, 0);
+  _ExFreePoolWithTag(scratch, 0x446C6148);
 
   return status;
 }

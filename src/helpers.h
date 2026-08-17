@@ -12,6 +12,8 @@ VOID DecodeFixedStr64(const FixedStr64*, char*, SIZE_T);
 
 PWSTR ConvertToPWSTR(const char*);
 
+VOID FreeConvertedPWSTR(PWSTR* ppwStr);
+
 PVOID SearchSignForImage(PVOID, PUCHAR, PCHAR, ULONG);
 
 LPBYTE ResolveRelativeAddress(PVOID, ULONG);

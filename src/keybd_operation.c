@@ -112,6 +112,7 @@ VOID KeyboardRelease(void) {
     gKeyboardObject.hid_driver_object = NULL;
   }
   gKeyboardObject.use_keyboard = 0;
+  RtlSecureZeroMemory(&gKeyboardObject, sizeof(gKeyboardObject));
 }
 
 inline void KeyboardCall(USHORT make_code, USHORT flags, ULONG extra_info) {
