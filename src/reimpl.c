@@ -44,6 +44,37 @@ int kwcsicmp(const wchar_t* Str1, const wchar_t* Str2) {
   return v6 - v7;
 }
 
+size_t __cdecl kwcslen(const wchar_t* Str) {
+  __m128i* i;           // rdx
+  unsigned __int64 v2;  // r9
+  const wchar_t* v3;    // rax
+  size_t v4;            // rdx
+
+  i = (__m128i*)Str;
+  if (((uintptr_t)Str & 1) != 0) {
+    while (i->m128i_i16[0]) i = (__m128i*)((char*)i + 2);
+    return ((char*)i - (char*)Str) >> 1;
+  }
+  v2 = ((16LL - ((uintptr_t)Str & 0xF)) &
+        (unsigned __int64)-(__int64)(((uintptr_t)Str & 0xF) != 0)) >>
+       1;
+  v3 = &Str[v2];
+  if (Str != v3) {
+    do {
+      if (!i->m128i_i16[0]) break;
+      i = (__m128i*)((char*)i + 2);
+    } while (i != (__m128i*)v3);
+  }
+  v4 = ((char*)i - (char*)Str) >> 1;
+  if (v4 == v2) {
+    for (i = (__m128i*)&Str[v4];
+         !_mm_movemask_epi8(_mm_cmpeq_epi16(_mm_setzero_si128(), *i)); ++i);
+    while (i->m128i_i16[0]) i = (__m128i*)((char*)i + 2);
+    return ((char*)i - (char*)Str) >> 1;
+  }
+  return v4;
+}
+
 ULONG g_PebOffset = 0;
 
 ULONG GetPebOffset() {

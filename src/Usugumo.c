@@ -29,7 +29,7 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
   RtlStringCbPrintfW(random_device_name_buf,
                      sizeof(random_device_name_buf) / sizeof(WCHAR),
                      L"\\Device\\%04X", (ULONG)RandomEngineNext());
-  RtlInitUnicodeString(&device_name, random_device_name_buf);
+  RtlInitUnicodeStringMeme(&device_name, random_device_name_buf);
 
   WCHAR guid_buf[64];
   kmemset(guid_buf, 0, sizeof(guid_buf));
@@ -40,7 +40,7 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
   kmemset(sym_link_buf, 0, sizeof(sym_link_buf));
   RtlStringCbPrintfW(sym_link_buf, sizeof(sym_link_buf),
                      L"\\DosDevices\\Global\\%sUsugum0", guid_buf);
-  RtlInitUnicodeString(&g_symbolic_link_name, sym_link_buf);
+  RtlInitUnicodeStringMeme(&g_symbolic_link_name, sym_link_buf);
 
   UNICODE_STRING sddl_string = RTL_CONSTANT_STRING(SDDL_STRING);
   PDEVICE_OBJECT device_object;

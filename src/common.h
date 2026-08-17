@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
@@ -10,6 +10,7 @@
 #include <ntstrsafe.h>
 #include <ntddk.h> 
 #include <windef.h>
+#include <emmintrin.h>
 
 #include "../includes/usugumo_request_define.h"
 #include "./defines.h"

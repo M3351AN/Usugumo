@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 #include "./imports.h"
 
 fn_KeAcquireSpinLockAtDpcLevel _KeAcquireSpinLockAtDpcLevel;

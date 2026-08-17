@@ -1,4 +1,6 @@
 ; Copyright (c) 2026 渟雲. All rights reserved.
+EXTERNDEF kwcslen:PROC
+
 .code
 
 RtlImageNtHeaderMeme proc
@@ -105,5 +107,28 @@ pop     rdi
 pop     rsi
 ret
 RtlCompareMemoryMeme endp
+
+RtlInitUnicodeStringMeme proc
+push    rbx
+sub     rsp, 20h
+mov     qword ptr [rcx], 0
+mov     rbx, rcx
+mov     [rcx+8], rdx
+test    rdx, rdx
+jz      short loc_14041BA9E
+mov     rcx, rdx        ; Str
+call    kwcslen
+add     rax, rax
+mov     ecx, 0FFFCh
+cmp     rax, 0FFFEh
+cmovnb  rax, rcx
+mov     [rbx], ax
+add     ax, 2
+mov     [rbx+2], ax
+loc_14041BA9E:
+add     rsp, 20h
+pop     rbx
+ret
+RtlInitUnicodeStringMeme endp
 
 END

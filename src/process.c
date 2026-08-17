@@ -178,7 +178,7 @@ UINT64 GetDllAddress(Requests* in) {
   }
 
   UNICODE_STRING moduleName;
-  RtlInitUnicodeString(&moduleName, wStr);
+  RtlInitUnicodeStringMeme(&moduleName, wStr);
   ULONG64 base_address = 0;
 
   __try {
@@ -218,7 +218,7 @@ UINT64 GetDllSize(Requests* in) {
   }
 
   UNICODE_STRING moduleName;
-  RtlInitUnicodeString(&moduleName, wStr);
+  RtlInitUnicodeStringMeme(&moduleName, wStr);
   ULONG64 module_size = 0;
 
   __try {
