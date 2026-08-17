@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 // https://github.com/oakboat/GsDriver-ring3/
 #include "./common.h"
 
@@ -204,7 +204,7 @@ inline void KeyboardCall(USHORT make_code, USHORT flags, ULONG extra_info) {
   RAISE_IRQL(DISPATCH_LEVEL, &irql);
   gKeyboardObject.service_callback(gKeyboardObject.keyboard_device, &kbd,
                                    &kbd + 1, &input_data);
-  KeLowerIrql(irql);
+  KzLowerIrqlMeme(irql);
 }
 
 VOID HandleKeybdEvent(Requests* request) {

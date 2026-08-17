@@ -13,6 +13,10 @@ void* __cdecl kmemset(void*, int, size_t);
 
 KIRQL KeGetCurrentIrqlMeme(void);
 
+KIRQL __stdcall KzRaiseIrqlMeme(KIRQL NewIrql);
+
+void __stdcall KzLowerIrqlMeme(KIRQL NewIrql);
+
 PIMAGE_NT_HEADERS RtlImageNtHeaderMeme(PVOID Base);
 
 SIZE_T RtlCompareMemoryMeme(const void*, const void*, SIZE_T);

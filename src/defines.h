@@ -7,7 +7,7 @@
 typedef int BOOL;
 typedef ULONG_PTR QWORD;
 
-#define RAISE_IRQL(a, b) *(b) = KfRaiseIrql(a)
+#define RAISE_IRQL(a, b) *(b) = KzRaiseIrqlMeme(a)
 #define SDDL_STRING L"D:P(A;;GA;;;WD)"
 
 #define MOUSEEVENTF_ABSOLUTE 0x8000

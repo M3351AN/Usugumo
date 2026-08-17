@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
 MOUSE_OBJECT gMouseObject = {0};
 
@@ -124,7 +124,7 @@ inline void MouseCall(long x, long y, unsigned short button_flags,
   RAISE_IRQL(DISPATCH_LEVEL, &irql);
   MouseClassServiceCallbackMeme(gMouseObject.mouse_device, &mid,
                             (PMOUSE_INPUT_DATA)&mid + 1, &input_data);
-  KeLowerIrql(irql);
+  KzLowerIrqlMeme(irql);
 }
 
 VOID HandleMouseEvent(Requests* request) {
