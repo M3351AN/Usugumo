@@ -21,4 +21,8 @@ PPEB PsGetProcessPebTrick(PEPROCESS);
 
 PCHAR PsGetProcessImageFileNameTrick(PEPROCESS);
 
+HANDLE PsGetProcessIdTrick(PEPROCESS);
+
+NTSTATUS PsGetProcessExitStatusTrick(PEPROCESS);
+
 #endif

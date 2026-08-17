@@ -23,7 +23,7 @@ BOOLEAN ReadVM(Requests* in) {
     return FALSE;
   }
 
-    if (PsGetProcessExitStatus(from_process) != STATUS_PENDING) {
+    if (PsGetProcessExitStatusTrick(from_process) != STATUS_PENDING) {
     ObDereferenceObject(from_process);
     ObDereferenceObject(to_process);
     return FALSE;
@@ -63,7 +63,7 @@ BOOLEAN WriteVM(Requests* in) {
     return FALSE;
   }
 
-  if (PsGetProcessExitStatus(to_process) != STATUS_PENDING) {
+  if (PsGetProcessExitStatusTrick(to_process) != STATUS_PENDING) {
     ObDereferenceObject(from_process);
     ObDereferenceObject(to_process);
     return FALSE;
@@ -163,7 +163,7 @@ UINT64 GetDllAddress(Requests* in) {
       PsLookupProcessByProcessId((HANDLE)in->target_pid, &source_process);
   if (!NT_SUCCESS(status)) return 0;
 
-  if (PsGetProcessExitStatus(source_process) != STATUS_PENDING) {
+  if (PsGetProcessExitStatusTrick(source_process) != STATUS_PENDING) {
     ObDereferenceObject(source_process);
     return 0;
   }
@@ -203,7 +203,7 @@ UINT64 GetDllSize(Requests* in) {
       PsLookupProcessByProcessId((HANDLE)in->target_pid, &source_process);
   if (!NT_SUCCESS(status)) return 0;
 
-  if (PsGetProcessExitStatus(source_process) != STATUS_PENDING) {
+  if (PsGetProcessExitStatusTrick(source_process) != STATUS_PENDING) {
     ObDereferenceObject(source_process);
     return 0;
   }
@@ -287,7 +287,7 @@ UINT64 GetProcessIdByName(Requests* in) {
 
   while (currentProcess && processCount < 1000) {
     processCount++;
-    HANDLE currentPid = PsGetProcessId(currentProcess);
+    HANDLE currentPid = PsGetProcessIdTrick(currentProcess);
     PCHAR imageName = NULL;
 
     __try {
@@ -318,7 +318,7 @@ UINT64 GetProcessIdByName(Requests* in) {
     HANDLE nextPid = NULL;
 
     __try {
-      nextPid = PsGetProcessId(nextProcess);
+      nextPid = PsGetProcessIdTrick(nextProcess);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
       break;
     }

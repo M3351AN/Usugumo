@@ -107,3 +107,68 @@ PCHAR PsGetProcessImageFileNameTrick(PEPROCESS Process) {
   ULONG offset = GetImageFileNameOffset();
   return (PCHAR)((PUCHAR)Process + offset);
 }
+
+ULONG g_ProcessIdOffset = 0;
+
+ULONG GetProcessIdOffset() {
+  if (g_ProcessIdOffset != 0) return g_ProcessIdOffset;
+
+  UNICODE_STRING routineName =
+      RTL_CONSTANT_STRING(L"PsGetProcessId");
+
+  PUCHAR pFunc = (PUCHAR)MmGetSystemRoutineAddress(&routineName);
+  if (!pFunc) {
+    return 0;
+  }
+
+  // 48 8B 81 ?? ?? ?? ?? mov     rax, [rcx+1D0h]
+  for (int i = 0; i < 0x10; i++) {
+    if (pFunc[i] == 0x48 && pFunc[i + 1] == 0x8B && pFunc[i + 2] == 0x81) {
+      ULONG offset = *(PULONG)(pFunc + i + 3);
+      // just guessing the range
+      if (offset > 0x10 && offset <= 0x1000) {
+        g_ProcessIdOffset = offset;
+        return offset;
+      }
+    }
+  }
+
+  return 0;
+}
+
+HANDLE PsGetProcessIdTrick(PEPROCESS Process) {
+  ULONG offset = GetProcessIdOffset();
+  return *(HANDLE*)((PUCHAR)Process + offset);
+}
+
+ULONG g_ProcessExitStatusOffset = 0;
+
+ULONG GetProcessExitStatusOffset() {
+  if (g_ProcessExitStatusOffset != 0) return g_ProcessExitStatusOffset;
+
+  UNICODE_STRING routineName = RTL_CONSTANT_STRING(L"PsGetProcessExitStatus");
+
+  PUCHAR pFunc = (PUCHAR)MmGetSystemRoutineAddress(&routineName);
+  if (!pFunc) {
+    return 0;
+  }
+
+  // 8B 81 ?? ?? ?? ?? mov     eax, [rcx+554h]
+  for (int i = 0; i < 0x10; i++) {
+    if (pFunc[i] == 0x8B && pFunc[i + 1] == 0x81) {
+      ULONG offset = *(PULONG)(pFunc + i + 2);
+      // just guessing the range
+      if (offset > 0x10 && offset <= 0x1000) {
+        g_ProcessExitStatusOffset = offset;
+        return offset;
+      }
+    }
+  }
+
+  return 0;
+}
+
+NTSTATUS PsGetProcessExitStatusTrick(PEPROCESS Process) {
+  ULONG offset = GetProcessExitStatusOffset();
+  return *(NTSTATUS*)((PUCHAR)Process + offset);
+}
