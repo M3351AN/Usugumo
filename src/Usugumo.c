@@ -9,10 +9,10 @@ VOID DriverUnload(_In_ struct _DRIVER_OBJECT* DriverObject) {
   KeyboardRelease();
   if (DriverObject->DeviceObject) {
     if (g_symbolic_link_name.Buffer != NULL) {
-      IoDeleteSymbolicLink(&g_symbolic_link_name);
+      _IoDeleteSymbolicLink(&g_symbolic_link_name);
       ExFreePool(g_symbolic_link_name.Buffer);
     }
-    IoDeleteDevice(DriverObject->DeviceObject);
+    _IoDeleteDevice(DriverObject->DeviceObject);
   }
 }
 
@@ -51,7 +51,7 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
 
   if (status != STATUS_SUCCESS) return status;
 
-  status = IoCreateSymbolicLink(&g_symbolic_link_name, &device_name);
+  status = _IoCreateSymbolicLink(&g_symbolic_link_name, &device_name);
   if (status != STATUS_SUCCESS) return status;
 
   KeyboardSpinLockInit();

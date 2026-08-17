@@ -15,6 +15,9 @@ fn_MmMapIoSpace _MmMapIoSpace;
 fn_MmUnmapIoSpace _MmUnmapIoSpace;
 fn_MmCopyMemory _MmCopyMemory;
 fn_PsLookupProcessByProcessId _PsLookupProcessByProcessId;
+fn_IoCreateSymbolicLink _IoCreateSymbolicLink;
+fn_IoDeleteDevice _IoDeleteDevice;
+fn_IoDeleteSymbolicLink _IoDeleteSymbolicLink;
 POBJECT_TYPE* _IoDriverObjectType;
 PLIST_ENTRY _PsLoadedModuleList;
 
@@ -34,6 +37,9 @@ NTSTATUS ResolveImports(VOID) {
       RTL_CONSTANT_STRING(L"MmUnmapIoSpace"),
       RTL_CONSTANT_STRING(L"MmCopyMemory"),
       RTL_CONSTANT_STRING(L"PsLookupProcessByProcessId"),
+      RTL_CONSTANT_STRING(L"IoCreateSymbolicLink"),
+      RTL_CONSTANT_STRING(L"IoDeleteDevice"),
+      RTL_CONSTANT_STRING(L"IoDeleteSymbolicLink"),
   };
   PVOID* func_slots[] = {
       (PVOID*)&_KeAcquireSpinLockAtDpcLevel,
@@ -50,6 +56,9 @@ NTSTATUS ResolveImports(VOID) {
       (PVOID*)&_MmUnmapIoSpace,
       (PVOID*)&_MmCopyMemory,
       (PVOID*)&_PsLookupProcessByProcessId,
+      (PVOID*)&_IoCreateSymbolicLink,
+      (PVOID*)&_IoDeleteDevice,
+      (PVOID*)&_IoDeleteSymbolicLink,
   };
 
   for (ULONG i = 0; i < RTL_NUMBER_OF(func_names); i++) {

@@ -72,7 +72,7 @@ NTSTATUS __fastcall IoDevObjCreateDeviceSecureMeme(
       if (updated >= 0)
         *v9 = (DEVICE_OBJECT*)DeviceObject;
       else
-        IoDeleteDevice((PDEVICE_OBJECT)DeviceObject);
+        _IoDeleteDevice((PDEVICE_OBJECT)DeviceObject);
     }
     goto $Exit;
   }

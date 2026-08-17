@@ -39,6 +39,11 @@ typedef NTSTATUS(NTAPI* fn_MmCopyMemory)(
     _In_opt_ PSIZE_T NumberOfBytesTransferred);
 typedef NTSTATUS(NTAPI* fn_PsLookupProcessByProcessId)(
     _In_ HANDLE ProcessId, _Outptr_ PEPROCESS* Process);
+typedef NTSTATUS(NTAPI* fn_IoCreateSymbolicLink)(
+    _In_ PUNICODE_STRING SymbolicLinkName, _In_ PUNICODE_STRING DeviceName);
+typedef NTSTATUS(NTAPI* fn_IoDeleteDevice)(_In_ PDEVICE_OBJECT DeviceObject);
+typedef NTSTATUS(NTAPI* fn_IoDeleteSymbolicLink)(
+    _In_ PUNICODE_STRING SymbolicLinkName);
 
 extern fn_KeAcquireSpinLockAtDpcLevel _KeAcquireSpinLockAtDpcLevel;
 extern fn_KeReleaseSpinLockFromDpcLevel _KeReleaseSpinLockFromDpcLevel;
@@ -54,6 +59,9 @@ extern fn_MmMapIoSpace _MmMapIoSpace;
 extern fn_MmUnmapIoSpace _MmUnmapIoSpace;
 extern fn_MmCopyMemory _MmCopyMemory;
 extern fn_PsLookupProcessByProcessId _PsLookupProcessByProcessId;
+extern fn_IoCreateSymbolicLink _IoCreateSymbolicLink;
+extern fn_IoDeleteDevice _IoDeleteDevice;
+extern fn_IoDeleteSymbolicLink _IoDeleteSymbolicLink;
 
 extern POBJECT_TYPE* _IoDriverObjectType;
 extern PLIST_ENTRY _PsLoadedModuleList;
