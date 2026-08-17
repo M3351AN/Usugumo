@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
 
 
@@ -12,12 +12,12 @@ BOOLEAN ReadVM(Requests* in) {
   if (in->request_pid == 0 || in->target_pid == 0) return FALSE;
 
   NTSTATUS status =
-      PsLookupProcessByProcessId((HANDLE)in->request_pid, &to_process);
+      _PsLookupProcessByProcessId((HANDLE)in->request_pid, &to_process);
   if (!NT_SUCCESS(status)) {
     return FALSE;
   }
 
-  status = PsLookupProcessByProcessId((HANDLE)in->target_pid, &from_process);
+  status = _PsLookupProcessByProcessId((HANDLE)in->target_pid, &from_process);
   if (!NT_SUCCESS(status)) {
     _ObfDereferenceObject(to_process);
     return FALSE;
@@ -52,12 +52,12 @@ BOOLEAN WriteVM(Requests* in) {
   if (in->request_pid == 0 || in->target_pid == 0) return FALSE;
 
   NTSTATUS status =
-      PsLookupProcessByProcessId((HANDLE)in->request_pid, &from_process);
+      _PsLookupProcessByProcessId((HANDLE)in->request_pid, &from_process);
   if (!NT_SUCCESS(status)) {
     return FALSE;
   }
 
-  status = PsLookupProcessByProcessId((HANDLE)in->target_pid, &to_process);
+  status = _PsLookupProcessByProcessId((HANDLE)in->target_pid, &to_process);
   if (!NT_SUCCESS(status)) {
     _ObfDereferenceObject(from_process);
     return FALSE;
@@ -160,7 +160,7 @@ UINT64 GetDllAddress(Requests* in) {
 
   PEPROCESS source_process = NULL;
   NTSTATUS status =
-      PsLookupProcessByProcessId((HANDLE)in->target_pid, &source_process);
+      _PsLookupProcessByProcessId((HANDLE)in->target_pid, &source_process);
   if (!NT_SUCCESS(status)) return 0;
 
   if (PsGetProcessExitStatusTrick(source_process) != STATUS_PENDING) {
@@ -200,7 +200,7 @@ UINT64 GetDllSize(Requests* in) {
 
   PEPROCESS source_process = NULL;
   NTSTATUS status =
-      PsLookupProcessByProcessId((HANDLE)in->target_pid, &source_process);
+      _PsLookupProcessByProcessId((HANDLE)in->target_pid, &source_process);
   if (!NT_SUCCESS(status)) return 0;
 
   if (PsGetProcessExitStatusTrick(source_process) != STATUS_PENDING) {
@@ -277,7 +277,7 @@ UINT64 GetProcessIdByName(Requests* in) {
   DecodeFixedStr64(&in->name_str, targetName, in->name_length);
 
   PEPROCESS startProcess = NULL;
-  if (!NT_SUCCESS(PsLookupProcessByProcessId((HANDLE)4, &startProcess)))
+  if (!NT_SUCCESS(_PsLookupProcessByProcessId((HANDLE)4, &startProcess)))
     return 0;
 
   PEPROCESS currentProcess = startProcess;
@@ -325,7 +325,8 @@ UINT64 GetProcessIdByName(Requests* in) {
 
     PEPROCESS nextSafe = NULL;
 
-    if (nextPid && NT_SUCCESS(PsLookupProcessByProcessId(nextPid, &nextSafe))) {
+    if (nextPid &&
+        NT_SUCCESS(_PsLookupProcessByProcessId(nextPid, &nextSafe))) {
       if (nextSafe == startProcess) {
         _ObfDereferenceObject(nextSafe);
         break;
