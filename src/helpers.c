@@ -211,27 +211,27 @@ NTSTATUS GetMachineGuid(WCHAR* guid_buf, size_t buf_len) {
       NULL
   );
 
-  status = ZwOpenKey(&hKey, KEY_READ, &obj_attr);
+  status = _ZwOpenKey(&hKey, KEY_READ, &obj_attr);
   if (!NT_SUCCESS(status)) {
     return status;
   }
 
-  status = ZwQueryValueKey(hKey, &value_name, KeyValuePartialInformation, NULL,
-                           0, &data_len);
+  status = _ZwQueryValueKey(hKey, &value_name, KeyValuePartialInformation, NULL,
+                            0, &data_len);
   if (status != STATUS_BUFFER_TOO_SMALL) {
-    ZwClose(hKey);
+    _ZwClose(hKey);
     return status;
   }
 
   pInfo = (PKEY_VALUE_PARTIAL_INFORMATION)_ExAllocatePool2(POOL_FLAG_PAGED,
                                                           data_len, 'File');
   if (!pInfo) {
-    ZwClose(hKey);
+    _ZwClose(hKey);
     return STATUS_INSUFFICIENT_RESOURCES;
   }
 
-  status = ZwQueryValueKey(hKey, &value_name, KeyValuePartialInformation, pInfo,
-                           data_len, &data_len);
+  status = _ZwQueryValueKey(hKey, &value_name, KeyValuePartialInformation, pInfo,
+                            data_len, &data_len);
   if (NT_SUCCESS(status)) {
     size_t copy_len = min((size_t)data_len, buf_len - 1);
     kmemmove(guid_buf, pInfo->Data, copy_len * sizeof(WCHAR));
@@ -239,6 +239,6 @@ NTSTATUS GetMachineGuid(WCHAR* guid_buf, size_t buf_len) {
   }
 
   if (pInfo) _ExFreePoolWithTag(pInfo, 0);
-  ZwClose(hKey);
+  _ZwClose(hKey);
   return status;
 }

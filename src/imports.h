@@ -48,6 +48,15 @@ typedef PVOID(NTAPI* fn_ExAllocatePool2)(_In_ POOL_FLAGS Flags,
                                          _In_ SIZE_T NumberOfBytes,
                                          _In_ ULONG Tag);
 typedef VOID(NTAPI* fn_ExFreePoolWithTag)(_In_ PVOID P, _In_ ULONG Tag);
+typedef NTSTATUS(NTAPI* fn_ZwClose)(_In_ HANDLE Handle);
+typedef NTSTATUS(NTAPI* fn_ZwOpenKey)(
+    _Out_ PHANDLE KeyHandle, _In_ ACCESS_MASK DesiredAccess,
+    _In_ POBJECT_ATTRIBUTES ObjectAttributes);
+typedef NTSTATUS(NTAPI* fn_ZwQueryValueKey)(
+    _In_ HANDLE KeyHandle, _In_ PUNICODE_STRING ValueName,
+    _In_ KEY_VALUE_INFORMATION_CLASS KeyValueInformationClass,
+    _Out_writes_bytes_opt_(Length) PVOID KeyValueInformation,
+    _In_ ULONG Length, _Out_ PULONG ResultLength);
 
 extern fn_KeAcquireSpinLockAtDpcLevel _KeAcquireSpinLockAtDpcLevel;
 extern fn_KeReleaseSpinLockFromDpcLevel _KeReleaseSpinLockFromDpcLevel;
@@ -68,6 +77,9 @@ extern fn_IoDeleteDevice _IoDeleteDevice;
 extern fn_IoDeleteSymbolicLink _IoDeleteSymbolicLink;
 extern fn_ExAllocatePool2 _ExAllocatePool2;
 extern fn_ExFreePoolWithTag _ExFreePoolWithTag;
+extern fn_ZwClose _ZwClose;
+extern fn_ZwOpenKey _ZwOpenKey;
+extern fn_ZwQueryValueKey _ZwQueryValueKey;
 
 extern POBJECT_TYPE* _IoDriverObjectType;
 extern PLIST_ENTRY _PsLoadedModuleList;
