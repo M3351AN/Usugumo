@@ -84,7 +84,7 @@
     <Link>
       <LargeAddressAware>true</LargeAddressAware>
       <RandomizedBaseAddress>true</RandomizedBaseAddress>
-      <AdditionalDependencies>%(AdditionalDependencies);$(KernelBufferOverflowLib);$(DDK_LIB_PATH)ntoskrnl.lib;$(DDK_LIB_PATH)hal.lib;$(DDK_LIB_PATH)wmilib.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);</AdditionalDependencies>
       <GenerateMapFile>true</GenerateMapFile>
       <EntryPointSymbol>UsugumoEntry</EntryPointSymbol>
     </Link>
@@ -113,7 +113,7 @@
       <LargeAddressAware>true</LargeAddressAware>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <RandomizedBaseAddress>true</RandomizedBaseAddress>
-      <AdditionalDependencies>%(AdditionalDependencies);$(KernelBufferOverflowLib);$(DDK_LIB_PATH)ntoskrnl.lib;$(DDK_LIB_PATH)hal.lib;$(DDK_LIB_PATH)wmilib.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);</AdditionalDependencies>
       <GenerateMapFile>true</GenerateMapFile>
       <MergeSections>_TEXT=.vmp;_PAGE=.tmd</MergeSections>
       <EntryPointSymbol>UsugumoEntry</EntryPointSymbol>
@@ -162,6 +162,7 @@
     <MASM Include="src\kmem.asm" />
     <MASM Include="src\mouse.asm" />
     <MASM Include="src\rtl_reimpl.asm" />
+    <MASM Include="src\sha256.asm" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

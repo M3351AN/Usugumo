@@ -23,7 +23,7 @@ static __forceinline ULONG Sha256LoadBe(const UCHAR* p) {
          (ULONG)p[3];
 }
 
-static VOID Sha256Compress(const UCHAR block[64], ULONG state[8]) {
+VOID Sha256Compress(const UCHAR block[64], ULONG state[8]) {
   ULONG w[64];
   ULONG a, b, c, d, e, f, g, h;
   ULONG t1, t2;
@@ -74,6 +74,7 @@ static VOID Sha256Compress(const UCHAR block[64], ULONG state[8]) {
   state[7] += h;
 }
 
+/* otherwise no optimiz for remove trunk
 VOID Sha256(const void* data, SIZE_T length, UCHAR digest[SHA256_DIGEST_SIZE]) {
   ULONG state[8] = {0x6A09E667UL, 0xBB67AE85UL, 0x3C6EF372UL, 0xA54FF53AUL,
                     0x510E527FUL, 0x9B05688CUL, 0x1F83D9ABUL, 0x5BE0CD19UL};
@@ -120,6 +121,7 @@ VOID Sha256(const void* data, SIZE_T length, UCHAR digest[SHA256_DIGEST_SIZE]) {
     digest[i * 4 + 3] = (UCHAR)(state[i]);
   }
 }
+*/
 
 VOID DecodeFixedStr64(const FixedStr64* fs, char* output, SIZE_T origLen) {
   size_t idx = 0;
