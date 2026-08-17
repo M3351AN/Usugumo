@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
 
 static const ULONG kSha256K[64] = {
@@ -142,7 +142,7 @@ PWSTR ConvertToPWSTR(const char* ascii_str) {
     len++;
   }
 
-  wchar_t* w_str = (wchar_t*)ExAllocatePool2(POOL_FLAG_NON_PAGED,
+  wchar_t* w_str = (wchar_t*)_ExAllocatePool2(POOL_FLAG_NON_PAGED,
                                              (len + 1) * sizeof(WCHAR), 'NtFs');
   if (!w_str) {
     return NULL;
@@ -238,7 +238,7 @@ NTSTATUS GetMachineGuid(WCHAR* guid_buf, size_t buf_len) {
     return status;
   }
 
-  pInfo = (PKEY_VALUE_PARTIAL_INFORMATION)ExAllocatePool2(POOL_FLAG_PAGED,
+  pInfo = (PKEY_VALUE_PARTIAL_INFORMATION)_ExAllocatePool2(POOL_FLAG_PAGED,
                                                           data_len, 'File');
   if (!pInfo) {
     ZwClose(hKey);
@@ -253,7 +253,7 @@ NTSTATUS GetMachineGuid(WCHAR* guid_buf, size_t buf_len) {
     guid_buf[copy_len] = L'\0';
   }
 
-  if (pInfo) ExFreePool(pInfo);
+  if (pInfo) _ExFreePoolWithTag(pInfo, 0);
   ZwClose(hKey);
   return status;
 }

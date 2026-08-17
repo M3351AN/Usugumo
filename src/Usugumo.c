@@ -10,7 +10,7 @@ VOID DriverUnload(_In_ struct _DRIVER_OBJECT* DriverObject) {
   if (DriverObject->DeviceObject) {
     if (g_symbolic_link_name.Buffer != NULL) {
       _IoDeleteSymbolicLink(&g_symbolic_link_name);
-      ExFreePool(g_symbolic_link_name.Buffer);
+      _ExFreePoolWithTag(g_symbolic_link_name.Buffer, 0);
     }
     _IoDeleteDevice(DriverObject->DeviceObject);
   }

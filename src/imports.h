@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 #pragma once
 #ifndef _IMPORTS_H_
 #define _IMPORTS_H_
@@ -44,6 +44,10 @@ typedef NTSTATUS(NTAPI* fn_IoCreateSymbolicLink)(
 typedef NTSTATUS(NTAPI* fn_IoDeleteDevice)(_In_ PDEVICE_OBJECT DeviceObject);
 typedef NTSTATUS(NTAPI* fn_IoDeleteSymbolicLink)(
     _In_ PUNICODE_STRING SymbolicLinkName);
+typedef PVOID(NTAPI* fn_ExAllocatePool2)(_In_ POOL_FLAGS Flags,
+                                         _In_ SIZE_T NumberOfBytes,
+                                         _In_ ULONG Tag);
+typedef VOID(NTAPI* fn_ExFreePoolWithTag)(_In_ PVOID P, _In_ ULONG Tag);
 
 extern fn_KeAcquireSpinLockAtDpcLevel _KeAcquireSpinLockAtDpcLevel;
 extern fn_KeReleaseSpinLockFromDpcLevel _KeReleaseSpinLockFromDpcLevel;
@@ -62,6 +66,8 @@ extern fn_PsLookupProcessByProcessId _PsLookupProcessByProcessId;
 extern fn_IoCreateSymbolicLink _IoCreateSymbolicLink;
 extern fn_IoDeleteDevice _IoDeleteDevice;
 extern fn_IoDeleteSymbolicLink _IoDeleteSymbolicLink;
+extern fn_ExAllocatePool2 _ExAllocatePool2;
+extern fn_ExFreePoolWithTag _ExFreePoolWithTag;
 
 extern POBJECT_TYPE* _IoDriverObjectType;
 extern PLIST_ENTRY _PsLoadedModuleList;
