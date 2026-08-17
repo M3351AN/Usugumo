@@ -121,5 +121,8 @@
     <MASM Include="src\kmem.asm">
       <Filter>Source Files</Filter>
     </MASM>
+    <MASM Include="src\keybd.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
   </ItemGroup>
 </Project>

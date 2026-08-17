@@ -29,6 +29,16 @@ typedef ULONG_PTR QWORD;
 #define MOUSE_MOVE_ABSOLUTE 0x0001
 #define MOUSE_VIRTUAL_DESKTOP 0x0002
 
+#define KEY_MAKE 0x0
+#define KEY_BREAK 0x1
+#define KEY_E0 0x2
+#define KEY_E1 0x4
+
+#define KEYEVENTF_EXTENDEDKEY 0x0001
+#define KEYEVENTF_KEYUP 0x0002
+#define KEYEVENTF_UNICODE 0x0004
+#define KEYEVENTF_SCANCODE 0x0008
+
 typedef struct _PEB_LDR_DATA {
   ULONG Length;
   UCHAR Initialized;
@@ -128,8 +138,8 @@ typedef struct _KEYBOARD_OBJECT {
   PDEVICE_OBJECT keyboard_device;
   KeyboardClassServiceCallbackFn service_callback;
   PDRIVER_OBJECT class_driver_object;
-  PDRIVER_OBJECT input_driver_object;
-  BOOLEAN use_keyboard;
+  PDRIVER_OBJECT hid_driver_object;
+  BOOL use_keyboard;
 } KEYBOARD_OBJECT, *PKEYBOARD_OBJECT;
 
 typedef BOOL(__fastcall* GreProtectSpriteContentFn)(PVOID, HWND, INT, UINT);

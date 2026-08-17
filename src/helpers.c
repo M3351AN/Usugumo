@@ -187,23 +187,6 @@ PVOID SearchSignForImage(PVOID ImageBase, PUCHAR Pattern, PCHAR Mask,
   return NULL;
 }
 
-NTSTATUS ZwReferenceObjectByName(PUNICODE_STRING ObjectName, ULONG Attributes,
-                                 PACCESS_STATE PassedAccessState,
-                                 ACCESS_MASK DesiredAccess,
-                                 POBJECT_TYPE ObjectType,
-                                 KPROCESSOR_MODE AccessMode,
-                                 LPVOID ParseContext, PDRIVER_OBJECT* Object) {
-  NTSTATUS Status = STATUS_UNSUCCESSFUL;
-
-  if (_ObReferenceObjectByName != NULL) {
-    Status = _ObReferenceObjectByName(ObjectName, Attributes, PassedAccessState,
-                                      DesiredAccess, ObjectType, AccessMode,
-                                      ParseContext, Object);
-  }
-
-  return Status;
-}
-
 NTSTATUS GetMachineGuid(WCHAR* guid_buf, size_t buf_len) {
   if (!guid_buf || buf_len < 64) {
     return STATUS_INVALID_PARAMETER;

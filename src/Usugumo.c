@@ -54,12 +54,7 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
   status = _IoCreateSymbolicLink(&g_symbolic_link_name, &device_name);
   if (status != STATUS_SUCCESS) return status;
 
-  KeyboardSpinLockInit();
-  status = SearchKdbServiceCallBack();
-  if (status != STATUS_SUCCESS) return status;
-
   if (!InitGreProtectSpriteContent()) {
-    return STATUS_ABANDONED;
     // NOT HANDLE. RETURN
   }
 

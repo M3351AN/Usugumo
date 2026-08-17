@@ -4,12 +4,13 @@
 #define _KEYBD_OPERATION_H_
 #include "../includes/usugumo_request_define.h"
 
-NTSTATUS SearchKdbServiceCallBack(void);
+VOID KeyboardClassServiceCallbackMeme(PDEVICE_OBJECT DeviceObject,
+                                      PKEYBOARD_INPUT_DATA InputDataStart,
+                                      PKEYBOARD_INPUT_DATA InputDataEnd,
+                                      PULONG InputDataConsumed);
 
 VOID KeyboardRelease(void);
 
 VOID HandleKeybdEvent(Requests*);
-
-VOID KeyboardSpinLockInit();
 
 #endif

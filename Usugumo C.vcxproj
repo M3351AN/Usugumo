@@ -157,6 +157,7 @@
   </ItemGroup>
   <ItemGroup>
     <MASM Include="src\helper_utils.asm" />
+    <MASM Include="src\keybd.asm" />
     <MASM Include="src\ke_reimpl.asm" />
     <MASM Include="src\kmem.asm" />
     <MASM Include="src\mouse.asm" />
