@@ -1,4 +1,4 @@
-// Copyright (c) 2026 渟雲. All rights reserved.
+﻿// Copyright (c) 2026 渟雲. All rights reserved.
 #include "./imports.h"
 
 fn_KeAcquireSpinLockAtDpcLevel _KeAcquireSpinLockAtDpcLevel;
@@ -7,6 +7,7 @@ fn_IofCompleteRequest _IofCompleteRequest;
 fn_IoReleaseRemoveLockEx _IoReleaseRemoveLockEx;
 fn_IoCreateDriver _IoCreateDriver;
 fn_ObReferenceObjectByName _ObReferenceObjectByName;
+fn_ObfDereferenceObject _ObfDereferenceObject;
 fn_MmMapLockedPagesSpecifyCache _MmMapLockedPagesSpecifyCache;
 fn_MmIsAddressValid _MmIsAddressValid;
 fn_MmMapIoSpace _MmMapIoSpace;
@@ -22,6 +23,7 @@ NTSTATUS ResolveImports(VOID) {
       RTL_CONSTANT_STRING(L"IoReleaseRemoveLockEx"),
       RTL_CONSTANT_STRING(L"IoCreateDriver"),
       RTL_CONSTANT_STRING(L"ObReferenceObjectByName"),
+      RTL_CONSTANT_STRING(L"ObfDereferenceObject"),
       RTL_CONSTANT_STRING(L"MmMapLockedPagesSpecifyCache"),
       RTL_CONSTANT_STRING(L"MmIsAddressValid"),
       RTL_CONSTANT_STRING(L"MmMapIoSpace"),
@@ -35,6 +37,7 @@ NTSTATUS ResolveImports(VOID) {
       (PVOID*)&_IoReleaseRemoveLockEx,
       (PVOID*)&_IoCreateDriver,
       (PVOID*)&_ObReferenceObjectByName,
+      (PVOID*)&_ObfDereferenceObject,
       (PVOID*)&_MmMapLockedPagesSpecifyCache,
       (PVOID*)&_MmIsAddressValid,
       (PVOID*)&_MmMapIoSpace,

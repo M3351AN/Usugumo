@@ -1,4 +1,4 @@
-// Copyright (c) 2026 渟雲. All rights reserved.
+﻿// Copyright (c) 2026 渟雲. All rights reserved.
 // https://github.com/oakboat/GsDriver-ring3/
 #include "./common.h"
 
@@ -132,12 +132,32 @@ NTSTATUS SearchKdbServiceCallBack(void) {
           break;
         }
       }
-      ObfDereferenceObject(ClassObject);
     }
-    ObfDereferenceObject(DriverObject);
+
+    if (NT_SUCCESS(Status)) {
+      gKeyboardObject.class_driver_object = ClassObject;
+      gKeyboardObject.input_driver_object = DriverObject;
+    } else {
+      if (ClassObject != NULL) {
+        _ObfDereferenceObject(ClassObject);
+      }
+      _ObfDereferenceObject(DriverObject);
+    }
   }
 
   return Status;
+}
+
+VOID KeyboardRelease(void) {
+  if (gKeyboardObject.class_driver_object) {
+    _ObfDereferenceObject(gKeyboardObject.class_driver_object);
+    gKeyboardObject.class_driver_object = NULL;
+  }
+  if (gKeyboardObject.input_driver_object) {
+    _ObfDereferenceObject(gKeyboardObject.input_driver_object);
+    gKeyboardObject.input_driver_object = NULL;
+  }
+  gKeyboardObject.use_keyboard = 0;
 }
 
 inline BOOL KeyboardOpen(void) {

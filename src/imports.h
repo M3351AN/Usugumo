@@ -1,4 +1,4 @@
-// Copyright (c) 2026 渟雲. All rights reserved.
+﻿// Copyright (c) 2026 渟雲. All rights reserved.
 #pragma once
 #ifndef _IMPORTS_H_
 #define _IMPORTS_H_
@@ -21,6 +21,7 @@ typedef NTSTATUS(NTAPI* fn_ObReferenceObjectByName)(
     _In_opt_ PACCESS_STATE AccessState, _In_opt_ ACCESS_MASK DesiredAccess,
     _In_ POBJECT_TYPE ObjectType, _In_ KPROCESSOR_MODE AccessMode,
     _Inout_opt_ PVOID ParseContext, _Out_ PVOID* Object);
+typedef LONG_PTR(NTAPI* fn_ObfDereferenceObject)(_In_ PVOID Object);
 typedef PVOID(NTAPI* fn_MmMapLockedPagesSpecifyCache)(
     _In_ PMDL MemoryDescriptorList, _In_ KPROCESSOR_MODE AccessMode,
     _In_ MEMORY_CACHING_TYPE CacheType, _In_opt_ PVOID RequestedAddress,
@@ -42,6 +43,7 @@ extern fn_IofCompleteRequest _IofCompleteRequest;
 extern fn_IoReleaseRemoveLockEx _IoReleaseRemoveLockEx;
 extern fn_IoCreateDriver _IoCreateDriver;
 extern fn_ObReferenceObjectByName _ObReferenceObjectByName;
+extern fn_ObfDereferenceObject _ObfDereferenceObject;
 extern fn_MmMapLockedPagesSpecifyCache _MmMapLockedPagesSpecifyCache;
 extern fn_MmIsAddressValid _MmIsAddressValid;
 extern fn_MmMapIoSpace _MmMapIoSpace;

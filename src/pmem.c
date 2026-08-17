@@ -1,4 +1,4 @@
-// Copyright (c) 2026 渟雲. All rights reserved.
+﻿// Copyright (c) 2026 渟雲. All rights reserved.
 // Cross-process memory read/write via CR3 + page table walk + physical I/O.
 // Ported from Valthrun valthrun-driver-kernel driver/src/pmem.rs
 #include "./common.h"
@@ -11,10 +11,15 @@ extern ULONG g_UserDirectoryTableBaseOffset;
 
 NTSTATUS ReadPhysical(UINT64 PhysicalAddress, PVOID Buffer, SIZE_T Size,
                       PSIZE_T BytesRead) {
-  MM_COPY_ADDRESS address;
-  address.PhysicalAddress.QuadPart = (LONGLONG)PhysicalAddress;
-  return _MmCopyMemory(Buffer, address, Size, MM_COPY_MEMORY_PHYSICAL,
-                       BytesRead);
+  if (Size == 0) return STATUS_SUCCESS;
+  PHYSICAL_ADDRESS phys;
+  phys.QuadPart = (LONGLONG)PhysicalAddress;
+  PVOID mapped = _MmMapIoSpace(phys, Size, MmCached);
+  if (mapped == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+  kmemmove(Buffer, mapped, Size);
+  _MmUnmapIoSpace(mapped, Size);
+  if (BytesRead != NULL) *BytesRead = Size;
+  return STATUS_SUCCESS;
 }
 
 NTSTATUS WritePhysical(UINT64 PhysicalAddress, const void* Buffer,

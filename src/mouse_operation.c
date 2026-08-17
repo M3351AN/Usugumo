@@ -1,4 +1,4 @@
-// Copyright (c) 2026 渟雲. All rights reserved.
+﻿// Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
 MOUSE_OBJECT gMouseObject = {0};
 
@@ -38,7 +38,7 @@ inline BOOL MouseOpen(void) {
     }
 
     if (!NT_SUCCESS(status) || hid_driver_object == NULL) {
-      ObfDereferenceObject(class_driver_object);
+      _ObfDereferenceObject(class_driver_object);
       gMouseObject.use_mouse = 0;
       return FALSE;
     }
@@ -85,8 +85,8 @@ inline BOOL MouseOpen(void) {
       }
     }
 
-    ObfDereferenceObject(class_driver_object);
-    ObfDereferenceObject(hid_driver_object);
+    gMouseObject.class_driver_object = class_driver_object;
+    gMouseObject.hid_driver_object = hid_driver_object;
 
     gMouseObject.use_mouse =
         (gMouseObject.mouse_device && gMouseObject.service_callback) ? 1 : 0;
@@ -94,6 +94,18 @@ inline BOOL MouseOpen(void) {
 
   return (gMouseObject.mouse_device != NULL) &&
          (gMouseObject.service_callback != NULL);
+}
+
+VOID MouseRelease(void) {
+  if (gMouseObject.class_driver_object) {
+    _ObfDereferenceObject(gMouseObject.class_driver_object);
+    gMouseObject.class_driver_object = NULL;
+  }
+  if (gMouseObject.hid_driver_object) {
+    _ObfDereferenceObject(gMouseObject.hid_driver_object);
+    gMouseObject.hid_driver_object = NULL;
+  }
+  gMouseObject.use_mouse = 0;
 }
 
 inline void MouseCall(long x, long y, unsigned short button_flags,

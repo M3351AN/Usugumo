@@ -5,6 +5,8 @@ UNICODE_STRING g_symbolic_link_name = {0};
 
 VOID DriverUnload(_In_ struct _DRIVER_OBJECT* DriverObject) {
   UNREFERENCED_PARAMETER(DriverObject);
+  MouseRelease();
+  KeyboardRelease();
   if (DriverObject->DeviceObject) {
     if (g_symbolic_link_name.Buffer != NULL) {
       IoDeleteSymbolicLink(&g_symbolic_link_name);

@@ -6,6 +6,8 @@
 
 NTSTATUS SearchKdbServiceCallBack(void);
 
+VOID KeyboardRelease(void);
+
 VOID HandleKeybdEvent(Requests*);
 
 VOID KeyboardSpinLockInit();

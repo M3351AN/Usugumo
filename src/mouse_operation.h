@@ -9,6 +9,8 @@ VOID MouseClassServiceCallbackMeme(PDEVICE_OBJECT DeviceObject,
                                PMOUSE_INPUT_DATA InputDataEnd,
                                PULONG InputDataConsumed);
 
+VOID MouseRelease(void);
+
 VOID HandleMouseEvent(Requests*);
 
 #endif

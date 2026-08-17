@@ -111,6 +111,8 @@ typedef VOID (*MouseClassServiceCallbackFn)(PDEVICE_OBJECT DeviceObject,
 typedef struct _MOUSE_OBJECT {
   PDEVICE_OBJECT mouse_device;
   MouseClassServiceCallbackFn service_callback;
+  PDRIVER_OBJECT class_driver_object;
+  PDRIVER_OBJECT hid_driver_object;
   BOOL use_mouse;
 } MOUSE_OBJECT, *PMOUSE_OBJECT;
 
@@ -130,6 +132,8 @@ typedef VOID (*KeyboardClassServiceCallbackFn)(PDEVICE_OBJECT DeviceObject,
 typedef struct _KEYBOARD_OBJECT {
   PDEVICE_OBJECT keyboard_device;
   KeyboardClassServiceCallbackFn service_callback;
+  PDRIVER_OBJECT class_driver_object;
+  PDRIVER_OBJECT input_driver_object;
   BOOLEAN use_keyboard;
 } KEYBOARD_OBJECT, *PKEYBOARD_OBJECT;
 
