@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 // Cross-process memory read/write via CR3 + page table walk + physical I/O.
 // Ported from Valthrun valthrun-driver-kernel driver/src/pmem.rs
 #include "./common.h"
@@ -45,7 +45,8 @@ static UINT64 ReadPhysicalU64(UINT64 PhysicalAddress) {
   return value;
 }
 
-UINT64 TranslateLinearAddress(UINT64 DirectoryTableBase, UINT64 VirtualAddress) {
+UINT64 TranslateLinearAddress(UINT64 DirectoryTableBase,
+                              UINT64 VirtualAddress) {
   DirectoryTableBase &= ~0xFULL;
   UINT64 pageOffset = VirtualAddress & ~(~0ULL << PMEM_PAGE_OFFSET_SIZE);
   UINT64 pte = (VirtualAddress >> 12) & 0x1FF;
@@ -71,8 +72,8 @@ UINT64 TranslateLinearAddress(UINT64 DirectoryTableBase, UINT64 VirtualAddress) 
     return (ptValue & PMEM_PMASK) + (VirtualAddress & ~(~0ULL << 21));
   }
 
-  UINT64 pteValue = ReadPhysicalU64((ptValue & PMEM_PMASK) + pte * 0x08) &
-                    PMEM_PMASK;
+  UINT64 pteValue =
+      ReadPhysicalU64((ptValue & PMEM_PMASK) + pte * 0x08) & PMEM_PMASK;
   if (pteValue == 0) return 0;
   return pteValue + pageOffset;
 }
@@ -86,7 +87,8 @@ UINT64 GetProcessCr3(PEPROCESS Process) {
   if (g_UserDirectoryTableBaseOffset == 0) {
     if (!InitOffsetsByVersion()) return 0;
   }
-  return *(volatile UINT64*)((UINT_PTR)Process + g_UserDirectoryTableBaseOffset);
+  return *(volatile UINT64*)((UINT_PTR)Process +
+                             g_UserDirectoryTableBaseOffset);
 }
 
 NTSTATUS ReadProcessMemory(PEPROCESS Process, UINT64 VirtualAddress,
@@ -139,37 +141,63 @@ NTSTATUS WriteProcessMemory(PEPROCESS Process, UINT64 VirtualAddress,
 }
 
 NTSTATUS CopyVirtualMemory(PEPROCESS FromProcess, UINT64 FromAddress,
-                           PEPROCESS ToProcess, UINT64 ToAddress,
-                           SIZE_T Size) {
+                           PEPROCESS ToProcess, UINT64 ToAddress, SIZE_T Size) {
   if (FromProcess == NULL || ToProcess == NULL || Size == 0)
     return STATUS_INVALID_PARAMETER;
+
   UINT64 fromDtb = GetProcessCr3(FromProcess);
   UINT64 toDtb = GetProcessCr3(ToProcess);
   if (fromDtb == 0 || toDtb == 0) return STATUS_INVALID_PARAMETER;
 
-  UINT8 scratch[PMEM_PAGE_SIZE];
+  UINT8* scratch =
+      (UINT8*)_ExAllocatePool2(POOL_FLAG_NON_PAGED | POOL_FLAG_UNINITIALIZED,
+                               PMEM_PAGE_SIZE, 0x446C6148);
+  if (scratch == NULL) {
+    return STATUS_INSUFFICIENT_RESOURCES;
+  }
+
+  NTSTATUS status = STATUS_SUCCESS;
   SIZE_T offset = 0;
+
   while (offset < Size) {
     SIZE_T remaining = Size - offset;
     UINT64 fva = FromAddress + offset;
     UINT64 tva = ToAddress + offset;
+
     SIZE_T chunk = PMEM_PAGE_SIZE - (SIZE_T)(fva & (PMEM_PAGE_SIZE - 1));
     SIZE_T chunk2 = PMEM_PAGE_SIZE - (SIZE_T)(tva & (PMEM_PAGE_SIZE - 1));
     if (chunk2 < chunk) chunk = chunk2;
     if (chunk > remaining) chunk = remaining;
 
     UINT64 fphys = TranslateLinearAddress(fromDtb, fva);
-    if (fphys == 0) return STATUS_PARTIAL_COPY;
+    if (fphys == 0) {
+      status = STATUS_PARTIAL_COPY;
+      goto Cleanup;
+    }
+
     SIZE_T done = 0;
-    NTSTATUS status = ReadPhysical(fphys, scratch, chunk, &done);
-    if (!NT_SUCCESS(status)) return status;
+    status = ReadPhysical(fphys, scratch, chunk, &done);
+    if (!NT_SUCCESS(status)) {
+      goto Cleanup;
+    }
 
     UINT64 tphys = TranslateLinearAddress(toDtb, tva);
-    if (tphys == 0) return STATUS_PARTIAL_COPY;
+    if (tphys == 0) {
+      status = STATUS_PARTIAL_COPY;
+      goto Cleanup;
+    }
+
     status = WritePhysical(tphys, scratch, chunk);
-    if (!NT_SUCCESS(status)) return status;
+    if (!NT_SUCCESS(status)) {
+      goto Cleanup;
+    }
 
     offset += chunk;
   }
-  return STATUS_SUCCESS;
+
+Cleanup:
+  RtlSecureZeroMemory(scratch, PMEM_PAGE_SIZE);
+  _ExFreePoolWithTag(scratch, 0);
+
+  return status;
 }
