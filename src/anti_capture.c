@@ -1,13 +1,12 @@
 // Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
 
-extern PLIST_ENTRY PsLoadedModuleList;
 static GreProtectSpriteContentFn GreProtectSpriteContent = NULL;
 
 static PVOID GetWin32kBase() {
-  if (!PsLoadedModuleList) return NULL;
-  for (PLIST_ENTRY Entry = PsLoadedModuleList->Flink;
-       Entry != PsLoadedModuleList; Entry = Entry->Flink) {
+  if (!_PsLoadedModuleList) return NULL;
+  for (PLIST_ENTRY Entry = _PsLoadedModuleList->Flink;
+       Entry != _PsLoadedModuleList; Entry = Entry->Flink) {
     PLDR_DATA_TABLE_ENTRY Module =
         CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
 

@@ -7,13 +7,16 @@ fn_IofCompleteRequest _IofCompleteRequest;
 fn_IoReleaseRemoveLockEx _IoReleaseRemoveLockEx;
 fn_IoCreateDriver _IoCreateDriver;
 fn_ObReferenceObjectByName _ObReferenceObjectByName;
+fn_ObfReferenceObject _ObfReferenceObject;
 fn_ObfDereferenceObject _ObfDereferenceObject;
 fn_MmMapLockedPagesSpecifyCache _MmMapLockedPagesSpecifyCache;
 fn_MmIsAddressValid _MmIsAddressValid;
 fn_MmMapIoSpace _MmMapIoSpace;
 fn_MmUnmapIoSpace _MmUnmapIoSpace;
 fn_MmCopyMemory _MmCopyMemory;
+fn_PsLookupProcessByProcessId _PsLookupProcessByProcessId;
 POBJECT_TYPE* _IoDriverObjectType;
+PLIST_ENTRY _PsLoadedModuleList;
 
 NTSTATUS ResolveImports(VOID) {
   static UNICODE_STRING func_names[] = {
@@ -23,12 +26,14 @@ NTSTATUS ResolveImports(VOID) {
       RTL_CONSTANT_STRING(L"IoReleaseRemoveLockEx"),
       RTL_CONSTANT_STRING(L"IoCreateDriver"),
       RTL_CONSTANT_STRING(L"ObReferenceObjectByName"),
+      RTL_CONSTANT_STRING(L"ObfReferenceObject"),
       RTL_CONSTANT_STRING(L"ObfDereferenceObject"),
       RTL_CONSTANT_STRING(L"MmMapLockedPagesSpecifyCache"),
       RTL_CONSTANT_STRING(L"MmIsAddressValid"),
       RTL_CONSTANT_STRING(L"MmMapIoSpace"),
       RTL_CONSTANT_STRING(L"MmUnmapIoSpace"),
       RTL_CONSTANT_STRING(L"MmCopyMemory"),
+      RTL_CONSTANT_STRING(L"PsLookupProcessByProcessId"),
   };
   PVOID* func_slots[] = {
       (PVOID*)&_KeAcquireSpinLockAtDpcLevel,
@@ -37,12 +42,14 @@ NTSTATUS ResolveImports(VOID) {
       (PVOID*)&_IoReleaseRemoveLockEx,
       (PVOID*)&_IoCreateDriver,
       (PVOID*)&_ObReferenceObjectByName,
+      (PVOID*)&_ObfReferenceObject,
       (PVOID*)&_ObfDereferenceObject,
       (PVOID*)&_MmMapLockedPagesSpecifyCache,
       (PVOID*)&_MmIsAddressValid,
       (PVOID*)&_MmMapIoSpace,
       (PVOID*)&_MmUnmapIoSpace,
       (PVOID*)&_MmCopyMemory,
+      (PVOID*)&_PsLookupProcessByProcessId,
   };
 
   for (ULONG i = 0; i < RTL_NUMBER_OF(func_names); i++) {
@@ -59,6 +66,13 @@ NTSTATUS ResolveImports(VOID) {
     return STATUS_NOT_FOUND;
   }
   _IoDriverObjectType = *(POBJECT_TYPE**)data_address;
+
+  UNICODE_STRING list_name = RTL_CONSTANT_STRING(L"PsLoadedModuleList");
+  PVOID list_address = MmGetSystemRoutineAddress(&list_name);
+  if (list_address == NULL) {
+    return STATUS_NOT_FOUND;
+  }
+  _PsLoadedModuleList = *(PLIST_ENTRY*)list_address;
 
   return STATUS_SUCCESS;
 }

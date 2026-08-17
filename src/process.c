@@ -19,13 +19,13 @@ BOOLEAN ReadVM(Requests* in) {
 
   status = PsLookupProcessByProcessId((HANDLE)in->target_pid, &from_process);
   if (!NT_SUCCESS(status)) {
-    ObDereferenceObject(to_process);
+    _ObfDereferenceObject(to_process);
     return FALSE;
   }
 
     if (PsGetProcessExitStatusTrick(from_process) != STATUS_PENDING) {
-    ObDereferenceObject(from_process);
-    ObDereferenceObject(to_process);
+    _ObfDereferenceObject(from_process);
+    _ObfDereferenceObject(to_process);
     return FALSE;
   }
 
@@ -37,8 +37,8 @@ BOOLEAN ReadVM(Requests* in) {
     status = STATUS_ACCESS_VIOLATION;
   }
 
-  ObDereferenceObject(from_process);
-  ObDereferenceObject(to_process);
+  _ObfDereferenceObject(from_process);
+  _ObfDereferenceObject(to_process);
   return NT_SUCCESS(status);
 }
 
@@ -59,13 +59,13 @@ BOOLEAN WriteVM(Requests* in) {
 
   status = PsLookupProcessByProcessId((HANDLE)in->target_pid, &to_process);
   if (!NT_SUCCESS(status)) {
-    ObDereferenceObject(from_process);
+    _ObfDereferenceObject(from_process);
     return FALSE;
   }
 
   if (PsGetProcessExitStatusTrick(to_process) != STATUS_PENDING) {
-    ObDereferenceObject(from_process);
-    ObDereferenceObject(to_process);
+    _ObfDereferenceObject(from_process);
+    _ObfDereferenceObject(to_process);
     return FALSE;
   }
 
@@ -77,8 +77,8 @@ BOOLEAN WriteVM(Requests* in) {
     status = STATUS_ACCESS_VIOLATION;
   }
 
-  ObDereferenceObject(from_process);
-  ObDereferenceObject(to_process);
+  _ObfDereferenceObject(from_process);
+  _ObfDereferenceObject(to_process);
   return NT_SUCCESS(status);
 }
 
@@ -164,7 +164,7 @@ UINT64 GetDllAddress(Requests* in) {
   if (!NT_SUCCESS(status)) return 0;
 
   if (PsGetProcessExitStatusTrick(source_process) != STATUS_PENDING) {
-    ObDereferenceObject(source_process);
+    _ObfDereferenceObject(source_process);
     return 0;
   }
 
@@ -173,7 +173,7 @@ UINT64 GetDllAddress(Requests* in) {
   DecodeFixedStr64(&in->name_str, decoded, in->name_length);
   PWSTR wStr = ConvertToPWSTR(decoded);
   if (!wStr) {
-    ObDereferenceObject(source_process);
+    _ObfDereferenceObject(source_process);
     return 0;
   }
 
@@ -188,7 +188,7 @@ UINT64 GetDllAddress(Requests* in) {
   }
 
   ExFreePoolWithTag(wStr, 'NtFs');
-  ObDereferenceObject(source_process);
+  _ObfDereferenceObject(source_process);
   return base_address;
 }
 
@@ -204,7 +204,7 @@ UINT64 GetDllSize(Requests* in) {
   if (!NT_SUCCESS(status)) return 0;
 
   if (PsGetProcessExitStatusTrick(source_process) != STATUS_PENDING) {
-    ObDereferenceObject(source_process);
+    _ObfDereferenceObject(source_process);
     return 0;
   }
 
@@ -213,7 +213,7 @@ UINT64 GetDllSize(Requests* in) {
   DecodeFixedStr64(&in->name_str, decoded, in->name_length);
   PWSTR wStr = ConvertToPWSTR(decoded);
   if (!wStr) {
-    ObDereferenceObject(source_process);
+    _ObfDereferenceObject(source_process);
     return 0;
   }
 
@@ -228,7 +228,7 @@ UINT64 GetDllSize(Requests* in) {
   }
 
   ExFreePoolWithTag(wStr, 'NtFs');
-  ObDereferenceObject(source_process);
+  _ObfDereferenceObject(source_process);
   return module_size;
 }
 
@@ -281,7 +281,7 @@ UINT64 GetProcessIdByName(Requests* in) {
     return 0;
 
   PEPROCESS currentProcess = startProcess;
-  ObReferenceObject(currentProcess);
+  _ObfReferenceObject(currentProcess);
   UINT64 foundPid = 0;
   ULONG processCount = 0;
 
@@ -327,10 +327,10 @@ UINT64 GetProcessIdByName(Requests* in) {
 
     if (nextPid && NT_SUCCESS(PsLookupProcessByProcessId(nextPid, &nextSafe))) {
       if (nextSafe == startProcess) {
-        ObDereferenceObject(nextSafe);
+        _ObfDereferenceObject(nextSafe);
         break;
       }
-      ObDereferenceObject(currentProcess);
+      _ObfDereferenceObject(currentProcess);
       currentProcess = nextSafe;
     } else {
       break;
@@ -338,8 +338,8 @@ UINT64 GetProcessIdByName(Requests* in) {
   }
 
   if (currentProcess && currentProcess != startProcess)
-    ObDereferenceObject(currentProcess);
-  if (startProcess) ObDereferenceObject(startProcess);
+    _ObfDereferenceObject(currentProcess);
+  if (startProcess) _ObfDereferenceObject(startProcess);
 
   return foundPid;
 }
