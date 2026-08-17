@@ -29,10 +29,6 @@ typedef ULONG_PTR QWORD;
 #define MOUSE_MOVE_ABSOLUTE 0x0001
 #define MOUSE_VIRTUAL_DESKTOP 0x0002
 
-
-
-
-
 typedef struct _PEB_LDR_DATA {
   ULONG Length;
   UCHAR Initialized;
@@ -124,10 +120,9 @@ typedef struct _KEYBOARD_INPUT_DATA {
   ULONG ExtraInformation;
 } KEYBOARD_INPUT_DATA, *PKEYBOARD_INPUT_DATA;
 
-typedef VOID (*KeyboardClassServiceCallbackFn)(PDEVICE_OBJECT DeviceObject,
-                                    PKEYBOARD_INPUT_DATA InputDataStart,
-                                    PKEYBOARD_INPUT_DATA InputDataEnd,
-                                    PULONG InputDataConsumed);
+typedef VOID (*KeyboardClassServiceCallbackFn)(
+    PDEVICE_OBJECT DeviceObject, PKEYBOARD_INPUT_DATA InputDataStart,
+    PKEYBOARD_INPUT_DATA InputDataEnd, PULONG InputDataConsumed);
 
 typedef struct _KEYBOARD_OBJECT {
   PDEVICE_OBJECT keyboard_device;
@@ -137,6 +132,14 @@ typedef struct _KEYBOARD_OBJECT {
   BOOLEAN use_keyboard;
 } KEYBOARD_OBJECT, *PKEYBOARD_OBJECT;
 
-typedef BOOL(__fastcall *GreProtectSpriteContentFn)(PVOID, HWND, INT, UINT);
+typedef BOOL(__fastcall* GreProtectSpriteContentFn)(PVOID, HWND, INT, UINT);
+
+typedef struct _STACK_CREATION_SETTINGS {
+  unsigned int Flags;
+  unsigned int DeviceType;
+  void* SecurityDescriptor;
+  unsigned int Characteristics;
+  unsigned int Exclusivity;
+} STACK_CREATION_SETTINGS, *PSTACK_CREATION_SETTINGS;
 
 #endif

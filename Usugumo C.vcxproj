@@ -84,7 +84,7 @@
     <Link>
       <LargeAddressAware>true</LargeAddressAware>
       <RandomizedBaseAddress>true</RandomizedBaseAddress>
-      <AdditionalDependencies>Wdmsec.lib;%(AdditionalDependencies);$(KernelBufferOverflowLib);$(DDK_LIB_PATH)ntoskrnl.lib;$(DDK_LIB_PATH)hal.lib;$(DDK_LIB_PATH)wmilib.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);$(KernelBufferOverflowLib);$(DDK_LIB_PATH)ntoskrnl.lib;$(DDK_LIB_PATH)hal.lib;$(DDK_LIB_PATH)wmilib.lib</AdditionalDependencies>
       <GenerateMapFile>true</GenerateMapFile>
       <EntryPointSymbol>UsugumoEntry</EntryPointSymbol>
     </Link>
@@ -113,7 +113,7 @@
       <LargeAddressAware>true</LargeAddressAware>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <RandomizedBaseAddress>true</RandomizedBaseAddress>
-      <AdditionalDependencies>Wdmsec.lib;%(AdditionalDependencies);$(KernelBufferOverflowLib);$(DDK_LIB_PATH)ntoskrnl.lib;$(DDK_LIB_PATH)hal.lib;$(DDK_LIB_PATH)wmilib.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);$(KernelBufferOverflowLib);$(DDK_LIB_PATH)ntoskrnl.lib;$(DDK_LIB_PATH)hal.lib;$(DDK_LIB_PATH)wmilib.lib</AdditionalDependencies>
       <GenerateMapFile>true</GenerateMapFile>
       <MergeSections>_TEXT=.vmp;_PAGE=.tmd</MergeSections>
       <EntryPointSymbol>UsugumoEntry</EntryPointSymbol>
@@ -128,6 +128,7 @@
   <ItemGroup>
     <ClCompile Include="src\anti_capture.c" />
     <ClCompile Include="src\dispatches.c" />
+    <ClCompile Include="src\wdm_reimpl.c" />
     <ClInclude Include="includes\usugumo_request_define.h" />
     <ClInclude Include="src\keybd_operation.h" />
     <ClCompile Include="src\keybd_operation.c" />

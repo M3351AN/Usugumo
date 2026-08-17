@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 #pragma once
 #ifndef _REIMPL_H_
 #define _REIMPL_H_
@@ -24,5 +24,11 @@ PCHAR PsGetProcessImageFileNameTrick(PEPROCESS);
 HANDLE PsGetProcessIdTrick(PEPROCESS);
 
 NTSTATUS PsGetProcessExitStatusTrick(PEPROCESS);
+
+NTSTATUS
+WdmlibIoCreateDeviceSecureMeme(DRIVER_OBJECT*, unsigned int, UNICODE_STRING*,
+                               unsigned int, unsigned int, unsigned __int8,
+                               const UNICODE_STRING*, const GUID*,
+                               DEVICE_OBJECT**);
 
 #endif

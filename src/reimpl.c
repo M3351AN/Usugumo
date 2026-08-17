@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
 
 __int64 _kascii_stricmp(const char* a1, const char* a2) {
