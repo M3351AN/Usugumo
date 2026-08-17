@@ -24,8 +24,8 @@ NTSTATUS WriteDispatch(PDEVICE_OBJECT device_obj, PIRP irp) {
     return irp->IoStatus.Status;
   }
 
-  PRequests pRequest =
-      (PRequests)MmGetSystemAddressForMdlSafe(pMdl, NormalPagePriority);
+  PRequests pRequest = (PRequests)_MmMapLockedPagesSpecifyCache(
+      pMdl, KernelMode, MmCached, NULL, NormalPagePriority);
   if (pRequest == NULL) {
     irp->IoStatus.Status = STATUS_INSUFFICIENT_RESOURCES;
     _IofCompleteRequest(irp, IO_NO_INCREMENT);
@@ -62,8 +62,8 @@ NTSTATUS ReadDispatch(PDEVICE_OBJECT device_obj, PIRP irp) {
     return irp->IoStatus.Status;
   }
 
-  PRequests pRequest =
-      (PRequests)MmGetSystemAddressForMdlSafe(pMdl, NormalPagePriority);
+  PRequests pRequest = (PRequests)_MmMapLockedPagesSpecifyCache(
+      pMdl, KernelMode, MmCached, NULL, NormalPagePriority);
   if (pRequest == NULL) {
     irp->IoStatus.Status = STATUS_INSUFFICIENT_RESOURCES;
     _IofCompleteRequest(irp, IO_NO_INCREMENT);

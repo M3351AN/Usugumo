@@ -21,6 +21,20 @@ typedef NTSTATUS(NTAPI* fn_ObReferenceObjectByName)(
     _In_opt_ PACCESS_STATE AccessState, _In_opt_ ACCESS_MASK DesiredAccess,
     _In_ POBJECT_TYPE ObjectType, _In_ KPROCESSOR_MODE AccessMode,
     _Inout_opt_ PVOID ParseContext, _Out_ PVOID* Object);
+typedef PVOID(NTAPI* fn_MmMapLockedPagesSpecifyCache)(
+    _In_ PMDL MemoryDescriptorList, _In_ KPROCESSOR_MODE AccessMode,
+    _In_ MEMORY_CACHING_TYPE CacheType, _In_opt_ PVOID RequestedAddress,
+    _In_ ULONG Priority);
+typedef BOOLEAN(NTAPI* fn_MmIsAddressValid)(_In_ PVOID VirtualAddress);
+typedef PVOID(NTAPI* fn_MmMapIoSpace)(_In_ PHYSICAL_ADDRESS PhysicalAddress,
+                                      _In_ SIZE_T NumberOfBytes,
+                                      _In_ MEMORY_CACHING_TYPE CacheType);
+typedef VOID(NTAPI* fn_MmUnmapIoSpace)(_In_ PVOID BaseAddress,
+                                       _In_ SIZE_T NumberOfBytes);
+typedef NTSTATUS(NTAPI* fn_MmCopyMemory)(
+    _In_ PVOID TargetAddress, _In_ MM_COPY_ADDRESS SourceAddress,
+    _In_ SIZE_T NumberOfBytes, _In_ ULONG Flags,
+    _In_opt_ PSIZE_T NumberOfBytesTransferred);
 
 extern fn_KeAcquireSpinLockAtDpcLevel _KeAcquireSpinLockAtDpcLevel;
 extern fn_KeReleaseSpinLockFromDpcLevel _KeReleaseSpinLockFromDpcLevel;
@@ -28,6 +42,11 @@ extern fn_IofCompleteRequest _IofCompleteRequest;
 extern fn_IoReleaseRemoveLockEx _IoReleaseRemoveLockEx;
 extern fn_IoCreateDriver _IoCreateDriver;
 extern fn_ObReferenceObjectByName _ObReferenceObjectByName;
+extern fn_MmMapLockedPagesSpecifyCache _MmMapLockedPagesSpecifyCache;
+extern fn_MmIsAddressValid _MmIsAddressValid;
+extern fn_MmMapIoSpace _MmMapIoSpace;
+extern fn_MmUnmapIoSpace _MmUnmapIoSpace;
+extern fn_MmCopyMemory _MmCopyMemory;
 
 extern POBJECT_TYPE* _IoDriverObjectType;
 

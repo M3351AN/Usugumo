@@ -55,8 +55,8 @@ NTSTATUS SearchServiceFromKdbExt(PDRIVER_OBJECT KbdDriverObject,
       KeReleaseSpinLock(&g_KeyboardSpinLock, Irql);
 
       for (i = 0; i < DeviceExtSize; i++, DeviceExt++) {
-        if (MmIsAddressValid(DeviceExt) &&
-            MmIsAddressValid((PVOID*)DeviceExt)) {
+        if (_MmIsAddressValid(DeviceExt) &&
+            _MmIsAddressValid((PVOID*)DeviceExt)) {
           PVOID pTemp = *(PVOID*)DeviceExt;
 
           KeAcquireSpinLock(&g_KeyboardSpinLock, &Irql);
@@ -77,7 +77,7 @@ NTSTATUS SearchServiceFromKdbExt(PDRIVER_OBJECT KbdDriverObject,
 
           if (pTemp > KbdDriverStart &&
               pTemp < (PVOID)((UCHAR*)KbdDriverStart + KbdDriverSize) &&
-              MmIsAddressValid(pTemp)) {
+              _MmIsAddressValid(pTemp)) {
             KeAcquireSpinLock(&g_KeyboardSpinLock, &Irql);
             gKeyboardObject.service_callback =
                 (KeyboardClassServiceCallbackFn)pTemp;

@@ -7,6 +7,11 @@ fn_IofCompleteRequest _IofCompleteRequest;
 fn_IoReleaseRemoveLockEx _IoReleaseRemoveLockEx;
 fn_IoCreateDriver _IoCreateDriver;
 fn_ObReferenceObjectByName _ObReferenceObjectByName;
+fn_MmMapLockedPagesSpecifyCache _MmMapLockedPagesSpecifyCache;
+fn_MmIsAddressValid _MmIsAddressValid;
+fn_MmMapIoSpace _MmMapIoSpace;
+fn_MmUnmapIoSpace _MmUnmapIoSpace;
+fn_MmCopyMemory _MmCopyMemory;
 POBJECT_TYPE* _IoDriverObjectType;
 
 NTSTATUS ResolveImports(VOID) {
@@ -17,6 +22,11 @@ NTSTATUS ResolveImports(VOID) {
       RTL_CONSTANT_STRING(L"IoReleaseRemoveLockEx"),
       RTL_CONSTANT_STRING(L"IoCreateDriver"),
       RTL_CONSTANT_STRING(L"ObReferenceObjectByName"),
+      RTL_CONSTANT_STRING(L"MmMapLockedPagesSpecifyCache"),
+      RTL_CONSTANT_STRING(L"MmIsAddressValid"),
+      RTL_CONSTANT_STRING(L"MmMapIoSpace"),
+      RTL_CONSTANT_STRING(L"MmUnmapIoSpace"),
+      RTL_CONSTANT_STRING(L"MmCopyMemory"),
   };
   PVOID* func_slots[] = {
       (PVOID*)&_KeAcquireSpinLockAtDpcLevel,
@@ -25,6 +35,11 @@ NTSTATUS ResolveImports(VOID) {
       (PVOID*)&_IoReleaseRemoveLockEx,
       (PVOID*)&_IoCreateDriver,
       (PVOID*)&_ObReferenceObjectByName,
+      (PVOID*)&_MmMapLockedPagesSpecifyCache,
+      (PVOID*)&_MmIsAddressValid,
+      (PVOID*)&_MmMapIoSpace,
+      (PVOID*)&_MmUnmapIoSpace,
+      (PVOID*)&_MmCopyMemory,
   };
 
   for (ULONG i = 0; i < RTL_NUMBER_OF(func_names); i++) {

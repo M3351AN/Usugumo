@@ -13,8 +13,8 @@ NTSTATUS ReadPhysical(UINT64 PhysicalAddress, PVOID Buffer, SIZE_T Size,
                       PSIZE_T BytesRead) {
   MM_COPY_ADDRESS address;
   address.PhysicalAddress.QuadPart = (LONGLONG)PhysicalAddress;
-  return MmCopyMemory(Buffer, address, Size, MM_COPY_MEMORY_PHYSICAL,
-                      BytesRead);
+  return _MmCopyMemory(Buffer, address, Size, MM_COPY_MEMORY_PHYSICAL,
+                       BytesRead);
 }
 
 NTSTATUS WritePhysical(UINT64 PhysicalAddress, const void* Buffer,
@@ -22,10 +22,10 @@ NTSTATUS WritePhysical(UINT64 PhysicalAddress, const void* Buffer,
   if (Size == 0) return STATUS_SUCCESS;
   PHYSICAL_ADDRESS phys;
   phys.QuadPart = (LONGLONG)PhysicalAddress;
-  PVOID mapped = MmMapIoSpace(phys, Size, MmCached);
+  PVOID mapped = _MmMapIoSpace(phys, Size, MmCached);
   if (mapped == NULL) return STATUS_INSUFFICIENT_RESOURCES;
   kmemmove(mapped, Buffer, Size);
-  MmUnmapIoSpace(mapped, Size);
+  _MmUnmapIoSpace(mapped, Size);
   return STATUS_SUCCESS;
 }
 
@@ -34,8 +34,8 @@ static UINT64 ReadPhysicalU64(UINT64 PhysicalAddress) {
   SIZE_T done = 0;
   MM_COPY_ADDRESS address;
   address.PhysicalAddress.QuadPart = (LONGLONG)PhysicalAddress;
-  NTSTATUS status = MmCopyMemory(&value, address, sizeof(value),
-                                 MM_COPY_MEMORY_PHYSICAL, &done);
+  NTSTATUS status = _MmCopyMemory(&value, address, sizeof(value),
+                                  MM_COPY_MEMORY_PHYSICAL, &done);
   if (!NT_SUCCESS(status)) return 0;
   return value;
 }
