@@ -29,13 +29,9 @@ BOOLEAN ReadVM(Requests* in) {
     return FALSE;
   }
 
-  __try {
-    status = CopyVirtualMemory(from_process, (UINT64)in->target_addr,
-                               to_process, (UINT64)in->request_addr,
-                               in->mem_size);
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
-    status = STATUS_ACCESS_VIOLATION;
-  }
+  status = CopyVirtualMemory(from_process, (UINT64)in->target_addr,
+                             to_process, (UINT64)in->request_addr,
+                             in->mem_size);
 
   _ObfDereferenceObject(from_process);
   _ObfDereferenceObject(to_process);
@@ -69,13 +65,9 @@ BOOLEAN WriteVM(Requests* in) {
     return FALSE;
   }
 
-  __try {
-    status = CopyVirtualMemory(from_process, (UINT64)in->request_addr,
-                               to_process, (UINT64)in->target_addr,
-                               in->mem_size);
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
-    status = STATUS_ACCESS_VIOLATION;
-  }
+  status = CopyVirtualMemory(from_process, (UINT64)in->request_addr,
+                             to_process, (UINT64)in->target_addr,
+                             in->mem_size);
 
   _ObfDereferenceObject(from_process);
   _ObfDereferenceObject(to_process);
@@ -101,7 +93,7 @@ UINT64 GetModuleBasex64(PEPROCESS proc, UNICODE_STRING module_name,
   if (peb_va == 0) return 0;
 
   UINT64 result = 0;
-  __try {
+  {
     UINT64 ldr_va = 0;
     if (!NT_SUCCESS(
             ReadProcessMemory(proc, peb_va + OFF_PEB_LDR, &ldr_va,
@@ -145,8 +137,6 @@ UINT64 GetModuleBasex64(PEPROCESS proc, UNICODE_STRING module_name,
       if (next == 0 || next == flink) break;
       flink = next;
     }
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
-    result = 0;
   }
 
   return result;
@@ -181,11 +171,7 @@ UINT64 GetDllAddress(Requests* in) {
   RtlInitUnicodeStringMeme(&moduleName, wStr);
   ULONG64 base_address = 0;
 
-  __try {
-    base_address = GetModuleBasex64(source_process, moduleName, FALSE);
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
-    base_address = 0;
-  }
+  base_address = GetModuleBasex64(source_process, moduleName, FALSE);
 
   _ExFreePoolWithTag(wStr, 'NtFs');
   _ObfDereferenceObject(source_process);
@@ -221,11 +207,7 @@ UINT64 GetDllSize(Requests* in) {
   RtlInitUnicodeStringMeme(&moduleName, wStr);
   ULONG64 module_size = 0;
 
-  __try {
-    module_size = GetModuleBasex64(source_process, moduleName, TRUE);
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
-    module_size = 0;
-  }
+  module_size = GetModuleBasex64(source_process, moduleName, TRUE);
 
   _ExFreePoolWithTag(wStr, 'NtFs');
   _ObfDereferenceObject(source_process);
@@ -293,11 +275,7 @@ UINT64 GetProcessIdByName(Requests* in) {
     HANDLE currentPid = PsGetProcessIdTrick(currentProcess);
     PCHAR imageName = NULL;
 
-    __try {
-      imageName = PsGetProcessImageFileNameTrick(currentProcess);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-      break;
-    }
+    imageName = PsGetProcessImageFileNameTrick(currentProcess);
 
     if (imageName && imageName[0]) {
       if (kstricmp(targetName, imageName) == 0) {
@@ -307,24 +285,16 @@ UINT64 GetProcessIdByName(Requests* in) {
     }
 
     PLIST_ENTRY listEntry = NULL;
-    __try {
-      listEntry =
-          (PLIST_ENTRY)((ULONG_PTR)currentProcess + g_ActiveProcessLinksOffset);
-      if (!listEntry->Flink || listEntry->Flink == listEntry) break;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-      break;
-    }
+    listEntry =
+        (PLIST_ENTRY)((ULONG_PTR)currentProcess + g_ActiveProcessLinksOffset);
+    if (!listEntry->Flink || listEntry->Flink == listEntry) break;
 
     ULONG_PTR nextAddr =
         (ULONG_PTR)listEntry->Flink - g_ActiveProcessLinksOffset;
     PEPROCESS nextProcess = (PEPROCESS)nextAddr;
     HANDLE nextPid = NULL;
 
-    __try {
-      nextPid = PsGetProcessIdTrick(nextProcess);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-      break;
-    }
+    nextPid = PsGetProcessIdTrick(nextProcess);
 
     PEPROCESS nextSafe = NULL;
 
