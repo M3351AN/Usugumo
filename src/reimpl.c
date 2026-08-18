@@ -203,3 +203,61 @@ NTSTATUS PsGetProcessExitStatusTrick(PEPROCESS Process) {
   ULONG offset = GetProcessExitStatusOffset();
   return *(NTSTATUS*)((PUCHAR)Process + offset);
 }
+
+ULONG64 g_PFNBase = 0;
+ULONG64 g_PTEBase = 0;
+
+VOID ParseBases() {
+  if (g_PFNBase != 0 && g_PTEBase != 0) return;
+
+  UNICODE_STRING routineName = RTL_CONSTANT_STRING(L"MmGetVirtualForPhysical");
+
+  PUCHAR pFunc = (PUCHAR)MmGetSystemRoutineAddress(&routineName);
+  if (!pFunc) {
+    return ;
+  }
+
+  // 48 B8 ?? ?? ?? ?? ?? ?? ?? ?? mov     rax, 0FFFFDE0000000008h
+  for (int i = 0; i < 0x20; i++) {
+    if (pFunc[i] == 0x48 && pFunc[i + 1] == 0xB8) {
+      ULONG64 base = *(PULONG64)(pFunc + i + 2);
+        g_PFNBase = base;
+        return;
+    }
+  }
+
+  // 48 BA ?? ?? ?? ?? ?? ?? ?? ?? mov     rdx, 0FFFFF68000000000h
+  for (int i = 0; i < 0x40; i++) {
+    if (pFunc[i] == 0x48 && pFunc[i + 1] == 0xBA) {
+      ULONG64 base = *(PULONG64)(pFunc + i + 2);
+      g_PTEBase = base;
+      return;
+    }
+  }
+
+  return;
+}
+
+PVOID MmGetVirtualForPhysicalTrick(PHYSICAL_ADDRESS PhysicalAddress) 
+{
+  ParseBases();
+
+  ULONG64 pa = PhysicalAddress.QuadPart;
+  ULONG64 pfn = pa >> 12;
+  ULONG64 offset = pa & 0xFFF;
+
+  ULONG64 base1 = g_PFNBase;
+
+  ULONG64 val = *(ULONG64*)(base1 + pfn * 48);
+
+  val = val << 25;
+
+  ULONG64 base2 = g_PTEBase;
+  ULONG64 base2_shifted = base2 << 25;
+
+  long long diff = (long long)(val - base2_shifted);
+  diff = diff >> 16;
+
+  ULONG64 virtualAddr = (ULONG64)diff + offset;
+  return (PVOID)virtualAddr;
+}

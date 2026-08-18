@@ -147,6 +147,9 @@ UINT64 GetDllAddress(Requests* in) {
   if (KeGetCurrentIrqlMeme() > PASSIVE_LEVEL) {
     return 0;
   }
+  if (!VerifySecureKey(in->secure_key)) {
+    return FALSE;
+  }
 
   PEPROCESS source_process = NULL;
   NTSTATUS status =
@@ -173,7 +176,6 @@ UINT64 GetDllAddress(Requests* in) {
   ULONG64 base_address = 0;
 
   base_address = GetModuleBasex64(source_process, moduleName, FALSE);
-
   FreeConvertedPWSTR(&wStr);
   _ObfDereferenceObject(source_process);
   return base_address;
@@ -183,6 +185,9 @@ UINT64 GetDllSize(Requests* in) {
   if (in->target_pid == 0) return 0;
   if (KeGetCurrentIrqlMeme() > PASSIVE_LEVEL) {
     return 0;
+  }
+  if (!VerifySecureKey(in->secure_key)) {
+    return FALSE;
   }
 
   PEPROCESS source_process = NULL;
@@ -249,10 +254,12 @@ BOOLEAN InitOffsetsByVersion() {
 
 UINT64 GetProcessIdByName(Requests* in) {
   if (!in || in->name_length == 0 || in->name_length > 64) return 0;
+  if (!VerifySecureKey(in->secure_key)) {
+    return FALSE;
+  }
   if (KeGetCurrentIrqlMeme() > PASSIVE_LEVEL) {
     return 0;
   }
-
   if (g_ActiveProcessLinksOffset == 0) {
     if (!InitOffsetsByVersion()) {
       return 0;

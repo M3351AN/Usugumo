@@ -12,7 +12,18 @@ VOID DecodeFixedStr64(const FixedStr64*, char*, SIZE_T);
 
 PWSTR ConvertToPWSTR(const char*);
 
-VOID FreeConvertedPWSTR(PWSTR* ppwStr);
+FORCEINLINE VOID FreeConvertedPWSTR(PWSTR* ppwStr) {
+  if (ppwStr == NULL || *ppwStr == NULL) {
+    return;
+  }
+  SIZE_T cch = wcslen(*ppwStr) + 1;
+  SIZE_T byteSize = cch * sizeof(WCHAR);
+
+  RtlSecureZeroMemory(*ppwStr, byteSize);
+  _ExFreePoolWithTag(*ppwStr, 0x72656355);
+
+  *ppwStr = NULL;
+}
 
 PVOID SearchSignForImage(PVOID, PUCHAR, PCHAR, ULONG);
 

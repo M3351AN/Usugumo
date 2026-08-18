@@ -158,19 +158,6 @@ PWSTR ConvertToPWSTR(const char* ascii_str) {
   return w_str;
 }
 
-VOID FreeConvertedPWSTR(PWSTR* ppwStr) {
-  if (ppwStr == NULL || *ppwStr == NULL) {
-    return;
-  }
-  SIZE_T cch = wcslen(*ppwStr) + 1;
-  SIZE_T byteSize = cch * sizeof(WCHAR);
-
-  RtlSecureZeroMemory(*ppwStr, byteSize);
-  _ExFreePoolWithTag(*ppwStr, 0x72656355);
-
-  *ppwStr = NULL;
-}
-
 PVOID SearchSignForImage(PVOID ImageBase, PUCHAR Pattern, PCHAR Mask,
                          ULONG PatternSize) {
   PIMAGE_NT_HEADERS NtHeaders = RtlImageNtHeaderMeme(ImageBase);
@@ -218,7 +205,6 @@ NTSTATUS GetMachineGuid(WCHAR* guid_buf, size_t buf_len) {
   OBJECT_ATTRIBUTES obj_attr;
   InitializeObjectAttributes(&obj_attr, &key_path, OBJ_CASE_INSENSITIVE, NULL,
                              NULL);
-
   status = _ZwOpenKey(&hKey, KEY_READ, &obj_attr);
   if (!NT_SUCCESS(status)) {
     return status;

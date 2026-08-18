@@ -11,9 +11,8 @@ fn_ObfReferenceObject _ObfReferenceObject;
 fn_ObfDereferenceObject _ObfDereferenceObject;
 fn_MmMapLockedPagesSpecifyCache _MmMapLockedPagesSpecifyCache;
 fn_MmIsAddressValid _MmIsAddressValid;
-fn_MmMapIoSpace _MmMapIoSpace;
-fn_MmUnmapIoSpace _MmUnmapIoSpace;
-fn_MmCopyMemory _MmCopyMemory;
+fn_MmAllocateContiguousMemory _MmAllocateContiguousMemory;
+fn_MmFreeContiguousMemory _MmFreeContiguousMemory;
 fn_PsLookupProcessByProcessId _PsLookupProcessByProcessId;
 fn_IoCreateSymbolicLink _IoCreateSymbolicLink;
 fn_IoDeleteDevice _IoDeleteDevice;
@@ -39,9 +38,8 @@ NTSTATUS ResolveImports(VOID) {
       RTL_CONSTANT_STRING(L"ObfDereferenceObject"),
       RTL_CONSTANT_STRING(L"MmMapLockedPagesSpecifyCache"),
       RTL_CONSTANT_STRING(L"MmIsAddressValid"),
-      RTL_CONSTANT_STRING(L"MmMapIoSpace"),
-      RTL_CONSTANT_STRING(L"MmUnmapIoSpace"),
-      RTL_CONSTANT_STRING(L"MmCopyMemory"),
+      RTL_CONSTANT_STRING(L"MmAllocateContiguousMemory"),
+      RTL_CONSTANT_STRING(L"MmFreeContiguousMemory"),
       RTL_CONSTANT_STRING(L"PsLookupProcessByProcessId"),
       RTL_CONSTANT_STRING(L"IoCreateSymbolicLink"),
       RTL_CONSTANT_STRING(L"IoDeleteDevice"),
@@ -63,9 +61,8 @@ NTSTATUS ResolveImports(VOID) {
       (PVOID*)&_ObfDereferenceObject,
       (PVOID*)&_MmMapLockedPagesSpecifyCache,
       (PVOID*)&_MmIsAddressValid,
-      (PVOID*)&_MmMapIoSpace,
-      (PVOID*)&_MmUnmapIoSpace,
-      (PVOID*)&_MmCopyMemory,
+      (PVOID*)&_MmAllocateContiguousMemory,
+      (PVOID*)&_MmFreeContiguousMemory,
       (PVOID*)&_PsLookupProcessByProcessId,
       (PVOID*)&_IoCreateSymbolicLink,
       (PVOID*)&_IoDeleteDevice,

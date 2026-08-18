@@ -10,6 +10,7 @@
 #include <ntstrsafe.h>
 #include <ntddk.h> 
 #include <windef.h>
+#include <intrin.h>
 #include <emmintrin.h>
 
 #include "../includes/usugumo_request_define.h"

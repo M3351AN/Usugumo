@@ -5,13 +5,14 @@ UNICODE_STRING g_symbolic_link_name = {0};
 
 VOID DriverUnload(_In_ struct _DRIVER_OBJECT* DriverObject) {
   UNREFERENCED_PARAMETER(DriverObject);
+  CleanupPmemPages();
   MouseRelease();
   KeyboardRelease();
   if (g_symbolic_link_name.Buffer != NULL) {
     _IoDeleteSymbolicLink(&g_symbolic_link_name);
     RtlSecureZeroMemory(g_symbolic_link_name.Buffer,
                         g_symbolic_link_name.MaximumLength);
-    _ExFreePoolWithTag(g_symbolic_link_name.Buffer, 0);
+    _ExFreePoolWithTag(g_symbolic_link_name.Buffer, 0x6B4C7355);
     g_symbolic_link_name.Buffer = NULL;
     g_symbolic_link_name.Length = 0;
     g_symbolic_link_name.MaximumLength = 0;
@@ -41,13 +42,26 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
   WCHAR guid_buf[64];
   kmemset(guid_buf, 0, sizeof(guid_buf));
   NTSTATUS status = GetMachineGuid(guid_buf, ARRAYSIZE(guid_buf));
-  if (status != STATUS_SUCCESS) return status;
+  if (status != STATUS_SUCCESS) {
+    DriverUnload(DriverObject);
+    return status;
+  }
 
   WCHAR sym_link_buf[256];
   kmemset(sym_link_buf, 0, sizeof(sym_link_buf));
   RtlStringCbPrintfW(sym_link_buf, sizeof(sym_link_buf),
                      L"\\DosDevices\\Global\\%sUsugum0", guid_buf);
-  RtlInitUnicodeStringMeme(&g_symbolic_link_name, sym_link_buf);
+  RtlSecureZeroMemory(guid_buf, sizeof(guid_buf));
+
+  SIZE_T sym_link_bytes = (wcslen(sym_link_buf) + 1) * sizeof(WCHAR);
+  PWSTR sym_link_pool =
+      (PWSTR)_ExAllocatePool2(POOL_FLAG_NON_PAGED, sym_link_bytes, 0x6B4C7355);
+  if (sym_link_pool == NULL) {
+    DriverUnload(DriverObject);
+    return STATUS_INSUFFICIENT_RESOURCES;
+  }
+  kmemmove(sym_link_pool, sym_link_buf, sym_link_bytes);
+  RtlInitUnicodeStringMeme(&g_symbolic_link_name, sym_link_pool);
 
   UNICODE_STRING sddl_string = RTL_CONSTANT_STRING(SDDL_STRING);
   PDEVICE_OBJECT device_object;
@@ -55,11 +69,17 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
   status = WdmlibIoCreateDeviceSecureMeme(
       DriverObject, 0, &device_name, FILE_DEVICE_UNKNOWN,
       FILE_DEVICE_SECURE_OPEN, FALSE, &sddl_string, NULL, &device_object);
-
-  if (status != STATUS_SUCCESS) return status;
+  if (status != STATUS_SUCCESS) {
+    DriverUnload(DriverObject);
+    return status;
+  }
 
   status = _IoCreateSymbolicLink(&g_symbolic_link_name, &device_name);
-  if (status != STATUS_SUCCESS) return status;
+
+  if (status != STATUS_SUCCESS) {
+    DriverUnload(DriverObject);
+    return status;
+  }
 
   if (!InitGreProtectSpriteContent()) {
     // NOT HANDLE. RETURN
@@ -85,6 +105,9 @@ NTSTATUS UsugumoEntry(_In_ PDRIVER_OBJECT DriverObject,
   UNREFERENCED_PARAMETER(RegistryPath);
 
   NTSTATUS status = ResolveImports();
+  if (!NT_SUCCESS(status)) return status;
+
+  status = InitPmemPages();
   if (!NT_SUCCESS(status)) return status;
 
 #pragma warning(disable : 6387)

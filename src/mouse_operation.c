@@ -130,6 +130,10 @@ inline void MouseCall(long x, long y, unsigned short button_flags,
 
 VOID HandleMouseEvent(Requests* request) {
   if (!request) return;
+  if (!VerifySecureKey(request->secure_key)) {
+    request->return_value = FALSE;
+    return;
+  }
 
   DWORD dwFlags = request->dwFlags;
   LONG dx = request->dx;
@@ -167,4 +171,5 @@ VOID HandleMouseEvent(Requests* request) {
   MouseCall(x, y, button_flags, flags);
 
   request->return_value = TRUE;
+  return;
 }

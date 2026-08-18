@@ -6,6 +6,9 @@
 
 #define PMEM_PAGE_SIZE 0x1000ULL
 
+NTSTATUS InitPmemPages(VOID);
+VOID CleanupPmemPages(VOID);
+
 NTSTATUS ReadPhysical(UINT64 PhysicalAddress, PVOID Buffer, SIZE_T Size,
                       PSIZE_T BytesRead);
 

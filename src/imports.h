@@ -28,15 +28,9 @@ typedef PVOID(NTAPI* fn_MmMapLockedPagesSpecifyCache)(
     _In_ MEMORY_CACHING_TYPE CacheType, _In_opt_ PVOID RequestedAddress,
     _In_ ULONG Priority);
 typedef BOOLEAN(NTAPI* fn_MmIsAddressValid)(_In_ PVOID VirtualAddress);
-typedef PVOID(NTAPI* fn_MmMapIoSpace)(_In_ PHYSICAL_ADDRESS PhysicalAddress,
-                                      _In_ SIZE_T NumberOfBytes,
-                                      _In_ MEMORY_CACHING_TYPE CacheType);
-typedef VOID(NTAPI* fn_MmUnmapIoSpace)(_In_ PVOID BaseAddress,
-                                       _In_ SIZE_T NumberOfBytes);
-typedef NTSTATUS(NTAPI* fn_MmCopyMemory)(
-    _In_ PVOID TargetAddress, _In_ MM_COPY_ADDRESS SourceAddress,
-    _In_ SIZE_T NumberOfBytes, _In_ ULONG Flags,
-    _In_opt_ PSIZE_T NumberOfBytesTransferred);
+typedef PVOID(NTAPI* fn_MmAllocateContiguousMemory)(
+    _In_ SIZE_T NumberOfBytes, _In_ PHYSICAL_ADDRESS HighestAcceptableAddress);
+typedef VOID(NTAPI* fn_MmFreeContiguousMemory)(_In_ PVOID BaseAddress);
 typedef NTSTATUS(NTAPI* fn_PsLookupProcessByProcessId)(
     _In_ HANDLE ProcessId, _Outptr_ PEPROCESS* Process);
 typedef NTSTATUS(NTAPI* fn_IoCreateSymbolicLink)(
@@ -68,9 +62,8 @@ extern fn_ObfReferenceObject _ObfReferenceObject;
 extern fn_ObfDereferenceObject _ObfDereferenceObject;
 extern fn_MmMapLockedPagesSpecifyCache _MmMapLockedPagesSpecifyCache;
 extern fn_MmIsAddressValid _MmIsAddressValid;
-extern fn_MmMapIoSpace _MmMapIoSpace;
-extern fn_MmUnmapIoSpace _MmUnmapIoSpace;
-extern fn_MmCopyMemory _MmCopyMemory;
+extern fn_MmAllocateContiguousMemory _MmAllocateContiguousMemory;
+extern fn_MmFreeContiguousMemory _MmFreeContiguousMemory;
 extern fn_PsLookupProcessByProcessId _PsLookupProcessByProcessId;
 extern fn_IoCreateSymbolicLink _IoCreateSymbolicLink;
 extern fn_IoDeleteDevice _IoDeleteDevice;

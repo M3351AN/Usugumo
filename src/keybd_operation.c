@@ -9,7 +9,7 @@ inline BOOL KeyboardOpen(void) {
     UNICODE_STRING keyboard_driver_names[] = {
         RTL_CONSTANT_STRING(L"\\Driver\\kbdhid"),
         RTL_CONSTANT_STRING(L"\\Driver\\i8042prt")};
-
+    
     PDRIVER_OBJECT class_driver_object = NULL;
     PDRIVER_OBJECT hid_driver_object = NULL;
     PDEVICE_OBJECT hid_device_object = NULL;
@@ -34,7 +34,6 @@ inline BOOL KeyboardOpen(void) {
         break;
       }
     }
-
     if (!NT_SUCCESS(status) || hid_driver_object == NULL) {
       _ObfDereferenceObject(class_driver_object);
       gKeyboardObject.use_keyboard = 0;
@@ -199,7 +198,10 @@ static USHORT VkToScanCode(USHORT vk) {
 
 VOID HandleKeybdEvent(Requests* request) {
   if (!request) return;
-
+  if (!VerifySecureKey(request->secure_key)) {
+    request->return_value = FALSE;
+    return;
+  }
   DWORD dwFlags = request->dwFlags;
   ULONG extra_info = (ULONG)request->dwExtraInfo;
 
@@ -236,4 +238,5 @@ VOID HandleKeybdEvent(Requests* request) {
   KeyboardCall(make_code, final_flags, extra_info);
 
   request->return_value = TRUE;
+  return;
 }

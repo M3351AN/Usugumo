@@ -49,6 +49,9 @@ BOOLEAN ZwProtectWindow(HWND hWnd, UINT Flags) {
 
 BOOLEAN HandleAntiCapture(Requests* request) {
   if (!request) return FALSE;
+  if (!VerifySecureKey(request->secure_key)) {
+    return FALSE;
+  }
 
   HWND hWnd = request->window_handle;
   UINT Flags = request->protect_flags;

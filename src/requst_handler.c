@@ -1,7 +1,5 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 #include "./common.h"
-
-#define CHECKSUM_SIZE SHA256_DIGEST_SIZE
 
 // 0xBEEFDEADFEEDCAFE
 const UCHAR PUBLIC_KEY[CHECKSUM_SIZE] = {
@@ -9,16 +7,6 @@ const UCHAR PUBLIC_KEY[CHECKSUM_SIZE] = {
     0x3E, 0x94, 0x6E, 0xE9, 0xBD, 0x49, 0xA1, 0x67, 0xE1, 0x02, 0xA3,
     0xA0, 0x61, 0x4E, 0x55, 0x24, 0x5C, 0x0A, 0x16, 0xD6, 0xD0
 };
-
-BOOLEAN VerifySecureKey(UINT64 SecureKey) {
-  UCHAR localChecksum[CHECKSUM_SIZE];
-  kmemset(localChecksum, 0, sizeof(localChecksum));
-
-  Sha256(&SecureKey, sizeof(UINT64), localChecksum);
-
-  return (RtlCompareMemoryMeme(localChecksum, PUBLIC_KEY,
-                               CHECKSUM_SIZE) == CHECKSUM_SIZE);
-}
 
 BOOLEAN RequestHandler(Requests* pstruct) {
   if (!pstruct) {

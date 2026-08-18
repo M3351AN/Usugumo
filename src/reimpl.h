@@ -33,6 +33,8 @@ HANDLE PsGetProcessIdTrick(PEPROCESS);
 
 NTSTATUS PsGetProcessExitStatusTrick(PEPROCESS);
 
+PVOID MmGetVirtualForPhysicalTrick(PHYSICAL_ADDRESS PhysicalAddress);
+
 NTSTATUS
 WdmlibIoCreateDeviceSecureMeme(DRIVER_OBJECT*, unsigned int, UNICODE_STRING*,
                                unsigned int, unsigned int, unsigned __int8,
