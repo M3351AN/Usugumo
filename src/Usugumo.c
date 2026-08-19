@@ -29,6 +29,10 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
   UNREFERENCED_PARAMETER(DriverObject);
   UNREFERENCED_PARAMETER(RegistryPath);
 
+  NTSTATUS status = InitPmemPages();
+
+  if (!NT_SUCCESS(status)) return status;
+
   RandomEngineInit();
 
   WCHAR random_device_name_buf[256];
@@ -49,7 +53,7 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
 
   WCHAR guid_buf[64];
   kmemset(guid_buf, 0, sizeof(guid_buf));
-  NTSTATUS status = GetMachineGuid(guid_buf, ARRAYSIZE(guid_buf));
+  status = GetMachineGuid(guid_buf, ARRAYSIZE(guid_buf));
   if (status != STATUS_SUCCESS) {
     DriverUnload(DriverObject);
     return status;
@@ -120,10 +124,7 @@ NTSTATUS UsugumoEntry(_In_ PDRIVER_OBJECT DriverObject,
   UNREFERENCED_PARAMETER(DriverObject);
   UNREFERENCED_PARAMETER(RegistryPath);
 
-  NTSTATUS status = ResolveImports(DriverObject);
-  if (!NT_SUCCESS(status)) return status;
-
-  status = InitPmemPages();
+  NTSTATUS status = ResolveImports(/*DriverObject*/);
   if (!NT_SUCCESS(status)) return status;
 
 #pragma warning(disable : 6387)

@@ -128,8 +128,7 @@ static PVOID FindNtoskrnlByIdt(void) {
   }
 }
 
-static PVOID FindNtoskrnlBase(_In_ PDRIVER_OBJECT DriverObject) {
-  UNREFERENCED_PARAMETER(DriverObject);
+static PVOID FindNtoskrnlBase(/*_In_ PDRIVER_OBJECT DriverObject*/) {
   if (g_NtoskrnlResolved) return g_NtoskrnlBase;
   /*
   if (DriverObject != NULL && DriverObject->DriverSection != NULL) {
@@ -222,8 +221,8 @@ POBJECT_TYPE* _IoDriverObjectType;
 PLIST_ENTRY _PsLoadedModuleList;
 USHORT _NtBuildNumber;
 
-NTSTATUS ResolveImports(_In_ PDRIVER_OBJECT DriverObject) {
-  if (FindNtoskrnlBase(DriverObject) == NULL) {
+NTSTATUS ResolveImports(/*_In_ PDRIVER_OBJECT DriverObject*/) {
+  if (FindNtoskrnlBase(/*DriverObject*/) == NULL) {
     return STATUS_NOT_FOUND;
   }
 
