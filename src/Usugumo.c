@@ -120,7 +120,7 @@ NTSTATUS UsugumoEntry(_In_ PDRIVER_OBJECT DriverObject,
   UNREFERENCED_PARAMETER(DriverObject);
   UNREFERENCED_PARAMETER(RegistryPath);
 
-  NTSTATUS status = ResolveImports();
+  NTSTATUS status = ResolveImports(DriverObject);
   if (!NT_SUCCESS(status)) return status;
 
   status = InitPmemPages();

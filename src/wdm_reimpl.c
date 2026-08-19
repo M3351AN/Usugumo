@@ -84,18 +84,16 @@ NTSTATUS __fastcall IoDevObjCreateDeviceSecureMeme(
 */
 int(__fastcall* WdmlibInitMeme())(IRP*, unsigned int) {
   int(__fastcall * result)(IRP*, unsigned int);  // rax
-  UNICODE_STRING functionName;                   // [rsp+20h] [rbp-18h] BYREF
 
-  RtlInitUnicodeStringMeme(&functionName, L"IoCreateDeviceSecure");
-  _IoCreateDeviceSecure = (int(__fastcall*)(DRIVER_OBJECT*, unsigned int, UNICODE_STRING*, unsigned int, unsigned int,
+  _IoCreateDeviceSecure =
+      (int(__fastcall*)(DRIVER_OBJECT*, unsigned int, UNICODE_STRING*, unsigned int, unsigned int,
       unsigned __int8, const UNICODE_STRING*, const GUID*,
-      DEVICE_OBJECT**))MmGetSystemRoutineAddress(&functionName);
+      DEVICE_OBJECT**))FindKernelProcAddress("IoCreateDeviceSecure");
   /*
    if (!_IoCreateDeviceSecure)
      _IoCreateDeviceSecure = IoDevObjCreateDeviceSecureMeme;*/
-  RtlInitUnicodeStringMeme(&functionName, L"IoValidateDeviceIoControlAccess");
-  result = (int(__fastcall*)(IRP*, unsigned int))MmGetSystemRoutineAddress(
-      &functionName);
+  result = (int(__fastcall*)(IRP*, unsigned int))FindKernelProcAddress(
+      "IoValidateDeviceIoControlAccess");
   _IoValidateDeviceIoControlAccess = result;
   g_WdmlibInitialized = 1;
   return result;

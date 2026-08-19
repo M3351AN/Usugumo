@@ -80,9 +80,7 @@ ULONG g_PebOffset = 0;
 ULONG GetPebOffset() {
   if (g_PebOffset != 0) return g_PebOffset;
 
-  UNICODE_STRING routineName = RTL_CONSTANT_STRING(L"PsGetProcessPeb");
-
-  PUCHAR pFunc = (PUCHAR)MmGetSystemRoutineAddress(&routineName);
+  PUCHAR pFunc = (PUCHAR)FindKernelProcAddress("PsGetProcessPeb");
   if (!pFunc) {
     return 0;
   }
@@ -112,9 +110,7 @@ ULONG g_ImageFileNameOffset = 0;
 ULONG GetImageFileNameOffset() {
   if (g_ImageFileNameOffset != 0) return g_ImageFileNameOffset;
 
-  UNICODE_STRING routineName = RTL_CONSTANT_STRING(L"PsGetProcessImageFileName");
-
-  PUCHAR pFunc = (PUCHAR)MmGetSystemRoutineAddress(&routineName);
+  PUCHAR pFunc = (PUCHAR)FindKernelProcAddress("PsGetProcessImageFileName");
   if (!pFunc) {
     return 0;
   }
@@ -144,10 +140,7 @@ ULONG g_ProcessIdOffset = 0;
 ULONG GetProcessIdOffset() {
   if (g_ProcessIdOffset != 0) return g_ProcessIdOffset;
 
-  UNICODE_STRING routineName =
-      RTL_CONSTANT_STRING(L"PsGetProcessId");
-
-  PUCHAR pFunc = (PUCHAR)MmGetSystemRoutineAddress(&routineName);
+  PUCHAR pFunc = (PUCHAR)FindKernelProcAddress("PsGetProcessId");
   if (!pFunc) {
     return 0;
   }
@@ -177,9 +170,7 @@ ULONG g_ProcessExitStatusOffset = 0;
 ULONG GetProcessExitStatusOffset() {
   if (g_ProcessExitStatusOffset != 0) return g_ProcessExitStatusOffset;
 
-  UNICODE_STRING routineName = RTL_CONSTANT_STRING(L"PsGetProcessExitStatus");
-
-  PUCHAR pFunc = (PUCHAR)MmGetSystemRoutineAddress(&routineName);
+  PUCHAR pFunc = (PUCHAR)FindKernelProcAddress("PsGetProcessExitStatus");
   if (!pFunc) {
     return 0;
   }
@@ -210,9 +201,7 @@ ULONG64 g_PTEBase = 0;
 VOID ParseBases() {
   if (g_PFNBase != 0 && g_PTEBase != 0) return;
 
-  UNICODE_STRING routineName = RTL_CONSTANT_STRING(L"MmGetVirtualForPhysical");
-
-  PUCHAR pFunc = (PUCHAR)MmGetSystemRoutineAddress(&routineName);
+  PUCHAR pFunc = (PUCHAR)FindKernelProcAddress("MmGetVirtualForPhysical");
   if (!pFunc) {
     return ;
   }
