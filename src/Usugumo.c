@@ -34,9 +34,17 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
   WCHAR random_device_name_buf[256];
   kmemset(random_device_name_buf, 0, sizeof(random_device_name_buf));
   UNICODE_STRING device_name;
-  RtlStringCbPrintfW(random_device_name_buf,
-                     sizeof(random_device_name_buf) / sizeof(WCHAR),
-                     L"\\Device\\%04X", (ULONG)RandomEngineNext());
+  const WCHAR device_prefix[] = L"\\Device\\";
+  kmemmove(random_device_name_buf, device_prefix,
+           (kwcslen(device_prefix)) * sizeof(WCHAR));
+  ULONG rand_val = (ULONG)RandomEngineNext();
+  for (INT n = 3; n >= 0; n--) {
+    WCHAR nibble = (WCHAR)(rand_val & 0xF);
+    random_device_name_buf[8 + n] =
+        (nibble < 10) ? (WCHAR)(L'0' + nibble) : (WCHAR)(L'A' + (nibble - 10));
+    rand_val >>= 4;
+  }
+  random_device_name_buf[12] = L'\0';
   RtlInitUnicodeStringMeme(&device_name, random_device_name_buf);
 
   WCHAR guid_buf[64];
@@ -49,11 +57,19 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
 
   WCHAR sym_link_buf[256];
   kmemset(sym_link_buf, 0, sizeof(sym_link_buf));
-  RtlStringCbPrintfW(sym_link_buf, sizeof(sym_link_buf),
-                     L"\\DosDevices\\Global\\%sUsugum0", guid_buf);
+  const WCHAR sym_prefix[] = L"\\DosDevices\\Global\\";
+  const WCHAR sym_suffix[] = L"Usugum0";
+  SIZE_T pre_len = kwcslen(sym_prefix);
+  SIZE_T guid_len = kwcslen(guid_buf);
+  SIZE_T suf_len = kwcslen(sym_suffix);
+  kmemmove(sym_link_buf, sym_prefix, pre_len * sizeof(WCHAR));
+  kmemmove(sym_link_buf + pre_len, guid_buf, guid_len * sizeof(WCHAR));
+  kmemmove(sym_link_buf + pre_len + guid_len, sym_suffix,
+           suf_len * sizeof(WCHAR));
+  sym_link_buf[pre_len + guid_len + suf_len] = L'\0';
   RtlSecureZeroMemory(guid_buf, sizeof(guid_buf));
 
-  SIZE_T sym_link_bytes = (wcslen(sym_link_buf) + 1) * sizeof(WCHAR);
+  SIZE_T sym_link_bytes = (kwcslen(sym_link_buf) + 1) * sizeof(WCHAR);
   PWSTR sym_link_pool =
       (PWSTR)_ExAllocatePool2(POOL_FLAG_NON_PAGED, sym_link_bytes, 0x6B4C7355);
   if (sym_link_pool == NULL) {

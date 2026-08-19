@@ -16,7 +16,7 @@ FORCEINLINE VOID FreeConvertedPWSTR(PWSTR* ppwStr) {
   if (ppwStr == NULL || *ppwStr == NULL) {
     return;
   }
-  SIZE_T cch = wcslen(*ppwStr) + 1;
+  SIZE_T cch = kwcslen(*ppwStr) + 1;
   SIZE_T byteSize = cch * sizeof(WCHAR);
 
   RtlSecureZeroMemory(*ppwStr, byteSize);
