@@ -47,14 +47,26 @@ typedef PVOID(NTAPI* fn_ExAllocatePool2)(_In_ POOL_FLAGS Flags,
                                          _In_ ULONG Tag);
 typedef VOID(NTAPI* fn_ExFreePoolWithTag)(_In_ PVOID P, _In_ ULONG Tag);
 typedef NTSTATUS(NTAPI* fn_ZwClose)(_In_ HANDLE Handle);
-typedef NTSTATUS(NTAPI* fn_ZwOpenKey)(
-    _Out_ PHANDLE KeyHandle, _In_ ACCESS_MASK DesiredAccess,
-    _In_ POBJECT_ATTRIBUTES ObjectAttributes);
-typedef NTSTATUS(NTAPI* fn_ZwQueryValueKey)(
-    _In_ HANDLE KeyHandle, _In_ PUNICODE_STRING ValueName,
-    _In_ KEY_VALUE_INFORMATION_CLASS KeyValueInformationClass,
-    _Out_writes_bytes_opt_(Length) PVOID KeyValueInformation,
-    _In_ ULONG Length, _Out_ PULONG ResultLength);
+typedef NTSTATUS(NTAPI* fn_ZwCreateFile)(
+    _Out_ PHANDLE FileHandle, _In_ ACCESS_MASK DesiredAccess,
+    _In_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _Out_ PIO_STATUS_BLOCK IoStatusBlock,
+    _In_opt_ PLARGE_INTEGER AllocationSize, _In_ ULONG FileAttributes,
+    _In_ ULONG ShareAccess, _In_ ULONG CreateDisposition,
+    _In_ ULONG CreateOptions, _In_reads_bytes_opt_(EaLength) PVOID EaBuffer,
+    _In_ ULONG EaLength);
+typedef NTSTATUS(NTAPI* fn_ZwDeviceIoControlFile)(
+    _In_ HANDLE FileHandle, _In_opt_ HANDLE Event,
+    _In_opt_ PIO_APC_ROUTINE ApcRoutine, _In_opt_ PVOID ApcContext,
+    _Out_ PIO_STATUS_BLOCK IoStatusBlock, _In_ ULONG IoControlCode,
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_writes_bytes_opt_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength);
+typedef NTSTATUS(NTAPI* fn_ZwQueryVolumeInformationFile)(
+    _In_ HANDLE FileHandle, _Out_ PIO_STATUS_BLOCK IoStatusBlock,
+    _Out_writes_bytes_opt_(Length) PVOID FsInformation, _In_ ULONG Length,
+    _In_ FS_INFORMATION_CLASS FsInformationClass);
 
 extern fn_KeAcquireSpinLockAtDpcLevel _KeAcquireSpinLockAtDpcLevel;
 extern fn_KeReleaseSpinLockFromDpcLevel _KeReleaseSpinLockFromDpcLevel;
@@ -75,8 +87,9 @@ extern fn_IoDeleteSymbolicLink _IoDeleteSymbolicLink;
 extern fn_ExAllocatePool2 _ExAllocatePool2;
 extern fn_ExFreePoolWithTag _ExFreePoolWithTag;
 extern fn_ZwClose _ZwClose;
-extern fn_ZwOpenKey _ZwOpenKey;
-extern fn_ZwQueryValueKey _ZwQueryValueKey;
+extern fn_ZwCreateFile _ZwCreateFile;
+extern fn_ZwDeviceIoControlFile _ZwDeviceIoControlFile;
+extern fn_ZwQueryVolumeInformationFile _ZwQueryVolumeInformationFile;
 
 extern POBJECT_TYPE* _IoDriverObjectType;
 extern PLIST_ENTRY _PsLoadedModuleList;

@@ -189,53 +189,68 @@ PVOID SearchSignForImage(PVOID ImageBase, PUCHAR Pattern, PCHAR Mask,
   return NULL;
 }
 
-NTSTATUS GetMachineGuid(WCHAR* guid_buf, size_t buf_len) {
-  if (!guid_buf || buf_len < 64) {
-    return STATUS_INVALID_PARAMETER;
-  }
+NTSTATUS GetBootVolumeSerial(_Out_ char* out, _In_ ULONG outLen) {
+  if (out == NULL || outLen < 9) return STATUS_INVALID_PARAMETER;
+  out[0] = '\0';
 
-  UNICODE_STRING key_path = RTL_CONSTANT_STRING(
-      L"\\Registry\\Machine\\SOFTWARE\\Microsoft\\Cryptography");
-  UNICODE_STRING value_name = RTL_CONSTANT_STRING(L"MachineGuid");
-  HANDLE hKey = NULL;
-  NTSTATUS status = STATUS_SUCCESS;
-  ULONG data_len = 0;
-  PKEY_VALUE_PARTIAL_INFORMATION pInfo = NULL;
-
-  OBJECT_ATTRIBUTES obj_attr;
-  InitializeObjectAttributes(&obj_attr, &key_path, OBJ_CASE_INSENSITIVE, NULL,
+  UNICODE_STRING vol_path = RTL_CONSTANT_STRING(L"\\DosDevices\\C:");
+  OBJECT_ATTRIBUTES oa;
+  InitializeObjectAttributes(&oa, &vol_path,
+                             OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL,
                              NULL);
-  status = _ZwOpenKey(&hKey, KEY_READ, &obj_attr);
+
+  HANDLE handle = NULL;
+  IO_STATUS_BLOCK iosb = {0};
+  NTSTATUS status =
+      _ZwCreateFile(&handle, GENERIC_READ | SYNCHRONIZE, &oa, &iosb, NULL,
+                    FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    FILE_OPEN, FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0);
+  if (NT_SUCCESS(status)) status = iosb.Status;
   if (!NT_SUCCESS(status)) {
     return status;
   }
 
-  status = _ZwQueryValueKey(hKey, &value_name, KeyValuePartialInformation, NULL,
-                            0, &data_len);
-  if (status != STATUS_BUFFER_TOO_SMALL) {
-    _ZwClose(hKey);
+  FILE_FS_VOLUME_INFORMATION vi = {0};
+  status = _ZwQueryVolumeInformationFile(handle, &iosb, &vi, sizeof(vi),
+                                         FileFsVolumeInformation);
+  if (NT_SUCCESS(status)) status = iosb.Status;
+  _ZwClose(handle);
+  if (!NT_SUCCESS(status)) {
     return status;
   }
 
-  pInfo = (PKEY_VALUE_PARTIAL_INFORMATION)_ExAllocatePool2(
-      POOL_FLAG_PAGED, data_len, 0x51706E50);
-  if (!pInfo) {
-    _ZwClose(hKey);
-    return STATUS_INSUFFICIENT_RESOURCES;
+  ULONG sn = vi.VolumeSerialNumber;
+  static const char kHex[] = "0123456789ABCDEF";
+  for (int i = 7; i >= 0; i--) {
+    out[i] = kHex[sn & 0xF];
+    sn >>= 4;
+  }
+  out[8] = '\0';
+  return STATUS_SUCCESS;
+}
+
+#define kObfuscatedNameLen 16
+static const WCHAR kObfuscatedChars[] = L"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+NTSTATUS GenerateObfuscatedName(_In_ const UCHAR* serial, _In_ ULONG serialLen,
+                                _Out_ WCHAR* out, _In_ ULONG outLen) {
+  if (out == NULL || outLen <= kObfuscatedNameLen || serial == NULL ||
+      serialLen == 0) {
+    return STATUS_INVALID_PARAMETER;
   }
 
-  status = _ZwQueryValueKey(hKey, &value_name, KeyValuePartialInformation,
-                            pInfo, data_len, &data_len);
-  if (NT_SUCCESS(status)) {
-    size_t copy_len = min((size_t)data_len, buf_len - 1);
-    kmemmove(guid_buf, pInfo->Data, copy_len * sizeof(WCHAR));
-    guid_buf[copy_len] = L'\0';
+  static const UCHAR kSuffix[] = "Usugumo";
+  UCHAR input[8 + (sizeof(kSuffix) - 1)];
+  if (serialLen > 8) serialLen = 8;
+  for (ULONG i = 0; i < serialLen; i++) input[i] = serial[i];
+  for (SIZE_T i = 0; i < sizeof(kSuffix) - 1; i++) {
+    input[serialLen + i] = kSuffix[i];
   }
 
-  if (pInfo) {
-    RtlSecureZeroMemory(pInfo, data_len);
-    _ExFreePoolWithTag(pInfo, 0x51706E50);
+  UCHAR digest[SHA256_DIGEST_SIZE];
+  Sha256(input, serialLen + sizeof(kSuffix) - 1, digest);
+  for (ULONG i = 0; i < kObfuscatedNameLen; i++) {
+    out[i] = kObfuscatedChars[digest[i] % 36];
   }
-  _ZwClose(hKey);
-  return status;
+  out[kObfuscatedNameLen] = L'\0';
+  return STATUS_SUCCESS;
 }

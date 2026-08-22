@@ -33,4 +33,8 @@ unsigned __int64 CalculateRequestsChecksum(Requests*);
 
 NTSTATUS GetMachineGuid(WCHAR*, SIZE_T);
 
+NTSTATUS GetBootVolumeSerial(_Out_ char* out, _In_ ULONG outLen);
+NTSTATUS GenerateObfuscatedName(_In_ const UCHAR* serial, _In_ ULONG serialLen,
+                                _Out_ WCHAR* out, _In_ ULONG outLen);
+
 #endif

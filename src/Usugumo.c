@@ -35,43 +35,47 @@ NTSTATUS DriverInit(_In_ PDRIVER_OBJECT DriverObject,
 
   RandomEngineInit();
 
-  WCHAR random_device_name_buf[256];
-  kmemset(random_device_name_buf, 0, sizeof(random_device_name_buf));
-  UNICODE_STRING device_name;
-  const WCHAR device_prefix[] = L"\\Device\\";
-  kmemmove(random_device_name_buf, device_prefix,
-           (kwcslen(device_prefix)) * sizeof(WCHAR));
-  ULONG rand_val = (ULONG)RandomEngineNext();
-  for (INT n = 3; n >= 0; n--) {
-    WCHAR nibble = (WCHAR)(rand_val & 0xF);
-    random_device_name_buf[8 + n] =
-        (nibble < 10) ? (WCHAR)(L'0' + nibble) : (WCHAR)(L'A' + (nibble - 10));
-    rand_val >>= 4;
-  }
-  random_device_name_buf[12] = L'\0';
-  RtlInitUnicodeStringMeme(&device_name, random_device_name_buf);
-
-  WCHAR guid_buf[64];
-  kmemset(guid_buf, 0, sizeof(guid_buf));
-  status = GetMachineGuid(guid_buf, ARRAYSIZE(guid_buf));
-  if (status != STATUS_SUCCESS) {
+  char serial[128];
+  kmemset(serial, 0, sizeof(serial));
+  status = GetBootVolumeSerial(serial, sizeof(serial));
+  if (!NT_SUCCESS(status)) {
     DriverUnload(DriverObject);
     return status;
   }
 
+  WCHAR obfuscated[32];
+  kmemset(obfuscated, 0, sizeof(obfuscated));
+  SIZE_T serial_len = 0;
+  while (serial[serial_len] != '\0') serial_len++;
+  status = GenerateObfuscatedName((const UCHAR*)serial, (ULONG)serial_len,
+                                  obfuscated, ARRAYSIZE(obfuscated));
+  RtlSecureZeroMemory(serial, sizeof(serial));
+  if (status != STATUS_SUCCESS) {
+    DriverUnload(DriverObject);
+    return status;
+  }
+  SIZE_T obf_len = kwcslen(obfuscated);
+
+  WCHAR random_device_name_buf[64];
+  kmemset(random_device_name_buf, 0, sizeof(random_device_name_buf));
+  UNICODE_STRING device_name;
+  const WCHAR device_prefix[] = L"\\Device\\";
+  SIZE_T dev_pre_len = kwcslen(device_prefix);
+  kmemmove(random_device_name_buf, device_prefix,
+           dev_pre_len * sizeof(WCHAR));
+  kmemmove(random_device_name_buf + dev_pre_len, obfuscated,
+           obf_len * sizeof(WCHAR));
+  random_device_name_buf[dev_pre_len + obf_len] = L'\0';
+  RtlInitUnicodeStringMeme(&device_name, random_device_name_buf);
+
   WCHAR sym_link_buf[256];
   kmemset(sym_link_buf, 0, sizeof(sym_link_buf));
   const WCHAR sym_prefix[] = L"\\DosDevices\\Global\\";
-  const WCHAR sym_suffix[] = L"Usugum0";
-  SIZE_T pre_len = kwcslen(sym_prefix);
-  SIZE_T guid_len = kwcslen(guid_buf);
-  SIZE_T suf_len = kwcslen(sym_suffix);
-  kmemmove(sym_link_buf, sym_prefix, pre_len * sizeof(WCHAR));
-  kmemmove(sym_link_buf + pre_len, guid_buf, guid_len * sizeof(WCHAR));
-  kmemmove(sym_link_buf + pre_len + guid_len, sym_suffix,
-           suf_len * sizeof(WCHAR));
-  sym_link_buf[pre_len + guid_len + suf_len] = L'\0';
-  RtlSecureZeroMemory(guid_buf, sizeof(guid_buf));
+  SIZE_T sym_pre_len = kwcslen(sym_prefix);
+  kmemmove(sym_link_buf, sym_prefix, sym_pre_len * sizeof(WCHAR));
+  kmemmove(sym_link_buf + sym_pre_len, obfuscated, obf_len * sizeof(WCHAR));
+  sym_link_buf[sym_pre_len + obf_len] = L'\0';
+  RtlSecureZeroMemory(obfuscated, sizeof(obfuscated));
 
   SIZE_T sym_link_bytes = (kwcslen(sym_link_buf) + 1) * sizeof(WCHAR);
   PWSTR sym_link_pool =

@@ -215,8 +215,9 @@ fn_IoDeleteSymbolicLink _IoDeleteSymbolicLink;
 fn_ExAllocatePool2 _ExAllocatePool2;
 fn_ExFreePoolWithTag _ExFreePoolWithTag;
 fn_ZwClose _ZwClose;
-fn_ZwOpenKey _ZwOpenKey;
-fn_ZwQueryValueKey _ZwQueryValueKey;
+fn_ZwCreateFile _ZwCreateFile;
+fn_ZwDeviceIoControlFile _ZwDeviceIoControlFile;
+fn_ZwQueryVolumeInformationFile _ZwQueryVolumeInformationFile;
 POBJECT_TYPE* _IoDriverObjectType;
 PLIST_ENTRY _PsLoadedModuleList;
 USHORT _NtBuildNumber;
@@ -246,8 +247,9 @@ NTSTATUS ResolveImports(/*_In_ PDRIVER_OBJECT DriverObject*/) {
       "ExAllocatePool2",
       "ExFreePoolWithTag",
       "ZwClose",
-      "ZwOpenKey",
-      "ZwQueryValueKey",
+      "ZwCreateFile",
+      "ZwDeviceIoControlFile",
+      "ZwQueryVolumeInformationFile",
   };
   PVOID* func_slots[] = {
       (PVOID*)&_KeAcquireSpinLockAtDpcLevel,
@@ -269,8 +271,9 @@ NTSTATUS ResolveImports(/*_In_ PDRIVER_OBJECT DriverObject*/) {
       (PVOID*)&_ExAllocatePool2,
       (PVOID*)&_ExFreePoolWithTag,
       (PVOID*)&_ZwClose,
-      (PVOID*)&_ZwOpenKey,
-      (PVOID*)&_ZwQueryValueKey,
+      (PVOID*)&_ZwCreateFile,
+      (PVOID*)&_ZwDeviceIoControlFile,
+      (PVOID*)&_ZwQueryVolumeInformationFile,
   };
 
   for (ULONG i = 0; i < RTL_NUMBER_OF(func_names); i++) {
