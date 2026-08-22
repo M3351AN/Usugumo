@@ -342,6 +342,7 @@ class UsugumoDriver {
     if (driver_handle_ == INVALID_HANDLE_VALUE) {
       return;
     }
+    request.request_key |= USUGUMO_SIGNATURE_MASK;
     request.time_stamp = GetTimestamp();
     request.secure_key = kSecureKey;
     request.check_sum = CalculateRequestsChecksum(&request);
