@@ -5,6 +5,7 @@
 mod consts;
 mod ffi;
 mod globals;
+mod imports;
 mod types;
 mod util;
 
@@ -14,6 +15,7 @@ use core::ptr::addr_of_mut;
 use crate::consts::*;
 use crate::ffi::*;
 use crate::globals::*;
+use crate::imports::*;
 use crate::types::*;
 use crate::util::*;
 
@@ -30,11 +32,13 @@ unsafe extern "system" fn driver_unload(driver: *mut driver_object) {
 
         let g = addr_of_mut!(g_symbolic_link_name);
         if !(*g).buffer.is_null() {
-            if let Some(f) = _IoDeleteSymbolicLink {
+            if !_IoDeleteSymbolicLink.is_null() {
+                let f: fn_io_delete_symbolic_link = core::mem::transmute(_IoDeleteSymbolicLink);
                 f(addr_of_mut!(g_symbolic_link_name));
             }
             zero_memory((*g).buffer as *mut u8, (*g).maximum_length as usize);
-            if let Some(f) = _ExFreePoolWithTag {
+            if !_ExFreePoolWithTag.is_null() {
+                let f: fn_ex_free_pool_with_tag = core::mem::transmute(_ExFreePoolWithTag);
                 f((*g).buffer as *mut c_void, symlink_tag);
             }
             (*g).buffer = core::ptr::null_mut();
@@ -43,7 +47,8 @@ unsafe extern "system" fn driver_unload(driver: *mut driver_object) {
         }
 
         if !(*driver).device_object.is_null() {
-            if let Some(f) = _IoDeleteDevice {
+            if !_IoDeleteDevice.is_null() {
+                let f: fn_io_delete_device = core::mem::transmute(_IoDeleteDevice);
                 f((*driver).device_object);
             }
             (*driver).device_object = core::ptr::null_mut();
@@ -118,9 +123,11 @@ unsafe extern "system" fn driver_init(
         zero_memory(obfuscated.as_mut_ptr() as *mut u8, core::mem::size_of::<[u16; 32]>());
 
         let sym_link_bytes = (wcslen(&sym_link_buf) + 1) * core::mem::size_of::<u16>();
-        let sym_link_pool = match _ExAllocatePool2 {
-            Some(f) => f(pool_flag_non_paged, sym_link_bytes, symlink_tag),
-            None => core::ptr::null_mut(),
+        let sym_link_pool = if _ExAllocatePool2.is_null() {
+            core::ptr::null_mut()
+        } else {
+            let f: fn_ex_allocate_pool2 = core::mem::transmute(_ExAllocatePool2);
+            f(pool_flag_non_paged, sym_link_bytes, symlink_tag)
         };
         if sym_link_pool.is_null() {
             driver_unload(driver);
@@ -153,9 +160,11 @@ unsafe extern "system" fn driver_init(
             return status;
         }
 
-        status = match _IoCreateSymbolicLink {
-            Some(f) => f(addr_of_mut!(g_symbolic_link_name), addr_of_mut!(device_name)),
-            None => status_unsuccessful,
+        status = if _IoCreateSymbolicLink.is_null() {
+            status_unsuccessful
+        } else {
+            let f: fn_io_create_symbolic_link = core::mem::transmute(_IoCreateSymbolicLink);
+            f(addr_of_mut!(g_symbolic_link_name), addr_of_mut!(device_name))
         };
         if status != status_success {
             driver_unload(driver);
@@ -180,15 +189,17 @@ unsafe extern "system" fn driver_init(
 
 #[unsafe(no_mangle)]
 pub extern "system" fn UsugumoEntry(_driver: *mut c_void, _registry: *mut c_void) -> nt_status {
-    let status = unsafe { ResolveImports() };
+    let status = resolve_imports();
     if status < 0 {
         return status;
     }
 
-    let io_create_driver = unsafe { _IoCreateDriver };
-    match io_create_driver {
-        Some(create) => unsafe { create(core::ptr::null_mut(), driver_init) },
-        None => status_unsuccessful,
+    unsafe {
+        if _IoCreateDriver.is_null() {
+            return status_unsuccessful;
+        }
+        let create: io_create_driver_fn = core::mem::transmute(_IoCreateDriver);
+        create(core::ptr::null_mut(), driver_init)
     }
 }
 

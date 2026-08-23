@@ -9,8 +9,6 @@
 
 PVOID FindKernelProcAddress(_In_ PCCH ExportName);
 
-NTSTATUS ResolveImports(/*_In_ struct _DRIVER_OBJECT* DriverObject*/);
-
 typedef VOID(NTAPI* fn_KeAcquireSpinLockAtDpcLevel)(_Inout_ PKSPIN_LOCK SpinLock);
 typedef VOID(NTAPI* fn_KeReleaseSpinLockFromDpcLevel)(_Inout_ PKSPIN_LOCK SpinLock,
                                                       _In_ KIRQL OldIrql);
