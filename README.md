@@ -18,6 +18,7 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc o
 - Kernel-mode mouse input
 - Kernel-mode keyboard input
 - Kernel-mode anti capture
+- Clean IAT
 
 ## KnownIssues
 
@@ -25,6 +26,18 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc o
 - Current implementation does not take into account CR3 encryption, kernel-mode memory protection, etc., and is only used as a PoC
 - This is just a PoC, which is why you may find my approach relatively elegant in some places, while overly ghetto in others
 - For the purpose of anti-paste, I unnecessarily rewrote many functions using MASM. However, doing so should not affect the actual functionality.
+
+## Build
+
+### Require
+
+- Rust x86_64-pc-windows-msvc toolchain
+- Visual Studio or Visual Studio Build Tools, with Desktop development with C++ workload.
+- Windows Driver Kit
+
+```shell
+cargo b --release
+```
 
 ## Usage
 
@@ -37,6 +50,7 @@ There‘s also an alternative example that utilizes Native API, which is not a b
 This project is licensed under [**BSD-3-Clause**](LICENSE).
 
 ## Credits
+
 Even without code copy as is
 
 - [ekknod/MouseClassServiceCallbackMeme](https://github.com/ekknod/MouseClassServiceCallbackMeme/)
