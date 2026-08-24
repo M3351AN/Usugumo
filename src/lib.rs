@@ -8,6 +8,7 @@ mod globals;
 mod imports;
 mod types;
 mod util;
+mod xxh3;
 
 use core::ffi::c_void;
 use core::ptr::addr_of_mut;

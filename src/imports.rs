@@ -3,6 +3,7 @@ use core::ptr::{addr_of_mut, null_mut};
 
 use crate::consts::{status_not_found, status_success};
 use crate::types::{device_object, nt_status, unicode_string};
+use crate::xxh3::xxh3_64;
 
 pub type fn_io_create_symbolic_link =
     unsafe extern "system" fn(*mut unicode_string, *mut unicode_string) -> nt_status;
@@ -183,28 +184,17 @@ struct kidtentry64 {
     reserved: u32,
 }
 
-fn lower_ascii(c: u8) -> u8 {
-    if c.wrapping_sub(b'A') <= (b'Z' - b'A') {
-        c + 32
-    } else {
-        c
+fn hash_cstring(ptr: *const u8) -> u64 {
+    let mut buf = [0u8; 128];
+    let mut len = 0;
+    while len < buf.len() && unsafe { *ptr.add(len) } != 0 {
+        buf[len] = unsafe { *ptr.add(len) };
+        len += 1;
     }
-}
-
-fn str_icmp(s1: *const u8, s2: *const u8) -> i32 {
-    unsafe {
-        let mut p1 = s1;
-        let mut p2 = s2;
-        loop {
-            let l1 = lower_ascii(*p1);
-            p1 = p1.add(1);
-            let l2 = lower_ascii(*p2);
-            p2 = p2.add(1);
-            if l1 == 0 || l1 != l2 {
-                return l1 as i32 - l2 as i32;
-            }
-        }
+    if unsafe { *ptr.add(len) } != 0 {
+        return 0;
     }
+    xxh3_64(&buf[..len])
 }
 
 unsafe fn read_gs_qword(offset: usize) -> u64 {
@@ -336,9 +326,9 @@ unsafe fn find_ntoskrnl_base() -> *mut c_void {
     }
 }
 
-unsafe fn find_exported_symbol(image_base: *mut c_void, export_name: &[u8]) -> *mut c_void {
+unsafe fn find_exported_symbol(image_base: *mut c_void, target_hash: u64) -> *mut c_void {
     unsafe {
-        if image_base.is_null() || export_name.is_empty() {
+        if image_base.is_null() {
             return null_mut();
         }
         let base = image_base as usize;
@@ -368,7 +358,7 @@ unsafe fn find_exported_symbol(image_base: *mut c_void, export_name: &[u8]) -> *
         for i in 0..exp.number_of_names {
             let name_ptr =
                 base.wrapping_add(name_rvas.add(i as usize).read_unaligned() as usize) as *const u8;
-            if str_icmp(name_ptr, export_name.as_ptr()) == 0 {
+            if hash_cstring(name_ptr) == target_hash {
                 let ordinal = ordinals.add(i as usize).read_unaligned() as usize;
                 let func_rva = function_rvas.add(ordinal).read_unaligned();
                 return base.wrapping_add(func_rva as usize) as *mut c_void;
@@ -378,13 +368,13 @@ unsafe fn find_exported_symbol(image_base: *mut c_void, export_name: &[u8]) -> *
     }
 }
 
-unsafe fn find_kernel_proc_address(export_name: &[u8]) -> *mut c_void {
+unsafe fn find_kernel_proc_address(export_hash: u64) -> *mut c_void {
     unsafe {
         let base = find_ntoskrnl_base();
         if base.is_null() {
             return null_mut();
         }
-        find_exported_symbol(base, export_name)
+        find_exported_symbol(base, export_hash)
     }
 }
 
@@ -394,12 +384,7 @@ pub extern "system" fn FindKernelProcAddress(export_name: *const i8) -> *mut c_v
         if export_name.is_null() {
             return null_mut();
         }
-        let mut len = 0;
-        while *export_name.add(len) != 0 {
-            len += 1;
-        }
-        let bytes = core::slice::from_raw_parts(export_name as *const u8, len + 1);
-        find_kernel_proc_address(bytes)
+        find_kernel_proc_address(hash_cstring(export_name as *const u8))
     }
 }
 
@@ -409,29 +394,29 @@ pub fn resolve_imports() -> nt_status {
             return status_not_found;
         }
 
-        const FUNC_NAMES: [&[u8]; 22] = [
-            b"KeAcquireSpinLockAtDpcLevel\0",
-            b"KeReleaseSpinLockFromDpcLevel\0",
-            b"IofCompleteRequest\0",
-            b"IoReleaseRemoveLockEx\0",
-            b"IoCreateDriver\0",
-            b"ObReferenceObjectByName\0",
-            b"ObfReferenceObject\0",
-            b"ObfDereferenceObject\0",
-            b"MmMapLockedPagesSpecifyCache\0",
-            b"MmIsAddressValid\0",
-            b"MmAllocateContiguousMemory\0",
-            b"MmFreeContiguousMemory\0",
-            b"PsLookupProcessByProcessId\0",
-            b"IoCreateSymbolicLink\0",
-            b"IoDeleteDevice\0",
-            b"IoDeleteSymbolicLink\0",
-            b"ExAllocatePool2\0",
-            b"ExFreePoolWithTag\0",
-            b"ZwClose\0",
-            b"ZwCreateFile\0",
-            b"ZwDeviceIoControlFile\0",
-            b"ZwQueryVolumeInformationFile\0",
+        const FUNC_HASHES: [u64; 22] = [
+            xxh3_64(b"KeAcquireSpinLockAtDpcLevel"),
+            xxh3_64(b"KeReleaseSpinLockFromDpcLevel"),
+            xxh3_64(b"IofCompleteRequest"),
+            xxh3_64(b"IoReleaseRemoveLockEx"),
+            xxh3_64(b"IoCreateDriver"),
+            xxh3_64(b"ObReferenceObjectByName"),
+            xxh3_64(b"ObfReferenceObject"),
+            xxh3_64(b"ObfDereferenceObject"),
+            xxh3_64(b"MmMapLockedPagesSpecifyCache"),
+            xxh3_64(b"MmIsAddressValid"),
+            xxh3_64(b"MmAllocateContiguousMemory"),
+            xxh3_64(b"MmFreeContiguousMemory"),
+            xxh3_64(b"PsLookupProcessByProcessId"),
+            xxh3_64(b"IoCreateSymbolicLink"),
+            xxh3_64(b"IoDeleteDevice"),
+            xxh3_64(b"IoDeleteSymbolicLink"),
+            xxh3_64(b"ExAllocatePool2"),
+            xxh3_64(b"ExFreePoolWithTag"),
+            xxh3_64(b"ZwClose"),
+            xxh3_64(b"ZwCreateFile"),
+            xxh3_64(b"ZwDeviceIoControlFile"),
+            xxh3_64(b"ZwQueryVolumeInformationFile"),
         ];
 
         let func_slots: [*mut *mut c_void; 22] = [
@@ -459,27 +444,27 @@ pub fn resolve_imports() -> nt_status {
             addr_of_mut!(_ZwQueryVolumeInformationFile) as *mut *mut c_void,
         ];
 
-        for i in 0..FUNC_NAMES.len() {
-            let address = find_kernel_proc_address(FUNC_NAMES[i]);
+        for i in 0..FUNC_HASHES.len() {
+            let address = find_kernel_proc_address(FUNC_HASHES[i]);
             if address.is_null() {
                 return status_not_found;
             }
             *func_slots[i] = address;
         }
 
-        let data_address = find_kernel_proc_address(b"IoDriverObjectType\0");
+        let data_address = find_kernel_proc_address(xxh3_64(b"IoDriverObjectType"));
         if data_address.is_null() {
             return status_not_found;
         }
         _IoDriverObjectType = *(data_address as *const *mut c_void);
 
-        let list_address = find_kernel_proc_address(b"PsLoadedModuleList\0");
+        let list_address = find_kernel_proc_address(xxh3_64(b"PsLoadedModuleList"));
         if list_address.is_null() {
             return status_not_found;
         }
         _PsLoadedModuleList = *(list_address as *const *mut c_void);
 
-        let build_address = find_kernel_proc_address(b"NtBuildNumber\0");
+        let build_address = find_kernel_proc_address(xxh3_64(b"NtBuildNumber"));
         if build_address.is_null() {
             return status_not_found;
         }
