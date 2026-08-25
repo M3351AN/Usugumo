@@ -48,5 +48,7 @@ pub struct driver_object {
 
 pub type dispatch_fn = unsafe extern "system" fn(*mut device_object, *mut c_void) -> nt_status;
 pub type unload_fn = unsafe extern "system" fn(*mut driver_object);
-pub type driver_init_fn = unsafe extern "system" fn(*mut driver_object, *mut unicode_string) -> nt_status;
-pub type io_create_driver_fn = unsafe extern "system" fn(*mut unicode_string, driver_init_fn) -> nt_status;
+pub type driver_init_fn =
+    unsafe extern "system" fn(*mut driver_object, *mut unicode_string) -> nt_status;
+pub type io_create_driver_fn =
+    unsafe extern "system" fn(*mut unicode_string, driver_init_fn) -> nt_status;

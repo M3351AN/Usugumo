@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 
 use std::env;
 use std::fs;
@@ -50,9 +50,7 @@ fn latest_version(root: &Path) -> Option<String> {
 }
 
 fn main() {
-    let wdk_root = PathBuf::from(
-        wdk_root_from_registry().expect("failed to locate WDK"),
-    );
+    let wdk_root = PathBuf::from(wdk_root_from_registry().expect("failed to locate WDK"));
 
     let wdk_ver = latest_version(&wdk_root).expect("no 10.* SDK version dirs under WDK root");
 
@@ -79,7 +77,10 @@ fn main() {
     asm_srcs.sort();
 
     let mut c = cc::Build::new();
-    c.include(&km_inc).include(&shared_inc).include(&um_inc).include(&includes);
+    c.include(&km_inc)
+        .include(&shared_inc)
+        .include(&um_inc)
+        .include(&includes);
     c.define("_AMD64_", None);
     c.define("_KERNEL_MODE", None);
     c.define("DEPRECATE_DDK_FUNCTIONS", None);
@@ -90,7 +91,10 @@ fn main() {
     c.compile("usugumo_c");
 
     let mut asm = cc::Build::new();
-    asm.include(&km_inc).include(&shared_inc).include(&um_inc).include(&includes);
+    asm.include(&km_inc)
+        .include(&shared_inc)
+        .include(&um_inc)
+        .include(&includes);
     asm.define("_AMD64_", None);
     asm.define("_KERNEL_MODE", None);
     asm.files(&asm_srcs);

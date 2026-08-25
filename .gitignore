@@ -38,3 +38,6 @@ target
 *.obj
 *.a
 *.o
+
+*.pfx
+*.cer

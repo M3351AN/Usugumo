@@ -18,14 +18,3 @@ pub const irp_mj_write: usize = 4;
 pub const do_direct_io: u32 = 0x10;
 pub const do_buffered_io: u32 = 0x04;
 pub const do_device_initializing: u32 = 0x80;
-
-pub const device_prefix: [u16; 8] = [
-    '\\' as u16, 'D' as u16, 'e' as u16, 'v' as u16,
-    'i' as u16, 'c' as u16, 'e' as u16, '\\' as u16,
-];
-pub const sym_prefix: [u16; 19] = [
-    '\\' as u16, 'D' as u16, 'o' as u16, 's' as u16, 'D' as u16,
-    'e' as u16, 'v' as u16, 'i' as u16, 'c' as u16, 'e' as u16,
-    's' as u16, '\\' as u16, 'G' as u16, 'l' as u16, 'o' as u16,
-    'b' as u16, 'a' as u16, 'l' as u16, '\\' as u16,
-];

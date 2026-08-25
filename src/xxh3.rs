@@ -254,8 +254,10 @@ const fn accumulate_512(
         let data_key = data_val ^ read_u64(secret, secret_offset + 8 * idx);
 
         acc[idx ^ 1] = acc[idx ^ 1].wrapping_add(data_val);
-        acc[idx] = acc[idx]
-            .wrapping_add(mult32_to64((data_key & 0xFFFF_FFFF) as u32, (data_key >> 32) as u32));
+        acc[idx] = acc[idx].wrapping_add(mult32_to64(
+            (data_key & 0xFFFF_FFFF) as u32,
+            (data_key >> 32) as u32,
+        ));
         idx += 1;
     }
     acc

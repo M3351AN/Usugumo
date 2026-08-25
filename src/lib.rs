@@ -13,6 +13,8 @@ mod xxh3;
 use core::ffi::c_void;
 use core::ptr::addr_of_mut;
 
+use obfstr::obfwide;
+
 use crate::consts::*;
 use crate::ffi::*;
 use crate::globals::*;
@@ -85,7 +87,10 @@ unsafe extern "system" fn driver_init(
             obfuscated.as_mut_ptr(),
             obfuscated.len() as u32,
         );
-        zero_memory(serial.as_mut_ptr() as *mut u8, core::mem::size_of::<[i8; 128]>());
+        zero_memory(
+            serial.as_mut_ptr() as *mut u8,
+            core::mem::size_of::<[i8; 128]>(),
+        );
         if status != status_success {
             driver_unload(driver);
             return status;
@@ -98,6 +103,7 @@ unsafe extern "system" fn driver_init(
             buffer: core::ptr::null_mut(),
         };
         let mut random_device_name_buf = [0u16; 64];
+        let device_prefix = obfwide!("\\Device\\");
         let mut n = 0;
         for &c in device_prefix.iter() {
             random_device_name_buf[n] = c;
@@ -111,6 +117,7 @@ unsafe extern "system" fn driver_init(
         RtlInitUnicodeStringMeme(&mut device_name, random_device_name_buf.as_ptr());
 
         let mut sym_link_buf = [0u16; 256];
+        let sym_prefix = obfwide!("\\DosDevices\\Global\\");
         let mut m = 0;
         for &c in sym_prefix.iter() {
             sym_link_buf[m] = c;
@@ -121,7 +128,10 @@ unsafe extern "system" fn driver_init(
         }
         m += obf_len;
         sym_link_buf[m] = 0;
-        zero_memory(obfuscated.as_mut_ptr() as *mut u8, core::mem::size_of::<[u16; 32]>());
+        zero_memory(
+            obfuscated.as_mut_ptr() as *mut u8,
+            core::mem::size_of::<[u16; 32]>(),
+        );
 
         let sym_link_bytes = (wcslen(&sym_link_buf) + 1) * core::mem::size_of::<u16>();
         let sym_link_pool = if _ExAllocatePool2.is_null() {
@@ -145,6 +155,12 @@ unsafe extern "system" fn driver_init(
         );
 
         let mut device_object: *mut device_object = core::ptr::null_mut();
+        let sddl = obfwide!("D:P(A;;GA;;;WD)");
+        let sddl_string = unicode_string {
+            length: (sddl.len() * 2) as u16,
+            maximum_length: (sddl.len() * 2) as u16,
+            buffer: sddl.as_ptr() as *mut u16,
+        };
         status = WdmlibIoCreateDeviceSecureMeme(
             driver,
             0,
@@ -165,7 +181,10 @@ unsafe extern "system" fn driver_init(
             status_unsuccessful
         } else {
             let f: fn_io_create_symbolic_link = core::mem::transmute(_IoCreateSymbolicLink);
-            f(addr_of_mut!(g_symbolic_link_name), addr_of_mut!(device_name))
+            f(
+                addr_of_mut!(g_symbolic_link_name),
+                addr_of_mut!(device_name),
+            )
         };
         if status != status_success {
             driver_unload(driver);

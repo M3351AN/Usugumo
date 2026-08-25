@@ -16,3 +16,6 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
+
+[dependencies]
+obfstr = "0.4.6"
