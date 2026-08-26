@@ -1,4 +1,4 @@
-// Copyright (c) 2026 渟雲. All rights reserved.
+﻿// Copyright (c) 2026 渟雲. All rights reserved.
 
 use std::env;
 use std::fs;
@@ -60,38 +60,20 @@ fn main() {
     let km_lib = wdk_root.join("Lib").join(&wdk_ver).join("km").join("x64");
 
     let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let csrc = manifest.join("csrc");
+    let asmsrc = manifest.join("asmsrc");
     let includes = manifest.join("includes");
 
-    println!("cargo:rerun-if-changed={}", csrc.display());
+    println!("cargo:rerun-if-changed={}", asmsrc.display());
     println!("cargo:rerun-if-changed={}", includes.display());
 
-    let mut c_srcs = Vec::new();
     let mut asm_srcs = Vec::new();
-    for entry in fs::read_dir(&csrc).expect("csrc dir must exist") {
+    for entry in fs::read_dir(&asmsrc).expect("asmsrc dir must exist") {
         let path = entry.expect("read_dir entry").path();
-        match path.extension().and_then(|e| e.to_str()) {
-            Some("c") => c_srcs.push(path),
-            Some("asm") => asm_srcs.push(path),
-            _ => {}
+        if path.extension().and_then(|e| e.to_str()) == Some("asm") {
+            asm_srcs.push(path);
         }
     }
-    c_srcs.sort();
     asm_srcs.sort();
-
-    let mut c = cc::Build::new();
-    c.include(&km_inc)
-        .include(&shared_inc)
-        .include(&um_inc)
-        .include(&includes);
-    c.define("_AMD64_", None);
-    c.define("_KERNEL_MODE", None);
-    c.define("DEPRECATE_DDK_FUNCTIONS", None);
-    c.define("_WIN32_WINNT", Some("0x0A00"));
-    c.flag("/std:c17").flag("/utf-8").flag("/GS-").flag("/O2");
-    c.static_crt(true);
-    c.files(&c_srcs);
-    c.compile("usugumo_c");
 
     let mut asm = cc::Build::new();
     asm.include(&km_inc)

@@ -384,16 +384,6 @@ pub fn resolve_kernel_export(export_hash: [u8; 32]) -> *mut c_void {
     unsafe { find_kernel_proc_address(export_hash) }
 }
 
-#[unsafe(no_mangle)]
-pub extern "system" fn FindKernelProcAddress(export_name: *const i8) -> *mut c_void {
-    unsafe {
-        if export_name.is_null() {
-            return null_mut();
-        }
-        find_kernel_proc_address(hash_cstring(export_name as *const u8))
-    }
-}
-
 pub fn resolve_imports() -> NtStatus {
     unsafe {
         if find_ntoskrnl_base().is_null() {

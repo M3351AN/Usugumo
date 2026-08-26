@@ -9,7 +9,11 @@ use crate::imports::{
     _ExFreePoolWithTag, _NtBuildNumber, _ObfDereferenceObject, _ObfReferenceObject,
     _PsLookupProcessByProcessId,
 };
-use crate::reimpl_pmem::{copy_virtual_memory, read_process_memory};
+use crate::pmem::{copy_virtual_memory, read_process_memory};
+use crate::reimpl::{
+    kstricmp, kwcsicmp, kwcslen, ps_get_process_exit_status_trick, ps_get_process_id_trick,
+    ps_get_process_image_file_name_trick, ps_get_process_peb_trick,
+};
 use crate::request_handler::verify_secure_key;
 use crate::types::{NtStatus, Requests, UnicodeString};
 
@@ -92,7 +96,7 @@ pub fn read_vm(in_req: *mut Requests) -> u8 {
             return 0;
         }
 
-        if PsGetProcessExitStatusTrick(from_process) != STATUS_PENDING {
+        if ps_get_process_exit_status_trick(from_process) != STATUS_PENDING {
             deref_process(from_process);
             deref_process(to_process);
             return 0;
@@ -132,7 +136,7 @@ pub fn write_vm(in_req: *mut Requests) -> u8 {
             return 0;
         }
 
-        if PsGetProcessExitStatusTrick(to_process) != STATUS_PENDING {
+        if ps_get_process_exit_status_trick(to_process) != STATUS_PENDING {
             deref_process(from_process);
             deref_process(to_process);
             return 0;
@@ -164,7 +168,7 @@ fn get_module_base(proc: *mut c_void, module_name: UnicodeString, get_size: bool
             return 0;
         }
 
-        let peb_va = PsGetProcessPebTrick(proc) as u64;
+        let peb_va = ps_get_process_peb_trick(proc) as u64;
         if peb_va == 0 {
             return 0;
         }
@@ -279,7 +283,7 @@ fn get_dll_base_or_size(in_req: *mut Requests, get_size: bool) -> u64 {
             return 0;
         }
 
-        if PsGetProcessExitStatusTrick(source_process) != STATUS_PENDING {
+        if ps_get_process_exit_status_trick(source_process) != STATUS_PENDING {
             deref_process(source_process);
             return 0;
         }
@@ -391,8 +395,8 @@ pub fn get_process_id_by_name(in_req: *mut Requests) -> u64 {
 
         while !current_process.is_null() && process_count < 1000 {
             process_count += 1;
-            let current_pid = PsGetProcessIdTrick(current_process);
-            let image_name = PsGetProcessImageFileNameTrick(current_process);
+            let current_pid = ps_get_process_id_trick(current_process);
+            let image_name = ps_get_process_image_file_name_trick(current_process);
 
             if !image_name.is_null() && *image_name != 0 {
                 if kstricmp(target_name.as_ptr(), image_name) == 0 {
@@ -410,7 +414,7 @@ pub fn get_process_id_by_name(in_req: *mut Requests) -> u64 {
 
             let next_addr = flink - G_ACTIVE_PROCESS_LINKS_OFFSET as usize;
             let next_process = next_addr as *mut c_void;
-            let next_pid = PsGetProcessIdTrick(next_process);
+            let next_pid = ps_get_process_id_trick(next_process);
 
             let mut next_safe: *mut c_void = null_mut();
             if next_pid != 0 && lookup_process(next_pid as u64, &mut next_safe) >= 0 {

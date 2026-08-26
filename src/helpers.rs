@@ -123,7 +123,8 @@ pub fn search_sign_for_image(
             let virtual_address = *(section.add(12) as *const u32);
             let characteristics = *(section.add(36) as *const u32);
 
-            if kstricmp(name, b".text\0".as_ptr() as *const i8) == 0
+            if crate::reimpl::kstricmp(name, obfstr::obfbytes!(b".text\0").as_ptr() as *const i8)
+                == 0
                 || (characteristics & IMAGE_SCN_CNT_CODE) != 0
             {
                 let start = (image_base as *const u8).add(virtual_address as usize);
@@ -234,9 +235,9 @@ pub fn get_boot_volume_serial(out: *mut i8, out_len: u32) -> NtStatus {
         }
 
         let mut sn = vi.volume_serial_number;
-        const HEX: &[u8] = b"0123456789ABCDEF";
+        let hex = obfstr::obfbytes!(b"0123456789ABCDEF");
         for i in (0..8).rev() {
-            *out.add(i) = HEX[(sn & 0xF) as usize] as i8;
+            *out.add(i) = hex[(sn & 0xF) as usize] as i8;
             sn >>= 4;
         }
         *out.add(8) = 0;
@@ -255,7 +256,7 @@ pub fn generate_obfuscated_name(
             return STATUS_INVALID_PARAMETER;
         }
 
-        let k_suffix = b"Usugumo";
+        let k_suffix = obfstr::obfbytes!(b"Usugumo");
         let mut input = [0u8; 8 + 7];
         let mut slen = serial_len as usize;
         if slen > 8 {
@@ -271,9 +272,9 @@ pub fn generate_obfuscated_name(
         let mut digest = [0u8; 32];
         sha256(input.as_ptr(), slen + k_suffix.len(), digest.as_mut_ptr());
 
-        const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        let chars = obfstr::obfbytes!(b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
         for i in 0..16 {
-            *out.add(i) = CHARS[(digest[i] % 36) as usize] as u16;
+            *out.add(i) = chars[(digest[i] % 36) as usize] as u16;
         }
         *out.add(16) = 0;
         STATUS_SUCCESS

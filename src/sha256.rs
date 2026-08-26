@@ -140,11 +140,6 @@ pub fn sha256(data: *const u8, length: usize, digest: *mut u8) {
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "system" fn Sha256(data: *const u8, length: usize, digest: *mut u8) {
-    sha256(data, length, digest)
-}
-
 const fn load_be_const(input: &[u8], offset: usize) -> u32 {
     ((input[offset] as u32) << 24)
         | ((input[offset + 1] as u32) << 16)

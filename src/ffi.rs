@@ -9,14 +9,6 @@ unsafe extern "system" {
     pub fn RtlImageNtHeaderMeme(base: *mut c_void) -> *mut c_void;
     pub fn ResolveRelativeAddress(base: *mut c_void, offset: u32) -> *mut u8;
     pub fn KeGetCurrentIrqlMeme() -> u8;
-    pub fn PsGetProcessExitStatusTrick(proc: *mut c_void) -> i32;
-    pub fn PsGetProcessPebTrick(proc: *mut c_void) -> *mut c_void;
-    pub fn PsGetProcessImageFileNameTrick(proc: *mut c_void) -> *mut i8;
-    pub fn PsGetProcessIdTrick(proc: *mut c_void) -> usize;
-    pub fn MmGetVirtualForPhysicalTrick(phys: u64) -> *mut c_void;
-    pub fn kwcsicmp(a: *const u16, b: *const u16) -> i32;
-    pub fn kstricmp(a: *const i8, b: *const i8) -> i32;
-    pub fn kwcslen(s: *const u16) -> usize;
     pub fn kmemset(dst: *mut c_void, val: i32, len: usize) -> *mut c_void;
     pub fn kmemmove(dst: *mut c_void, src: *const c_void, len: usize) -> *mut c_void;
     pub fn RtlCompareMemoryMeme(src1: *const u8, src2: *const u8, len: usize) -> usize;

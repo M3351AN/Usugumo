@@ -5,15 +5,12 @@ use crate::consts::*;
 use crate::ffi::*;
 use crate::keybd;
 use crate::mouse;
+use crate::process::{get_dll_address, get_dll_size, get_process_id_by_name, read_vm, write_vm};
 use crate::reimpl_ke::query_system_time;
-use crate::reimpl_process::{
-    get_dll_address, get_dll_size, get_process_id_by_name, read_vm, write_vm,
-};
 use crate::types::Requests;
 
 const TICKS_PER_SECOND: i64 = 10_000_000;
 
-#[unsafe(no_mangle)]
 pub static PUBLIC_KEY: [u8; 32] = [
     0x29, 0x51, 0x35, 0x8E, 0x6F, 0x85, 0xA5, 0xDA, 0xE0, 0x8E, 0x60, 0x3E, 0x94, 0x6E, 0xE9, 0xBD,
     0x49, 0xA1, 0x67, 0xE1, 0x02, 0xA3, 0xA0, 0x61, 0x4E, 0x55, 0x24, 0x5C, 0x0A, 0x16, 0xD6, 0xD0,

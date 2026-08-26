@@ -12,10 +12,11 @@ mod helpers;
 mod imports;
 mod keybd;
 mod mouse;
+mod pmem;
+mod process;
 mod random;
+mod reimpl;
 mod reimpl_ke;
-mod reimpl_pmem;
-mod reimpl_process;
 mod reimpl_wdm;
 mod request_handler;
 mod sha256;
@@ -42,7 +43,7 @@ pub extern "C" fn __CxxFrameHandler3() -> i32 {
 
 unsafe extern "system" fn driver_unload(driver: *mut DriverObject) {
     unsafe {
-        reimpl_pmem::cleanup_pmem_pages();
+        pmem::cleanup_pmem_pages();
         mouse::mouse_release();
         keybd::keyboard_release();
         let g = addr_of_mut!(G_SYMBOLIC_LINK_NAME);
@@ -76,7 +77,7 @@ unsafe extern "system" fn driver_init(
     _registry: *mut UnicodeString,
 ) -> NtStatus {
     unsafe {
-        let mut status = reimpl_pmem::init_pmem_pages();
+        let mut status = pmem::init_pmem_pages();
         if status < 0 {
             return status;
         }
@@ -120,11 +121,11 @@ unsafe extern "system" fn driver_init(
             random_device_name_buf[n] = c;
             n += 1;
         }
-        const HEX_CHARS: &[u8] = b"0123456789ABCDEF";
+        let hex_chars = obfstr::obfbytes!(b"0123456789ABCDEF");
         let rand_val = random::random_engine_next();
         for i in 0..16 {
             let nibble = ((rand_val >> (i * 4)) & 0xF) as usize;
-            random_device_name_buf[n] = HEX_CHARS[nibble] as u16;
+            random_device_name_buf[n] = hex_chars[nibble] as u16;
             n += 1;
         }
         random_device_name_buf[n] = 0;

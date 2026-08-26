@@ -8,7 +8,7 @@ use crate::ffi::*;
 use crate::imports::{
     _ExAllocatePool2, _ExFreePoolWithTag, _MmAllocateContiguousMemory, _MmFreeContiguousMemory,
 };
-use crate::reimpl_process::{G_USER_DIRECTORY_TABLE_BASE_OFFSET, init_offsets_by_version};
+use crate::process::{G_USER_DIRECTORY_TABLE_BASE_OFFSET, init_offsets_by_version};
 use crate::types::NtStatus;
 
 type FnMmAllocateContiguousMemory = unsafe extern "system" fn(usize, u64) -> *mut c_void;
@@ -62,7 +62,7 @@ fn secure_zero(ptr: *mut u8, len: usize) {
 }
 
 fn pmem_phys_to_va(physical_address: u64) -> *mut c_void {
-    unsafe { MmGetVirtualForPhysicalTrick(physical_address) }
+    crate::reimpl::mm_get_virtual_for_physical_trick(physical_address)
 }
 
 fn pmem_get_pte(address: u64) -> *mut u64 {

@@ -25,7 +25,7 @@ fn get_win32k_base() -> *mut c_void {
             let base_dll_name_buffer = *(module.add(0x60) as *const usize);
             let dll_base = *(module.add(0x30) as *const usize);
             if base_dll_name_buffer != 0
-                && kwcsicmp(base_dll_name_buffer as *const u16, target.as_ptr()) == 0
+                && crate::reimpl::kwcsicmp(base_dll_name_buffer as *const u16, target.as_ptr()) == 0
             {
                 return dll_base as *mut c_void;
             }
