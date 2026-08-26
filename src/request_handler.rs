@@ -35,10 +35,8 @@ fn is_timestamp_valid(ts: u64, tolerance_seconds: i64) -> bool {
 pub(crate) fn verify_secure_key(secure_key: u64) -> bool {
     let key_bytes = secure_key.to_ne_bytes();
     let mut local_checksum = [0u8; 32];
-    unsafe {
-        Sha256(key_bytes.as_ptr(), 8, local_checksum.as_mut_ptr());
-        RtlCompareMemoryMeme(local_checksum.as_ptr(), PUBLIC_KEY.as_ptr(), 32) == 32
-    }
+    crate::sha256::sha256(key_bytes.as_ptr(), 8, local_checksum.as_mut_ptr());
+    unsafe { RtlCompareMemoryMeme(local_checksum.as_ptr(), PUBLIC_KEY.as_ptr(), 32) == 32 }
 }
 
 pub unsafe extern "system" fn request_handler(pstruct: *mut Requests) -> u8 {

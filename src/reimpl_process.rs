@@ -286,12 +286,12 @@ fn get_dll_base_or_size(in_req: *mut Requests, get_size: bool) -> u64 {
 
         let mut decoded = [0i8; 65];
         kmemset(decoded.as_mut_ptr() as *mut c_void, 0, decoded.len());
-        DecodeFixedStr64(
+        crate::helpers::decode_fixed_str64(
             &(*in_req).name_str,
             decoded.as_mut_ptr(),
             (*in_req).name_length,
         );
-        let mut w_str = ConvertToPWSTR(decoded.as_ptr());
+        let mut w_str = crate::helpers::convert_to_pwstr(decoded.as_ptr());
         if w_str.is_null() {
             free_converted_pwstr(&mut w_str);
             deref_process(source_process);
@@ -373,7 +373,7 @@ pub fn get_process_id_by_name(in_req: *mut Requests) -> u64 {
             0,
             target_name.len(),
         );
-        DecodeFixedStr64(
+        crate::helpers::decode_fixed_str64(
             &(*in_req).name_str,
             target_name.as_mut_ptr(),
             (*in_req).name_length,

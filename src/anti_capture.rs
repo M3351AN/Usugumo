@@ -54,7 +54,7 @@ pub fn init_gre_protect_sprite_content() -> u8 {
                 b'x' as i8, b'x' as i8, b'x' as i8, b'x' as i8,
             ];
 
-            let found = SearchSignForImage(
+            let found = crate::helpers::search_sign_for_image(
                 module_base,
                 pattern.as_ptr(),
                 mask.as_ptr(),

@@ -8,6 +8,7 @@ mod consts;
 mod dispatches;
 mod ffi;
 mod globals;
+mod helpers;
 mod imports;
 mod random;
 mod reimpl_ke;
@@ -15,6 +16,7 @@ mod reimpl_pmem;
 mod reimpl_process;
 mod reimpl_wdm;
 mod request_handler;
+mod sha256;
 mod types;
 mod util;
 mod xxh3;
@@ -81,7 +83,7 @@ unsafe extern "system" fn driver_init(
         random::random_engine_init();
 
         let mut serial = [0i8; 128];
-        status = GetBootVolumeSerial(serial.as_mut_ptr(), serial.len() as u32);
+        status = helpers::get_boot_volume_serial(serial.as_mut_ptr(), serial.len() as u32);
         if status < 0 {
             driver_unload(driver);
             return status;
@@ -89,7 +91,7 @@ unsafe extern "system" fn driver_init(
         let serial_len = serial.iter().position(|&c| c == 0).unwrap_or(serial.len());
 
         let mut obfuscated = [0u16; 32];
-        status = GenerateObfuscatedName(
+        status = helpers::generate_obfuscated_name(
             serial.as_ptr() as *const u8,
             serial_len as u32,
             obfuscated.as_mut_ptr(),
