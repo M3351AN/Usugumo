@@ -107,7 +107,7 @@ unsafe extern "system" fn driver_init(
             driver_unload(driver);
             return status;
         }
-        let obf_len = wcslen(&obfuscated);
+        let obf_len = kwcslen(obfuscated.as_ptr());
 
         let mut device_name = UnicodeString {
             length: 0,
@@ -148,7 +148,7 @@ unsafe extern "system" fn driver_init(
             core::mem::size_of::<[u16; 32]>(),
         );
 
-        let sym_link_bytes = (wcslen(&sym_link_buf) + 1) * core::mem::size_of::<u16>();
+        let sym_link_bytes = (kwcslen(sym_link_buf.as_ptr()) + 1) * core::mem::size_of::<u16>();
         let sym_link_pool = if _ExAllocatePool2.is_null() {
             core::ptr::null_mut()
         } else {
@@ -162,7 +162,7 @@ unsafe extern "system" fn driver_init(
         core::ptr::copy_nonoverlapping(
             sym_link_buf.as_ptr(),
             sym_link_pool as *mut u16,
-            wcslen(&sym_link_buf) + 1,
+            kwcslen(sym_link_buf.as_ptr()) + 1,
         );
         RtlInitUnicodeStringMeme(
             addr_of_mut!(G_SYMBOLIC_LINK_NAME),

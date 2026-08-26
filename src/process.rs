@@ -11,9 +11,11 @@ use crate::imports::{
 };
 use crate::pmem::{copy_virtual_memory, read_process_memory};
 use crate::reimpl::{
-    kstricmp, kwcsicmp, kwcslen, ps_get_process_exit_status_trick, ps_get_process_id_trick,
+    ps_get_process_exit_status_trick, ps_get_process_id_trick,
     ps_get_process_image_file_name_trick, ps_get_process_peb_trick,
 };
+use crate::util::{kmemset, kstricmp, kwcsicmp, kwcslen};
+
 use crate::request_handler::verify_secure_key;
 use crate::types::{NtStatus, Requests, UnicodeString};
 

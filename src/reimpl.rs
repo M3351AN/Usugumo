@@ -3,88 +3,8 @@
 use core::ffi::c_void;
 use core::ptr::null_mut;
 
-use crate::ffi::{kmemmove, kmemset};
 use crate::imports::resolve_kernel_export;
 use crate::sha256::sha256_const;
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn strlen(s: *const i8) -> usize {
-    let mut len = 0;
-    while unsafe { *s.add(len) } != 0 {
-        len += 1;
-    }
-    len
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn memset(dst: *mut c_void, val: i32, len: usize) -> *mut c_void {
-    unsafe { kmemset(dst, val, len) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn memmove(dst: *mut c_void, src: *const c_void, len: usize) -> *mut c_void {
-    unsafe { kmemmove(dst, src, len) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn memcpy(dst: *mut c_void, src: *const c_void, len: usize) -> *mut c_void {
-    unsafe { kmemmove(dst, src, len) }
-}
-
-pub fn kstricmp(mut a: *const i8, mut b: *const i8) -> i32 {
-    unsafe {
-        loop {
-            let c1 = *a as i32;
-            a = a.add(1);
-            let c2 = *b as i32;
-            b = b.add(1);
-            let mut x = c1 + 32;
-            if (c1 as u32).wrapping_sub(65) > 0x19 {
-                x = c1;
-            }
-            let mut y = c2 + 32;
-            if (c2 as u32).wrapping_sub(65) > 0x19 {
-                y = c2;
-            }
-            if x == 0 || x != y {
-                return x - y;
-            }
-        }
-    }
-}
-
-pub fn kwcsicmp(mut a: *const u16, mut b: *const u16) -> i32 {
-    unsafe {
-        loop {
-            let c1 = *a as u32;
-            a = a.add(1);
-            let c2 = *b as u32;
-            b = b.add(1);
-            let mut x = c1 + 32;
-            if c1.wrapping_sub(65) & 0xFFFF > 0x19 {
-                x = c1;
-            }
-            let mut y = c2 + 32;
-            if c2.wrapping_sub(65) & 0xFFFF > 0x19 {
-                y = c2;
-            }
-            if x == 0 || x != y {
-                return x as i32 - y as i32;
-            }
-        }
-    }
-}
-
-#[unsafe(no_mangle)]
-pub fn kwcslen(s: *const u16) -> usize {
-    let mut len = 0;
-    unsafe {
-        while *s.add(len) != 0 {
-            len += 1;
-        }
-    }
-    len
-}
 
 static mut G_PEB_OFFSET: u32 = 0;
 

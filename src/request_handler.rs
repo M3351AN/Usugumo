@@ -46,7 +46,7 @@ pub unsafe extern "system" fn request_handler(pstruct: *mut Requests) -> u8 {
         if !is_timestamp_valid((*pstruct).time_stamp, 1) {
             return 0;
         }
-        if (*pstruct).check_sum != CalculateRequestsChecksum(pstruct) {
+        if (*pstruct).check_sum != crate::helpers::calculate_requests_checksum(pstruct) {
             return 0;
         }
         if !verify_secure_key((*pstruct).secure_key) {

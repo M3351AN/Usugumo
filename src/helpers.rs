@@ -7,7 +7,7 @@ use crate::consts::*;
 use crate::ffi::*;
 use crate::imports::{_ExAllocatePool2, _ZwClose, _ZwCreateFile, _ZwQueryVolumeInformationFile};
 use crate::sha256::sha256;
-use crate::types::{FixedStr64, IoStatusBlock, NtStatus, UnicodeString};
+use crate::types::{FixedStr64, IoStatusBlock, NtStatus, Requests, UnicodeString};
 
 type FnExAllocatePool2 = unsafe extern "system" fn(u64, usize, u32) -> *mut c_void;
 type FnZwClose = unsafe extern "system" fn(usize) -> NtStatus;
@@ -123,8 +123,7 @@ pub fn search_sign_for_image(
             let virtual_address = *(section.add(12) as *const u32);
             let characteristics = *(section.add(36) as *const u32);
 
-            if crate::reimpl::kstricmp(name, obfstr::obfbytes!(b".text\0").as_ptr() as *const i8)
-                == 0
+            if crate::util::kstricmp(name, obfstr::obfbytes!(b".text\0").as_ptr() as *const i8) == 0
                 || (characteristics & IMAGE_SCN_CNT_CODE) != 0
             {
                 let start = (image_base as *const u8).add(virtual_address as usize);
@@ -278,5 +277,60 @@ pub fn generate_obfuscated_name(
         }
         *out.add(16) = 0;
         STATUS_SUCCESS
+    }
+}
+
+static mut CRC64_INITIALIZED: bool = false;
+static mut CRC64_TABLE: [u64; 256] = [0; 256];
+
+fn init_crc64_table() {
+    unsafe {
+        if CRC64_INITIALIZED {
+            return;
+        }
+        let mut rcx = 0usize;
+        while rcx < 256 {
+            let mut rax = rcx as u64;
+            let mut i = 0;
+            while i < 8 {
+                if rax & 1 != 0 {
+                    rax ^= 0x85E1C3D753D46D27;
+                }
+                rax >>= 1;
+                i += 1;
+            }
+            CRC64_TABLE[rcx] = rax;
+            rcx += 1;
+        }
+        CRC64_INITIALIZED = true;
+    }
+}
+
+pub fn calculate_requests_checksum(req: *mut Requests) -> u64 {
+    unsafe {
+        if req.is_null() {
+            return 0;
+        }
+        init_crc64_table();
+        let bytes = core::slice::from_raw_parts(req as *const u8, 0xB8);
+        let mut rax = 0xFFFFFFFFFFFFFFFFu64;
+        for &b in bytes.iter() {
+            rax ^= b as u64;
+            let idx = (rax & 0xFF) as usize;
+            rax >>= 8;
+            rax ^= CRC64_TABLE[idx];
+        }
+        !rax
+    }
+}
+
+pub fn resolve_relative_address(base: *mut c_void, offset: u32) -> *mut u8 {
+    if base.is_null() {
+        return null_mut();
+    }
+    unsafe {
+        let b = base as *const u8;
+        let disp = *(b.add(offset as usize) as *const i32) as i64;
+        b.add(offset as usize + 4).offset(disp as isize) as *mut u8
     }
 }

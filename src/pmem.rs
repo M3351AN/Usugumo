@@ -151,9 +151,9 @@ fn pmem_swap_phys(
 
         let target = (page.virtual_address as *mut u8).add(page_offset);
         if write {
-            kmemmove(target as *mut c_void, buffer, size);
+            crate::util::kmemmove(target as *mut c_void, buffer, size);
         } else {
-            kmemmove(buffer, target as *const c_void, size);
+            crate::util::kmemmove(buffer, target as *const c_void, size);
         }
 
         *page.pte_long = old_value;

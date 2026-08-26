@@ -3,7 +3,6 @@
 use core::ffi::c_void;
 use core::ptr::null_mut;
 
-use crate::ffi::*;
 use crate::imports::_PsLoadedModuleList;
 use crate::request_handler::verify_secure_key;
 use crate::types::Requests;
@@ -25,7 +24,7 @@ fn get_win32k_base() -> *mut c_void {
             let base_dll_name_buffer = *(module.add(0x60) as *const usize);
             let dll_base = *(module.add(0x30) as *const usize);
             if base_dll_name_buffer != 0
-                && crate::reimpl::kwcsicmp(base_dll_name_buffer as *const u16, target.as_ptr()) == 0
+                && crate::util::kwcsicmp(base_dll_name_buffer as *const u16, target.as_ptr()) == 0
             {
                 return dll_base as *mut c_void;
             }
@@ -64,7 +63,7 @@ pub fn init_gre_protect_sprite_content() -> u8 {
                 return 0;
             }
 
-            let address = ResolveRelativeAddress(found, 1);
+            let address = crate::helpers::resolve_relative_address(found, 1);
             if address.is_null() {
                 return 0;
             }
