@@ -54,36 +54,9 @@ fn main() {
 
     let wdk_ver = latest_version(&wdk_root).expect("no 10.* SDK version dirs under WDK root");
 
-    let km_inc = wdk_root.join("Include").join(&wdk_ver).join("km");
-    let shared_inc = wdk_root.join("Include").join(&wdk_ver).join("shared");
-    let um_inc = wdk_root.join("Include").join(&wdk_ver).join("um");
     let km_lib = wdk_root.join("Lib").join(&wdk_ver).join("km").join("x64");
 
     let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let asmsrc = manifest.join("asmsrc");
-    let includes = manifest.join("includes");
-
-    println!("cargo:rerun-if-changed={}", asmsrc.display());
-    println!("cargo:rerun-if-changed={}", includes.display());
-
-    let mut asm_srcs = Vec::new();
-    for entry in fs::read_dir(&asmsrc).expect("asmsrc dir must exist") {
-        let path = entry.expect("read_dir entry").path();
-        if path.extension().and_then(|e| e.to_str()) == Some("asm") {
-            asm_srcs.push(path);
-        }
-    }
-    asm_srcs.sort();
-
-    let mut asm = cc::Build::new();
-    asm.include(&km_inc)
-        .include(&shared_inc)
-        .include(&um_inc)
-        .include(&includes);
-    asm.define("_AMD64_", None);
-    asm.define("_KERNEL_MODE", None);
-    asm.files(&asm_srcs);
-    asm.compile("usugumo_asm");
 
     println!("cargo:rustc-link-search=native={}", km_lib.display());
     println!("cargo:rustc-link-lib=ntoskrnl");

@@ -10,7 +10,9 @@ mod ffi;
 mod helpers;
 mod imports;
 mod keybd;
+mod keybdcallback;
 mod mouse;
+mod mousecallback;
 mod pmem;
 mod process;
 mod random;
@@ -33,11 +35,6 @@ use crate::dispatches::*;
 use crate::imports::*;
 use crate::types::*;
 use crate::util::*;
-
-#[unsafe(no_mangle)]
-pub extern "C" fn __CxxFrameHandler3() -> i32 {
-    0
-}
 
 unsafe extern "system" fn driver_unload(driver: *mut DriverObject) {
     unsafe {

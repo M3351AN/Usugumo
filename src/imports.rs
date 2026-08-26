@@ -14,14 +14,12 @@ pub type ExAllocatePool2Fn = unsafe extern "system" fn(u64, usize, u32) -> *mut 
 pub type ExFreePoolWithTagFn = unsafe extern "system" fn(*mut c_void, u32);
 pub type IoDeleteDeviceFn = unsafe extern "system" fn(*mut DeviceObject) -> NtStatus;
 
-#[unsafe(no_mangle)]
-pub static mut _KeAcquireSpinLockAtDpcLevel: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _KeReleaseSpinLockFromDpcLevel: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _IofCompleteRequest: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _IoReleaseRemoveLockEx: *mut c_void = null_mut();
+unsafe extern "C" {
+    static mut _KeAcquireSpinLockAtDpcLevel: *mut c_void;
+    static mut _KeReleaseSpinLockFromDpcLevel: *mut c_void;
+    pub(crate) static mut _IofCompleteRequest: *mut c_void;
+    static mut _IoReleaseRemoveLockEx: *mut c_void;
+}
 pub static mut _IO_CREATE_DRIVER: *mut c_void = null_mut();
 pub static mut _OB_REFERENCE_OBJECT_BY_NAME: *mut c_void = null_mut();
 pub static mut _OBF_REFERENCE_OBJECT: *mut c_void = null_mut();
