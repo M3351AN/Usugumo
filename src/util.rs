@@ -4,13 +4,33 @@ use core::ffi::c_void;
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn kmemmove(dst: *mut c_void, src: *const c_void, len: usize) -> *mut c_void {
-    unsafe { core::ptr::copy(src as *const u8, dst as *mut u8, len) }
+    let d = dst as *mut u8;
+    let s = src as *const u8;
+    unsafe {
+        if (d as usize) <= (s as usize) || (s as usize).wrapping_add(len) <= (d as usize) {
+            for i in 0..len {
+                *d.add(i) = *s.add(i);
+            }
+        } else {
+            let mut i = len;
+            while i > 0 {
+                i -= 1;
+                *d.add(i) = *s.add(i);
+            }
+        }
+    }
     dst
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn kmemset(dst: *mut c_void, val: i32, len: usize) -> *mut c_void {
-    unsafe { core::ptr::write_bytes(dst as *mut u8, val as u8, len) }
+    let d = dst as *mut u8;
+    let v = val as u8;
+    unsafe {
+        for i in 0..len {
+            *d.add(i) = v;
+        }
+    }
     dst
 }
 

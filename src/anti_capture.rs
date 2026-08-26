@@ -18,17 +18,17 @@ fn get_win32k_base() -> *mut c_void {
         }
         let target = obfstr::obfwide!("win32kfull.sys");
         let head = _PsLoadedModuleList as usize;
-        let mut entry = *(_PsLoadedModuleList as *const usize);
+        let mut entry = crate::helpers::read_u64(_PsLoadedModuleList as *const u8, 0) as usize;
         while entry != head {
             let module = entry as *mut u8;
-            let base_dll_name_buffer = *(module.add(0x60) as *const usize);
-            let dll_base = *(module.add(0x30) as *const usize);
+            let base_dll_name_buffer = crate::helpers::read_u64(module, 0x60) as usize;
+            let dll_base = crate::helpers::read_u64(module, 0x30) as usize;
             if base_dll_name_buffer != 0
                 && crate::util::kwcsicmp(base_dll_name_buffer as *const u16, target.as_ptr()) == 0
             {
                 return dll_base as *mut c_void;
             }
-            entry = *(module as *const usize);
+            entry = crate::helpers::read_u64(module, 0) as usize;
         }
         null_mut()
     }

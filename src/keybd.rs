@@ -436,12 +436,14 @@ fn keyboard_open() -> bool {
                             / 4;
 
                         for i in 0..device_ext_size {
-                            if *device_extension.add(i) as usize == class_device_object as usize
-                                && *device_extension.add(i + 1) as usize
+                            let ext = device_extension as *const u8;
+                            if crate::helpers::read_u64(ext, i * 8) as usize
+                                == class_device_object as usize
+                                && crate::helpers::read_u64(ext, (i + 1) * 8) as usize
                                     > class_driver_object as usize
                             {
                                 G_KEYBOARD_OBJECT.service_callback =
-                                    *device_extension.add(i + 1) as *mut c_void;
+                                    crate::helpers::read_u64(ext, (i + 1) * 8) as *mut c_void;
                                 G_KEYBOARD_OBJECT.keyboard_device = class_device_object;
                                 break;
                             }

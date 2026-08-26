@@ -34,6 +34,13 @@ const OFF_ENTRY_DLLBASE: u64 = 0x30;
 const OFF_ENTRY_SIZEIMAGE: u64 = 0x40;
 const OFF_ENTRY_BASENAME: u64 = 0x58;
 
+const _: () = assert!(OFF_PEB_LDR == 0x18);
+const _: () = assert!(OFF_LDR_INLOAD_ORDER == 0x10);
+const _: () = assert!(OFF_ENTRY_INLOAD_LINKS == 0x00);
+const _: () = assert!(OFF_ENTRY_DLLBASE == 0x30);
+const _: () = assert!(OFF_ENTRY_SIZEIMAGE == 0x40);
+const _: () = assert!(OFF_ENTRY_BASENAME == 0x58);
+
 fn lookup_process(pid: u64, out: *mut *mut c_void) -> NtStatus {
     unsafe {
         if _PsLookupProcessByProcessId.is_null() {
@@ -407,10 +414,12 @@ pub fn get_process_id_by_name(in_req: *mut Requests) -> u64 {
                 }
             }
 
-            let list_entry =
-                (current_process as usize + G_ACTIVE_PROCESS_LINKS_OFFSET as usize) as *const usize;
-            let flink = *list_entry;
-            if flink == 0 || flink == list_entry as usize {
+            let list_entry = current_process as usize + G_ACTIVE_PROCESS_LINKS_OFFSET as usize;
+            let flink = crate::helpers::read_u64(
+                current_process as *const u8,
+                G_ACTIVE_PROCESS_LINKS_OFFSET as usize,
+            ) as usize;
+            if flink == 0 || flink == list_entry {
                 break;
             }
 

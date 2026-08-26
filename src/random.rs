@@ -42,12 +42,12 @@ pub fn random_engine_next() -> u64 {
 
 #[inline]
 fn read_interrupt_time_raw() -> u64 {
-    let ptr = KUSER_SHARED_INTERRUPT_TIME as *const u32;
-    let lo = unsafe { *ptr };
-    let mut hi1 = unsafe { *ptr.add(1) } as i32;
-    let hi2 = unsafe { *ptr.add(2) } as i32;
+    let ptr = KUSER_SHARED_INTERRUPT_TIME as *const u8;
+    let lo = crate::helpers::read_u32(ptr, 0);
+    let mut hi1 = crate::helpers::read_u32(ptr, 4) as i32;
+    let hi2 = crate::helpers::read_u32(ptr, 8) as i32;
     if hi1 != hi2 {
-        hi1 = unsafe { *ptr.add(1) } as i32;
+        hi1 = crate::helpers::read_u32(ptr, 4) as i32;
     }
     ((hi1 as u32 as u64) << 32) | lo as u64
 }

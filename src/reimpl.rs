@@ -20,13 +20,11 @@ fn get_peb_offset() -> u32 {
         let p = func as *const u8;
         let mut i = 0;
         while i < 0x10 {
-            if *p.add(i) == 0x48 && *p.add(i + 1) == 0x8B && *p.add(i + 2) == 0x81 {
-                let off = u32::from_le_bytes([
-                    *p.add(i + 3),
-                    *p.add(i + 4),
-                    *p.add(i + 5),
-                    *p.add(i + 6),
-                ]);
+            if crate::helpers::read_u8(p, i) == 0x48
+                && crate::helpers::read_u8(p, i + 1) == 0x8B
+                && crate::helpers::read_u8(p, i + 2) == 0x81
+            {
+                let off = crate::helpers::read_u32(p, i + 3);
                 if off > 0x10 && off <= 0x1000 {
                     G_PEB_OFFSET = off;
                     return off;
@@ -39,13 +37,11 @@ fn get_peb_offset() -> u32 {
 }
 
 pub fn ps_get_process_peb_trick(process: *mut c_void) -> *mut c_void {
-    unsafe {
-        let off = get_peb_offset();
-        if off == 0 {
-            return null_mut();
-        }
-        *((process as *const u8).add(off as usize) as *const *mut c_void)
+    let off = get_peb_offset();
+    if off == 0 {
+        return null_mut();
     }
+    crate::helpers::read_u64(process as *const u8, off as usize) as *mut c_void
 }
 
 static mut G_IMAGE_FILE_NAME_OFFSET: u32 = 0;
@@ -62,13 +58,11 @@ fn get_image_file_name_offset() -> u32 {
         let p = func as *const u8;
         let mut i = 0;
         while i < 0x10 {
-            if *p.add(i) == 0x48 && *p.add(i + 1) == 0x8D && *p.add(i + 2) == 0x81 {
-                let off = u32::from_le_bytes([
-                    *p.add(i + 3),
-                    *p.add(i + 4),
-                    *p.add(i + 5),
-                    *p.add(i + 6),
-                ]);
+            if crate::helpers::read_u8(p, i) == 0x48
+                && crate::helpers::read_u8(p, i + 1) == 0x8D
+                && crate::helpers::read_u8(p, i + 2) == 0x81
+            {
+                let off = crate::helpers::read_u32(p, i + 3);
                 if off > 0x10 && off <= 0x1000 {
                     G_IMAGE_FILE_NAME_OFFSET = off;
                     return off;
@@ -104,13 +98,11 @@ fn get_process_id_offset() -> u32 {
         let p = func as *const u8;
         let mut i = 0;
         while i < 0x10 {
-            if *p.add(i) == 0x48 && *p.add(i + 1) == 0x8B && *p.add(i + 2) == 0x81 {
-                let off = u32::from_le_bytes([
-                    *p.add(i + 3),
-                    *p.add(i + 4),
-                    *p.add(i + 5),
-                    *p.add(i + 6),
-                ]);
+            if crate::helpers::read_u8(p, i) == 0x48
+                && crate::helpers::read_u8(p, i + 1) == 0x8B
+                && crate::helpers::read_u8(p, i + 2) == 0x81
+            {
+                let off = crate::helpers::read_u32(p, i + 3);
                 if off > 0x10 && off <= 0x1000 {
                     G_PROCESS_ID_OFFSET = off;
                     return off;
@@ -123,13 +115,11 @@ fn get_process_id_offset() -> u32 {
 }
 
 pub fn ps_get_process_id_trick(process: *mut c_void) -> usize {
-    unsafe {
-        let off = get_process_id_offset();
-        if off == 0 {
-            return 0;
-        }
-        *((process as *const u8).add(off as usize) as *const usize)
+    let off = get_process_id_offset();
+    if off == 0 {
+        return 0;
     }
+    crate::helpers::read_u64(process as *const u8, off as usize) as usize
 }
 
 static mut G_PROCESS_EXIT_STATUS_OFFSET: u32 = 0;
@@ -146,13 +136,8 @@ fn get_process_exit_status_offset() -> u32 {
         let p = func as *const u8;
         let mut i = 0;
         while i < 0x10 {
-            if *p.add(i) == 0x8B && *p.add(i + 1) == 0x81 {
-                let off = u32::from_le_bytes([
-                    *p.add(i + 2),
-                    *p.add(i + 3),
-                    *p.add(i + 4),
-                    *p.add(i + 5),
-                ]);
+            if crate::helpers::read_u8(p, i) == 0x8B && crate::helpers::read_u8(p, i + 1) == 0x81 {
+                let off = crate::helpers::read_u32(p, i + 2);
                 if off > 0x10 && off <= 0x1000 {
                     G_PROCESS_EXIT_STATUS_OFFSET = off;
                     return off;
@@ -165,13 +150,11 @@ fn get_process_exit_status_offset() -> u32 {
 }
 
 pub fn ps_get_process_exit_status_trick(process: *mut c_void) -> i32 {
-    unsafe {
-        let off = get_process_exit_status_offset();
-        if off == 0 {
-            return 0;
-        }
-        *((process as *const u8).add(off as usize) as *const i32)
+    let off = get_process_exit_status_offset();
+    if off == 0 {
+        return 0;
     }
+    crate::helpers::read_u32(process as *const u8, off as usize) as i32
 }
 
 static mut G_PFN_BASE: u64 = 0;
@@ -189,16 +172,16 @@ fn parse_bases() {
         let p = func as *const u8;
         let mut i = 0;
         while i < 0x20 {
-            if *p.add(i) == 0x48 && *p.add(i + 1) == 0xB8 {
-                G_PFN_BASE = u64::from_le_bytes(core::ptr::read(p.add(i + 2) as *const [u8; 8]));
+            if crate::helpers::read_u8(p, i) == 0x48 && crate::helpers::read_u8(p, i + 1) == 0xB8 {
+                G_PFN_BASE = crate::helpers::read_u64(p, i + 2);
                 return;
             }
             i += 1;
         }
         let mut j = 0;
         while j < 0x40 {
-            if *p.add(j) == 0x48 && *p.add(j + 1) == 0xBA {
-                G_PTE_BASE = u64::from_le_bytes(core::ptr::read(p.add(j + 2) as *const [u8; 8]));
+            if crate::helpers::read_u8(p, j) == 0x48 && crate::helpers::read_u8(p, j + 1) == 0xBA {
+                G_PTE_BASE = crate::helpers::read_u64(p, j + 2);
                 return;
             }
             j += 1;
@@ -211,7 +194,7 @@ pub fn mm_get_virtual_for_physical_trick(physical_address: u64) -> *mut c_void {
         parse_bases();
         let pfn = physical_address >> 12;
         let offset = physical_address & 0xFFF;
-        let val = *((G_PFN_BASE + pfn * 48) as *const u64);
+        let val = crate::helpers::read_u64((G_PFN_BASE + pfn * 48) as *const u8, 0);
         let shifted = val << 25;
         let base2_shifted = G_PTE_BASE << 25;
         let diff = (shifted.wrapping_sub(base2_shifted) as i64) >> 16;

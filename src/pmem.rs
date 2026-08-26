@@ -66,56 +66,53 @@ fn pmem_phys_to_va(physical_address: u64) -> *mut c_void {
 }
 
 fn pmem_get_pte(address: u64) -> *mut u64 {
-    unsafe {
-        let cr3 = read_cr3() & !0xF;
-        let pml4_index = (address >> 39) & 0x1FF;
-        let pdpt_index = (address >> 30) & 0x1FF;
-        let pd_index = (address >> 21) & 0x1FF;
-        let pt_index = (address >> 12) & 0x1FF;
+    let cr3 = read_cr3() & !0xF;
+    let pml4_index = (address >> 39) & 0x1FF;
+    let pdpt_index = (address >> 30) & 0x1FF;
+    let pd_index = (address >> 21) & 0x1FF;
+    let pt_index = (address >> 12) & 0x1FF;
 
-        let pml4_va = pmem_phys_to_va(cr3);
-        if pml4_va.is_null() {
-            return null_mut();
-        }
-        let pml4e = *(pml4_va as *const u64).add(pml4_index as usize);
-        if pml4e & 1 == 0 {
-            return null_mut();
-        }
-
-        let pdpt_va = pmem_phys_to_va(pml4e & PMEM_PMASK);
-        if pdpt_va.is_null() {
-            return null_mut();
-        }
-        let pdpte = *(pdpt_va as *const u64).add(pdpt_index as usize);
-        if pdpte & 1 == 0 {
-            return null_mut();
-        }
-        if pdpte & 0x80 != 0 {
-            return null_mut();
-        }
-
-        let pd_va = pmem_phys_to_va(pdpte & PMEM_PMASK);
-        if pd_va.is_null() {
-            return null_mut();
-        }
-        let pde = *(pd_va as *const u64).add(pd_index as usize);
-        if pde & 1 == 0 {
-            return null_mut();
-        }
-        if pde & 0x80 != 0 {
-            return null_mut();
-        }
-
-        let pt_va = pmem_phys_to_va(pde & PMEM_PMASK);
-        if pt_va.is_null() {
-            return null_mut();
-        }
-        let pte = (pt_va as *mut u64).add(pt_index as usize);
-        if *pte & 1 == 0 {
-            return null_mut();
-        }
-        pte
+    let pml4_va = pmem_phys_to_va(cr3);
+    if pml4_va.is_null() {
+        return null_mut();
     }
+    let pml4e = crate::helpers::read_u64(pml4_va as *const u8, (pml4_index * 8) as usize);
+    if pml4e & 1 == 0 {
+        return null_mut();
+    }
+
+    let pdpt_va = pmem_phys_to_va(pml4e & PMEM_PMASK);
+    if pdpt_va.is_null() {
+        return null_mut();
+    }
+    let pdpte = crate::helpers::read_u64(pdpt_va as *const u8, (pdpt_index * 8) as usize);
+    if pdpte & 1 == 0 {
+        return null_mut();
+    }
+    if pdpte & 0x80 != 0 {
+        return null_mut();
+    }
+
+    let pd_va = pmem_phys_to_va(pdpte & PMEM_PMASK);
+    if pd_va.is_null() {
+        return null_mut();
+    }
+    let pde = crate::helpers::read_u64(pd_va as *const u8, (pd_index * 8) as usize);
+    if pde & 1 == 0 {
+        return null_mut();
+    }
+    if pde & 0x80 != 0 {
+        return null_mut();
+    }
+
+    let pt_va = pmem_phys_to_va(pde & PMEM_PMASK);
+    if pt_va.is_null() {
+        return null_mut();
+    }
+    if crate::helpers::read_u64(pt_va as *const u8, (pt_index * 8) as usize) & 1 == 0 {
+        return null_mut();
+    }
+    unsafe { (pt_va as *mut u64).add(pt_index as usize) }
 }
 
 fn pmem_swap_phys(
@@ -144,8 +141,12 @@ fn pmem_swap_phys(
             return STATUS_INVALID_PARAMETER;
         }
 
-        let old_value = *page.pte_long;
-        *page.pte_long = (old_value & !PMEM_PMASK) | page_start;
+        let old_value = crate::helpers::read_u64(page.pte_long as *const u8, 0);
+        crate::helpers::write_u64(
+            page.pte_long as *mut u8,
+            0,
+            (old_value & !PMEM_PMASK) | page_start,
+        );
         mfence();
         invlpg(page.virtual_address as u64);
 
@@ -156,7 +157,7 @@ fn pmem_swap_phys(
             crate::util::kmemmove(buffer, target as *const c_void, size);
         }
 
-        *page.pte_long = old_value;
+        crate::helpers::write_u64(page.pte_long as *mut u8, 0, old_value);
         mfence();
         invlpg(page.virtual_address as u64);
 
@@ -273,18 +274,19 @@ pub fn get_process_cr3(process: *mut c_void) -> u64 {
     if process.is_null() {
         return 0;
     }
-    unsafe {
-        let dtb = *(process as *const u64).add(0x28 / 8);
-        if dtb != 0 {
-            return dtb;
-        }
-        if G_USER_DIRECTORY_TABLE_BASE_OFFSET == 0 {
-            if !init_offsets_by_version() {
-                return 0;
-            }
-        }
-        *(process as *const u64).add(G_USER_DIRECTORY_TABLE_BASE_OFFSET as usize / 8)
+    let dtb = crate::helpers::read_u64(process as *const u8, 0x28);
+    if dtb != 0 {
+        return dtb;
     }
+    if unsafe { G_USER_DIRECTORY_TABLE_BASE_OFFSET == 0 } {
+        if !init_offsets_by_version() {
+            return 0;
+        }
+    }
+    crate::helpers::read_u64(
+        process as *const u8,
+        unsafe { G_USER_DIRECTORY_TABLE_BASE_OFFSET } as usize,
+    )
 }
 
 pub fn read_process_memory(

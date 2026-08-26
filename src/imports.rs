@@ -174,6 +174,25 @@ struct ImageExportDirectory {
     address_of_name_ordinals: u32,
 }
 
+const OFF_DOS_ELFANEW: usize = core::mem::offset_of!(ImageDosHeader, e_lfanew);
+const OFF_NT_SIG: usize = 0;
+const OFF_NT_DD0_VA: usize =
+    core::mem::offset_of!(ImageNtHeaders64, optional_header.data_directory);
+const OFF_NT_DD0_SIZE: usize = OFF_NT_DD0_VA + 4;
+const OFF_EXP_NUM_NAMES: usize = core::mem::offset_of!(ImageExportDirectory, number_of_names);
+const OFF_EXP_ADDR_FUNCS: usize = core::mem::offset_of!(ImageExportDirectory, address_of_functions);
+const OFF_EXP_ADDR_NAMES: usize = core::mem::offset_of!(ImageExportDirectory, address_of_names);
+const OFF_EXP_ADDR_ORDINALS: usize =
+    core::mem::offset_of!(ImageExportDirectory, address_of_name_ordinals);
+
+const _: () = assert!(OFF_DOS_ELFANEW == 0x3C);
+const _: () = assert!(OFF_NT_DD0_VA == 0x88);
+const _: () = assert!(OFF_NT_DD0_SIZE == 0x8C);
+const _: () = assert!(OFF_EXP_NUM_NAMES == 0x18);
+const _: () = assert!(OFF_EXP_ADDR_FUNCS == 0x1C);
+const _: () = assert!(OFF_EXP_ADDR_NAMES == 0x20);
+const _: () = assert!(OFF_EXP_ADDR_ORDINALS == 0x24);
+
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
 struct IdtEntry64 {
@@ -189,11 +208,11 @@ struct IdtEntry64 {
 fn hash_cstring(ptr: *const u8) -> [u8; 32] {
     let mut buf = [0u8; 128];
     let mut len = 0;
-    while len < buf.len() && unsafe { *ptr.add(len) } != 0 {
-        buf[len] = unsafe { *ptr.add(len) };
+    while len < buf.len() && crate::helpers::read_u8(ptr, len) != 0 {
+        buf[len] = crate::helpers::read_u8(ptr, len);
         len += 1;
     }
-    if unsafe { *ptr.add(len) } != 0 {
+    if crate::helpers::read_u8(ptr, len) != 0 {
         return [0u8; 32];
     }
     sha256_const(&buf[..len])
@@ -212,7 +231,7 @@ unsafe fn read_gs_qword(offset: usize) -> u64 {
     out
 }
 
-unsafe fn search_bytes(start: u64, max_len: u64, pat: &[u8], wildcard: u8, dir: i32) -> u64 {
+fn search_bytes(start: u64, max_len: u64, pat: &[u8], wildcard: u8, dir: i32) -> u64 {
     for i in 0..max_len {
         let addr = if dir > 0 {
             start.wrapping_add(i)
@@ -226,7 +245,7 @@ unsafe fn search_bytes(start: u64, max_len: u64, pat: &[u8], wildcard: u8, dir: 
             } else {
                 addr.wrapping_sub(j as u64)
             };
-            if pb != wildcard && unsafe { *(p as *const u8) } != pb {
+            if pb != wildcard && crate::helpers::read_u8(p as *const u8, 0) != pb {
                 matched = false;
                 break;
             }
@@ -238,13 +257,17 @@ unsafe fn search_bytes(start: u64, max_len: u64, pat: &[u8], wildcard: u8, dir: 
     0
 }
 
-unsafe fn search_in_image(start: u64, max_len: u64, pat: &[u8], wildcard: u8, dir: i32) -> u64 {
-    unsafe { search_bytes(start, max_len, pat, wildcard, dir) }
+fn search_in_image(start: u64, max_len: u64, pat: &[u8], wildcard: u8, dir: i32) -> u64 {
+    search_bytes(start, max_len, pat, wildcard, dir)
 }
 
 fn idt_handler_offset(idt: *const IdtEntry64, index: usize) -> u64 {
-    let e = unsafe { idt.add(index).read_unaligned() };
-    e.offset_low as u64 | ((e.offset_middle as u64) << 16) | ((e.offset_high as u64) << 32)
+    let base = idt as *const u8;
+    let off = index * 16;
+    let offset_low = crate::helpers::read_u16(base, off) as u64;
+    let offset_middle = crate::helpers::read_u16(base, off + 6) as u64;
+    let offset_high = crate::helpers::read_u32(base, off + 8) as u64;
+    offset_low | (offset_middle << 16) | (offset_high << 32)
 }
 
 unsafe fn find_ntoskrnl_by_idt() -> *mut c_void {
@@ -267,7 +290,7 @@ unsafe fn find_ntoskrnl_by_idt() -> *mut c_void {
         let jump_start = search_in_image(handler, 0x1000, &pat_jump, 0, 1);
         if jump_start != 0 {
             let e9 = jump_start + 0x03;
-            let disp = *((e9 + 0x01) as *const i32);
+            let disp = crate::helpers::read_u32(e9 as *const u8, 0x01) as i32;
             handler = (e9 + 0x05).wrapping_add(disp as i64 as u64);
         }
 
@@ -277,7 +300,7 @@ unsafe fn find_ntoskrnl_by_idt() -> *mut c_void {
         ];
         let lea_start1 = search_in_image(handler, 0x400000, &pat_rdata1, 0xAA, 1);
         if lea_start1 != 0 {
-            let disp = *((lea_start1 + 0x03) as *const i32);
+            let disp = crate::helpers::read_u32(lea_start1 as *const u8, 0x03) as i32;
             rdata = (lea_start1 + 0x07).wrapping_add(disp as i64 as u64);
         }
         if rdata == 0 {
@@ -287,7 +310,7 @@ unsafe fn find_ntoskrnl_by_idt() -> *mut c_void {
             ];
             let lea_start2 = search_in_image(handler, 0x400000, &pat_rdata2, 0xAA, 1);
             if lea_start2 != 0 {
-                let disp = *((lea_start2 + 0x03) as *const i32);
+                let disp = crate::helpers::read_u32(lea_start2 as *const u8, 0x03) as i32;
                 rdata = (lea_start2 + 0x07).wrapping_add(disp as i64 as u64);
             }
         }
@@ -298,16 +321,15 @@ unsafe fn find_ntoskrnl_by_idt() -> *mut c_void {
         let mut scan = (rdata & !0xFFFu64).wrapping_add(0x1000);
         loop {
             scan = scan.wrapping_sub(0x1000);
-            let dos = (scan as *const ImageDosHeader).read_unaligned();
-            if dos.e_magic != IMAGE_DOS_SIGNATURE {
+            if crate::helpers::read_u16(scan as *const u8, 0) != IMAGE_DOS_SIGNATURE {
                 continue;
             }
-            let nt_addr = scan.wrapping_add((dos.e_lfanew as u32 & 0xFFFF) as u64);
-            let nt = (nt_addr as *const ImageNtHeaders64).read_unaligned();
-            if nt.signature != IMAGE_NT_SIGNATURE {
+            let e_lfanew = crate::helpers::read_u32(scan as *const u8, OFF_DOS_ELFANEW);
+            let nt_addr = scan.wrapping_add((e_lfanew & 0xFFFF) as u64);
+            if crate::helpers::read_u32(nt_addr as *const u8, OFF_NT_SIG) != IMAGE_NT_SIGNATURE {
                 continue;
             }
-            if nt.file_header.number_of_sections < 0x18 {
+            if crate::helpers::read_u16(nt_addr as *const u8, 6) < 0x18 {
                 continue;
             }
             return scan as *mut c_void;
@@ -328,46 +350,50 @@ unsafe fn find_ntoskrnl_base() -> *mut c_void {
     }
 }
 
-unsafe fn find_exported_symbol(image_base: *mut c_void, target_hash: [u8; 32]) -> *mut c_void {
-    unsafe {
-        if image_base.is_null() {
-            return null_mut();
-        }
-        let base = image_base as usize;
-
-        let dos = (base as *const ImageDosHeader).read_unaligned();
-        if dos.e_magic != IMAGE_DOS_SIGNATURE {
-            return null_mut();
-        }
-        let nt_addr = base.wrapping_add(dos.e_lfanew as usize);
-        let nt = (nt_addr as *const ImageNtHeaders64).read_unaligned();
-        if nt.signature != IMAGE_NT_SIGNATURE {
-            return null_mut();
-        }
-
-        let exp_dir = nt.optional_header.data_directory[0];
-        if exp_dir.virtual_address == 0 || exp_dir.size == 0 {
-            return null_mut();
-        }
-
-        let exp_addr = base.wrapping_add(exp_dir.virtual_address as usize);
-        let exp = (exp_addr as *const ImageExportDirectory).read_unaligned();
-
-        let name_rvas = base.wrapping_add(exp.address_of_names as usize) as *const u32;
-        let ordinals = base.wrapping_add(exp.address_of_name_ordinals as usize) as *const u16;
-        let function_rvas = base.wrapping_add(exp.address_of_functions as usize) as *const u32;
-
-        for i in 0..exp.number_of_names {
-            let name_ptr =
-                base.wrapping_add(name_rvas.add(i as usize).read_unaligned() as usize) as *const u8;
-            if hash_cstring(name_ptr) == target_hash {
-                let ordinal = ordinals.add(i as usize).read_unaligned() as usize;
-                let func_rva = function_rvas.add(ordinal).read_unaligned();
-                return base.wrapping_add(func_rva as usize) as *mut c_void;
-            }
-        }
-        null_mut()
+fn find_exported_symbol(image_base: *mut c_void, target_hash: [u8; 32]) -> *mut c_void {
+    if image_base.is_null() {
+        return null_mut();
     }
+    let base = image_base as usize;
+
+    if crate::helpers::read_u16(image_base as *const u8, 0) != IMAGE_DOS_SIGNATURE {
+        return null_mut();
+    }
+    let nt_addr = base
+        .wrapping_add(crate::helpers::read_u32(image_base as *const u8, OFF_DOS_ELFANEW) as usize);
+    if crate::helpers::read_u32(nt_addr as *const u8, OFF_NT_SIG) != IMAGE_NT_SIGNATURE {
+        return null_mut();
+    }
+
+    let exp_dir_va = crate::helpers::read_u32(nt_addr as *const u8, OFF_NT_DD0_VA);
+    let exp_dir_size = crate::helpers::read_u32(nt_addr as *const u8, OFF_NT_DD0_SIZE);
+    if exp_dir_va == 0 || exp_dir_size == 0 {
+        return null_mut();
+    }
+
+    let exp_addr = base.wrapping_add(exp_dir_va as usize);
+
+    let num_names = crate::helpers::read_u32(exp_addr as *const u8, OFF_EXP_NUM_NAMES);
+    let name_rvas = base
+        .wrapping_add(crate::helpers::read_u32(exp_addr as *const u8, OFF_EXP_ADDR_NAMES) as usize);
+    let ordinals = base
+        .wrapping_add(
+            crate::helpers::read_u32(exp_addr as *const u8, OFF_EXP_ADDR_ORDINALS) as usize,
+        );
+    let function_rvas = base
+        .wrapping_add(crate::helpers::read_u32(exp_addr as *const u8, OFF_EXP_ADDR_FUNCS) as usize);
+
+    for i in 0..num_names {
+        let name_ptr = base
+            .wrapping_add(crate::helpers::read_u32(name_rvas as *const u8, i as usize * 4) as usize)
+            as *const u8;
+        if hash_cstring(name_ptr) == target_hash {
+            let ordinal = crate::helpers::read_u16(ordinals as *const u8, i as usize * 2) as usize;
+            let func_rva = crate::helpers::read_u32(function_rvas as *const u8, ordinal * 4);
+            return base.wrapping_add(func_rva as usize) as *mut c_void;
+        }
+    }
+    null_mut()
 }
 
 unsafe fn find_kernel_proc_address(export_hash: [u8; 32]) -> *mut c_void {
@@ -452,19 +478,19 @@ pub fn resolve_imports() -> NtStatus {
         if data_address.is_null() {
             return STATUS_NOT_FOUND;
         }
-        _IoDriverObjectType = *(data_address as *const *mut c_void);
+        _IoDriverObjectType = crate::helpers::read_u64(data_address as *const u8, 0) as *mut c_void;
 
         let list_address = find_kernel_proc_address(sha256_const(b"PsLoadedModuleList"));
         if list_address.is_null() {
             return STATUS_NOT_FOUND;
         }
-        _PsLoadedModuleList = *(list_address as *const *mut c_void);
+        _PsLoadedModuleList = crate::helpers::read_u64(list_address as *const u8, 0) as *mut c_void;
 
         let build_address = find_kernel_proc_address(sha256_const(b"NtBuildNumber"));
         if build_address.is_null() {
             return STATUS_NOT_FOUND;
         }
-        _NtBuildNumber = (*(build_address as *const u32) & 0xFFFF) as u16;
+        _NtBuildNumber = (crate::helpers::read_u32(build_address as *const u8, 0) & 0xFFFF) as u16;
 
         STATUS_SUCCESS
     }

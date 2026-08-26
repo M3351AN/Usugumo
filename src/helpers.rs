@@ -113,15 +113,15 @@ pub fn search_sign_for_image(
             return null_mut();
         }
 
-        let num_sections = *(nt.add(6) as *const u16) as usize;
-        let size_of_optional_header = *(nt.add(20) as *const u16) as usize;
+        let num_sections = read_u16(nt, 6) as usize;
+        let size_of_optional_header = read_u16(nt, 20) as usize;
         let mut section = nt.add(24 + size_of_optional_header);
 
         for _ in 0..num_sections {
             let name = section as *const i8;
-            let virtual_size = *(section.add(8) as *const u32);
-            let virtual_address = *(section.add(12) as *const u32);
-            let characteristics = *(section.add(36) as *const u32);
+            let virtual_size = read_u32(section, 8);
+            let virtual_address = read_u32(section, 12);
+            let characteristics = read_u32(section, 36);
 
             if crate::util::kstricmp(name, obfstr::obfbytes!(b".text\0").as_ptr() as *const i8) == 0
                 || (characteristics & IMAGE_SCN_CNT_CODE) != 0
@@ -132,7 +132,9 @@ pub fn search_sign_for_image(
                     for j in 0..=(size - pattern_size as usize) {
                         let mut found = true;
                         for k in 0..pattern_size as usize {
-                            if *mask.add(k) == b'x' as i8 && *start.add(j + k) != *pattern.add(k) {
+                            if read_u8(mask as *const u8, k) == b'x'
+                                && read_u8(start, j + k) != *pattern.add(k)
+                            {
                                 found = false;
                                 break;
                             }
@@ -236,10 +238,10 @@ pub fn get_boot_volume_serial(out: *mut i8, out_len: u32) -> NtStatus {
         let mut sn = vi.volume_serial_number;
         let hex = obfstr::obfbytes!(b"0123456789ABCDEF");
         for i in (0..8).rev() {
-            *out.add(i) = hex[(sn & 0xF) as usize] as i8;
+            write_u8(out as *mut u8, i, hex[(sn & 0xF) as usize]);
             sn >>= 4;
         }
-        *out.add(8) = 0;
+        write_u8(out as *mut u8, 8, 0);
         STATUS_SUCCESS
     }
 }
@@ -273,9 +275,13 @@ pub fn generate_obfuscated_name(
 
         let chars = obfstr::obfbytes!(b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
         for i in 0..16 {
-            *out.add(i) = chars[(digest[i] % 36) as usize] as u16;
+            write_u16(
+                out as *mut u8,
+                i * 2,
+                chars[(digest[i] % 36) as usize] as u16,
+            );
         }
-        *out.add(16) = 0;
+        write_u16(out as *mut u8, 32, 0);
         STATUS_SUCCESS
     }
 }
@@ -330,7 +336,35 @@ pub fn resolve_relative_address(base: *mut c_void, offset: u32) -> *mut u8 {
     }
     unsafe {
         let b = base as *const u8;
-        let disp = *(b.add(offset as usize) as *const i32) as i64;
+        let disp = crate::helpers::read_u32(b, offset as usize) as i32 as i64;
         b.add(offset as usize + 4).offset(disp as isize) as *mut u8
     }
+}
+
+pub fn read_u8(p: *const u8, off: usize) -> u8 {
+    unsafe { *p.add(off) }
+}
+
+pub fn read_u16(p: *const u8, off: usize) -> u16 {
+    unsafe { (p.add(off) as *const u16).read_unaligned() }
+}
+
+pub fn read_u32(p: *const u8, off: usize) -> u32 {
+    unsafe { (p.add(off) as *const u32).read_unaligned() }
+}
+
+pub fn read_u64(p: *const u8, off: usize) -> u64 {
+    unsafe { (p.add(off) as *const u64).read_unaligned() }
+}
+
+pub fn write_u8(p: *mut u8, off: usize, v: u8) {
+    unsafe { *p.add(off) = v }
+}
+
+pub fn write_u16(p: *mut u8, off: usize, v: u16) {
+    unsafe { (p.add(off) as *mut u16).write_unaligned(v) }
+}
+
+pub fn write_u64(p: *mut u8, off: usize, v: u64) {
+    unsafe { (p.add(off) as *mut u64).write_unaligned(v) }
 }
