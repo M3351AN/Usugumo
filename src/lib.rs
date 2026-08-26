@@ -10,6 +10,8 @@ mod globals;
 mod imports;
 mod random;
 mod reimpl_ke;
+mod reimpl_pmem;
+mod reimpl_process;
 mod reimpl_wdm;
 mod request_handler;
 mod types;
@@ -36,10 +38,9 @@ pub extern "C" fn __CxxFrameHandler3() -> i32 {
 
 unsafe extern "system" fn driver_unload(driver: *mut DriverObject) {
     unsafe {
-        CleanupPmemPages();
+        reimpl_pmem::cleanup_pmem_pages();
         MouseRelease();
         KeyboardRelease();
-
         let g = addr_of_mut!(G_SYMBOLIC_LINK_NAME);
         if !(*g).buffer.is_null() {
             if !_IoDeleteSymbolicLink.is_null() {
@@ -71,7 +72,7 @@ unsafe extern "system" fn driver_init(
     _registry: *mut UnicodeString,
 ) -> NtStatus {
     unsafe {
-        let mut status = InitPmemPages();
+        let mut status = reimpl_pmem::init_pmem_pages();
         if status < 0 {
             return status;
         }

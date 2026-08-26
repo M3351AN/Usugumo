@@ -3,6 +3,9 @@
 use crate::consts::*;
 use crate::ffi::*;
 use crate::reimpl_ke::query_system_time;
+use crate::reimpl_process::{
+    get_dll_address, get_dll_size, get_process_id_by_name, read_vm, write_vm,
+};
 use crate::types::Requests;
 
 const TICKS_PER_SECOND: i64 = 10_000_000;
@@ -28,7 +31,7 @@ fn is_timestamp_valid(ts: u64, tolerance_seconds: i64) -> bool {
     diff <= tolerance_ticks as u64
 }
 
-fn verify_secure_key(secure_key: u64) -> bool {
+pub(crate) fn verify_secure_key(secure_key: u64) -> bool {
     let key_bytes = secure_key.to_ne_bytes();
     let mut local_checksum = [0u8; 32];
     unsafe {
@@ -64,11 +67,11 @@ pub unsafe extern "system" fn request_handler(pstruct: *mut Requests) -> u8 {
         let mut handled = false;
 
         if func & USUGUMO_READ != 0 {
-            (*pstruct).return_value = ReadVM(pstruct) as u64;
+            (*pstruct).return_value = read_vm(pstruct) as u64;
             handled = true;
         }
         if func & USUGUMO_WRITE != 0 {
-            (*pstruct).return_value = WriteVM(pstruct) as u64;
+            (*pstruct).return_value = write_vm(pstruct) as u64;
             handled = true;
         }
         if func & USUGUMO_MOUSE != 0 {
@@ -82,15 +85,15 @@ pub unsafe extern "system" fn request_handler(pstruct: *mut Requests) -> u8 {
             handled = true;
         }
         if func & USUGUMO_MODULE_BASE != 0 {
-            (*pstruct).return_value = GetDllAddress(pstruct);
+            (*pstruct).return_value = get_dll_address(pstruct);
             handled = true;
         }
         if func & USUGUMO_MODULE_SIZE != 0 {
-            (*pstruct).return_value = GetDllSize(pstruct);
+            (*pstruct).return_value = get_dll_size(pstruct);
             handled = true;
         }
         if func & USUGUMO_PID != 0 {
-            (*pstruct).return_value = GetProcessIdByName(pstruct);
+            (*pstruct).return_value = get_process_id_by_name(pstruct);
             handled = true;
         }
         if func & USUGUMO_ANTI_CAPTURE != 0 {
