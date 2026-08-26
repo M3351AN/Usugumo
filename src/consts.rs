@@ -23,3 +23,25 @@ pub const IRP_MJ_WRITE: usize = 4;
 pub const DO_DIRECT_IO: u32 = 0x10;
 pub const DO_BUFFERED_IO: u32 = 0x04;
 pub const DO_DEVICE_INITIALIZING: u32 = 0x80;
+
+pub const USUGUMO_FUNC_BITS: u64 = 0x0000_0000_0000_FFFF;
+pub const USUGUMO_SIGNATURE: u64 = 0xA5;
+pub const USUGUMO_SIGNATURE_MASK: u64 = USUGUMO_SIGNATURE << 56;
+pub const USUGUMO_PROBE: u64 = 1 << 0;
+pub const USUGUMO_READ: u64 = 1 << 1;
+pub const USUGUMO_WRITE: u64 = 1 << 2;
+pub const USUGUMO_MOUSE: u64 = 1 << 3;
+pub const USUGUMO_KEYBD: u64 = 1 << 4;
+pub const USUGUMO_MODULE_BASE: u64 = 1 << 5;
+pub const USUGUMO_MODULE_SIZE: u64 = 1 << 6;
+pub const USUGUMO_PID: u64 = 1 << 7;
+pub const USUGUMO_ANTI_CAPTURE: u64 = 1 << 8;
+pub const USUGUMO_SUPPORTED_MASK: u64 = USUGUMO_PROBE
+    | USUGUMO_READ
+    | USUGUMO_WRITE
+    | USUGUMO_MOUSE
+    | USUGUMO_KEYBD
+    | USUGUMO_MODULE_BASE
+    | USUGUMO_MODULE_SIZE
+    | USUGUMO_PID
+    | USUGUMO_ANTI_CAPTURE;

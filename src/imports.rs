@@ -380,6 +380,10 @@ unsafe fn find_kernel_proc_address(export_hash: u64) -> *mut c_void {
     }
 }
 
+pub fn resolve_kernel_export(export_hash: u64) -> *mut c_void {
+    unsafe { find_kernel_proc_address(export_hash) }
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn FindKernelProcAddress(export_name: *const i8) -> *mut c_void {
     unsafe {

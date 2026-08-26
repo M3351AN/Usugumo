@@ -5,8 +5,8 @@ use core::mem::size_of;
 use core::ptr::null_mut;
 
 use crate::consts::*;
-use crate::ffi::RequestHandler;
 use crate::imports::{_IofCompleteRequest, _MmMapLockedPagesSpecifyCache};
+use crate::request_handler::request_handler;
 use crate::types::{DeviceObject, IoStackLocation, IoStackParameters, Irp, NtStatus, Requests};
 
 const _: () = assert!(core::mem::offset_of!(Irp, mdl_address) == 8);
@@ -95,7 +95,7 @@ pub unsafe extern "system" fn write_dispatch(
         }
 
         if write_len >= size_of::<Requests>() as u32 {
-            if RequestHandler(p_request as *mut Requests) != 0 {
+            if request_handler(p_request as *mut Requests) != 0 {
                 (*irp).io_status.information = size_of::<Requests>();
                 (*irp).io_status.status = STATUS_SUCCESS;
             } else {

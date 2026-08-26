@@ -18,6 +18,4 @@ FORCEINLINE BOOLEAN VerifySecureKey(UINT64 SecureKey) {
           CHECKSUM_SIZE);
 }
 
-BOOLEAN RequestHandler(Requests*);
-
 #endif

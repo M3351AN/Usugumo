@@ -8,6 +8,9 @@ mod dispatches;
 mod ffi;
 mod globals;
 mod imports;
+mod reimpl_ke;
+mod reimpl_wdm;
+mod request_handler;
 mod types;
 mod util;
 mod xxh3;
@@ -164,7 +167,7 @@ unsafe extern "system" fn driver_init(
             maximum_length: (sddl.len() * 2) as u16,
             buffer: sddl.as_ptr() as *mut u16,
         };
-        status = WdmlibIoCreateDeviceSecureMeme(
+        status = reimpl_wdm::wdmlib_io_create_device_secure(
             driver,
             0,
             &mut device_name,
