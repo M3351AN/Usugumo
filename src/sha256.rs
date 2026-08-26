@@ -16,7 +16,7 @@ const H0: [u32; 8] = [
 ];
 
 #[inline]
-fn rotr(x: u32, n: u32) -> u32 {
+const fn rotr(x: u32, n: u32) -> u32 {
     (x >> n) | (x << (32 - n))
 }
 
@@ -143,4 +143,128 @@ pub fn sha256(data: *const u8, length: usize, digest: *mut u8) {
 #[unsafe(no_mangle)]
 pub extern "system" fn Sha256(data: *const u8, length: usize, digest: *mut u8) {
     sha256(data, length, digest)
+}
+
+const fn load_be_const(input: &[u8], offset: usize) -> u32 {
+    ((input[offset] as u32) << 24)
+        | ((input[offset + 1] as u32) << 16)
+        | ((input[offset + 2] as u32) << 8)
+        | (input[offset + 3] as u32)
+}
+
+const fn compress_const(state: &mut [u32; 8], input: &[u8], offset: usize) {
+    let mut w = [0u32; 64];
+    let mut i = 0;
+    while i < 16 {
+        w[i] = load_be_const(input, offset + i * 4);
+        i += 1;
+    }
+    while i < 64 {
+        let s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >> 3);
+        let s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >> 10);
+        w[i] = w[i - 16]
+            .wrapping_add(s0)
+            .wrapping_add(w[i - 7])
+            .wrapping_add(s1);
+        i += 1;
+    }
+
+    let mut a = state[0];
+    let mut b = state[1];
+    let mut c = state[2];
+    let mut d = state[3];
+    let mut e = state[4];
+    let mut f = state[5];
+    let mut g = state[6];
+    let mut h = state[7];
+
+    i = 0;
+    while i < 64 {
+        let s1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+        let ch = (e & f) ^ ((!e) & g);
+        let t1 = h
+            .wrapping_add(s1)
+            .wrapping_add(ch)
+            .wrapping_add(K[i])
+            .wrapping_add(w[i]);
+        let s0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+        let maj = (a & b) ^ (a & c) ^ (b & c);
+        let t2 = s0.wrapping_add(maj);
+
+        h = g;
+        g = f;
+        f = e;
+        e = d.wrapping_add(t1);
+        d = c;
+        c = b;
+        b = a;
+        a = t1.wrapping_add(t2);
+        i += 1;
+    }
+
+    state[0] = state[0].wrapping_add(a);
+    state[1] = state[1].wrapping_add(b);
+    state[2] = state[2].wrapping_add(c);
+    state[3] = state[3].wrapping_add(d);
+    state[4] = state[4].wrapping_add(e);
+    state[5] = state[5].wrapping_add(f);
+    state[6] = state[6].wrapping_add(g);
+    state[7] = state[7].wrapping_add(h);
+}
+
+pub const fn sha256_const(input: &[u8]) -> [u8; 32] {
+    let mut state = H0;
+    let full = input.len() / 64;
+    let rem = input.len() % 64;
+
+    let mut block = 0;
+    while block < full {
+        compress_const(&mut state, input, block * 64);
+        block += 1;
+    }
+
+    let mut last = [0u8; 64];
+    let mut idx = 0;
+    while idx < rem {
+        last[idx] = input[full * 64 + idx];
+        idx += 1;
+    }
+    last[idx] = 0x80;
+    idx += 1;
+
+    let bit_len = (input.len() as u64) * 8;
+    if idx > 56 {
+        while idx < 64 {
+            last[idx] = 0;
+            idx += 1;
+        }
+        compress_const(&mut state, &last, 0);
+        idx = 0;
+        while idx < 56 {
+            last[idx] = 0;
+            idx += 1;
+        }
+    } else {
+        while idx < 56 {
+            last[idx] = 0;
+            idx += 1;
+        }
+    }
+    let mut bi = 0;
+    while bi < 8 {
+        last[56 + bi] = (bit_len >> (56 - bi * 8)) as u8;
+        bi += 1;
+    }
+    compress_const(&mut state, &last, 0);
+
+    let mut out = [0u8; 32];
+    let mut oi = 0;
+    while oi < 8 {
+        out[oi * 4 + 0] = (state[oi] >> 24) as u8;
+        out[oi * 4 + 1] = (state[oi] >> 16) as u8;
+        out[oi * 4 + 2] = (state[oi] >> 8) as u8;
+        out[oi * 4 + 3] = state[oi] as u8;
+        oi += 1;
+    }
+    out
 }

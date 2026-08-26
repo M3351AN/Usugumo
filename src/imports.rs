@@ -4,8 +4,8 @@ use core::ffi::c_void;
 use core::ptr::{addr_of_mut, null_mut};
 
 use crate::consts::{STATUS_NOT_FOUND, STATUS_SUCCESS};
+use crate::sha256::sha256_const;
 use crate::types::{DeviceObject, NtStatus, UnicodeString};
-use crate::xxh3::xxh3_64;
 
 pub type IoCreateSymbolicLinkFn =
     unsafe extern "system" fn(*mut UnicodeString, *mut UnicodeString) -> NtStatus;
@@ -186,7 +186,7 @@ struct IdtEntry64 {
     reserved: u32,
 }
 
-fn hash_cstring(ptr: *const u8) -> u64 {
+fn hash_cstring(ptr: *const u8) -> [u8; 32] {
     let mut buf = [0u8; 128];
     let mut len = 0;
     while len < buf.len() && unsafe { *ptr.add(len) } != 0 {
@@ -194,9 +194,9 @@ fn hash_cstring(ptr: *const u8) -> u64 {
         len += 1;
     }
     if unsafe { *ptr.add(len) } != 0 {
-        return 0;
+        return [0u8; 32];
     }
-    xxh3_64(&buf[..len])
+    sha256_const(&buf[..len])
 }
 
 unsafe fn read_gs_qword(offset: usize) -> u64 {
@@ -328,7 +328,7 @@ unsafe fn find_ntoskrnl_base() -> *mut c_void {
     }
 }
 
-unsafe fn find_exported_symbol(image_base: *mut c_void, target_hash: u64) -> *mut c_void {
+unsafe fn find_exported_symbol(image_base: *mut c_void, target_hash: [u8; 32]) -> *mut c_void {
     unsafe {
         if image_base.is_null() {
             return null_mut();
@@ -370,7 +370,7 @@ unsafe fn find_exported_symbol(image_base: *mut c_void, target_hash: u64) -> *mu
     }
 }
 
-unsafe fn find_kernel_proc_address(export_hash: u64) -> *mut c_void {
+unsafe fn find_kernel_proc_address(export_hash: [u8; 32]) -> *mut c_void {
     unsafe {
         let base = find_ntoskrnl_base();
         if base.is_null() {
@@ -380,7 +380,7 @@ unsafe fn find_kernel_proc_address(export_hash: u64) -> *mut c_void {
     }
 }
 
-pub fn resolve_kernel_export(export_hash: u64) -> *mut c_void {
+pub fn resolve_kernel_export(export_hash: [u8; 32]) -> *mut c_void {
     unsafe { find_kernel_proc_address(export_hash) }
 }
 
@@ -400,29 +400,29 @@ pub fn resolve_imports() -> NtStatus {
             return STATUS_NOT_FOUND;
         }
 
-        const FUNC_HASHES: [u64; 22] = [
-            xxh3_64(b"KeAcquireSpinLockAtDpcLevel"),
-            xxh3_64(b"KeReleaseSpinLockFromDpcLevel"),
-            xxh3_64(b"IofCompleteRequest"),
-            xxh3_64(b"IoReleaseRemoveLockEx"),
-            xxh3_64(b"IoCreateDriver"),
-            xxh3_64(b"ObReferenceObjectByName"),
-            xxh3_64(b"ObfReferenceObject"),
-            xxh3_64(b"ObfDereferenceObject"),
-            xxh3_64(b"MmMapLockedPagesSpecifyCache"),
-            xxh3_64(b"MmIsAddressValid"),
-            xxh3_64(b"MmAllocateContiguousMemory"),
-            xxh3_64(b"MmFreeContiguousMemory"),
-            xxh3_64(b"PsLookupProcessByProcessId"),
-            xxh3_64(b"IoCreateSymbolicLink"),
-            xxh3_64(b"IoDeleteDevice"),
-            xxh3_64(b"IoDeleteSymbolicLink"),
-            xxh3_64(b"ExAllocatePool2"),
-            xxh3_64(b"ExFreePoolWithTag"),
-            xxh3_64(b"ZwClose"),
-            xxh3_64(b"ZwCreateFile"),
-            xxh3_64(b"ZwDeviceIoControlFile"),
-            xxh3_64(b"ZwQueryVolumeInformationFile"),
+        const FUNC_HASHES: [[u8; 32]; 22] = [
+            sha256_const(b"KeAcquireSpinLockAtDpcLevel"),
+            sha256_const(b"KeReleaseSpinLockFromDpcLevel"),
+            sha256_const(b"IofCompleteRequest"),
+            sha256_const(b"IoReleaseRemoveLockEx"),
+            sha256_const(b"IoCreateDriver"),
+            sha256_const(b"ObReferenceObjectByName"),
+            sha256_const(b"ObfReferenceObject"),
+            sha256_const(b"ObfDereferenceObject"),
+            sha256_const(b"MmMapLockedPagesSpecifyCache"),
+            sha256_const(b"MmIsAddressValid"),
+            sha256_const(b"MmAllocateContiguousMemory"),
+            sha256_const(b"MmFreeContiguousMemory"),
+            sha256_const(b"PsLookupProcessByProcessId"),
+            sha256_const(b"IoCreateSymbolicLink"),
+            sha256_const(b"IoDeleteDevice"),
+            sha256_const(b"IoDeleteSymbolicLink"),
+            sha256_const(b"ExAllocatePool2"),
+            sha256_const(b"ExFreePoolWithTag"),
+            sha256_const(b"ZwClose"),
+            sha256_const(b"ZwCreateFile"),
+            sha256_const(b"ZwDeviceIoControlFile"),
+            sha256_const(b"ZwQueryVolumeInformationFile"),
         ];
 
         let func_slots: [*mut *mut c_void; 22] = [
@@ -458,19 +458,19 @@ pub fn resolve_imports() -> NtStatus {
             *func_slots[i] = address;
         }
 
-        let data_address = find_kernel_proc_address(xxh3_64(b"IoDriverObjectType"));
+        let data_address = find_kernel_proc_address(sha256_const(b"IoDriverObjectType"));
         if data_address.is_null() {
             return STATUS_NOT_FOUND;
         }
         _IoDriverObjectType = *(data_address as *const *mut c_void);
 
-        let list_address = find_kernel_proc_address(xxh3_64(b"PsLoadedModuleList"));
+        let list_address = find_kernel_proc_address(sha256_const(b"PsLoadedModuleList"));
         if list_address.is_null() {
             return STATUS_NOT_FOUND;
         }
         _PsLoadedModuleList = *(list_address as *const *mut c_void);
 
-        let build_address = find_kernel_proc_address(xxh3_64(b"NtBuildNumber"));
+        let build_address = find_kernel_proc_address(sha256_const(b"NtBuildNumber"));
         if build_address.is_null() {
             return STATUS_NOT_FOUND;
         }
