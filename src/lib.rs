@@ -10,6 +10,8 @@ mod ffi;
 mod globals;
 mod helpers;
 mod imports;
+mod keybd;
+mod mouse;
 mod random;
 mod reimpl_ke;
 mod reimpl_pmem;
@@ -42,8 +44,8 @@ pub extern "C" fn __CxxFrameHandler3() -> i32 {
 unsafe extern "system" fn driver_unload(driver: *mut DriverObject) {
     unsafe {
         reimpl_pmem::cleanup_pmem_pages();
-        MouseRelease();
-        KeyboardRelease();
+        mouse::mouse_release();
+        keybd::keyboard_release();
         let g = addr_of_mut!(G_SYMBOLIC_LINK_NAME);
         if !(*g).buffer.is_null() {
             if !_IoDeleteSymbolicLink.is_null() {

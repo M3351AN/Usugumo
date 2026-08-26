@@ -21,12 +21,20 @@ pub struct DeviceObject {
     pub _size: u16,
     pub _reference_count: u32,
     pub _driver_object: *mut c_void,
-    pub _next_device: *mut c_void,
-    pub _attached_device: *mut c_void,
+    pub next_device: *mut DeviceObject,
+    pub attached_device: *mut DeviceObject,
     pub _current_irp: *mut c_void,
     pub _timer: *mut c_void,
     pub flags: u32,
     pub _characteristics: u32,
+    pub _vpb: *mut c_void,
+    pub device_extension: *mut u64,
+    pub _device_type: u32,
+    pub _stack_size: u8,
+    pub _queue: [u8; 16],
+    pub _alignment_requirement: u32,
+    pub device_object_extension: *mut c_void,
+    pub _reserved: u32,
 }
 
 #[repr(C)]

@@ -26,6 +26,7 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc o
 - Current implementation does not take into account CR3 encryption, kernel-mode memory protection, etc., and is only used as a PoC
 - This is just a PoC, which is why you may find my approach relatively elegant in some places, while overly ghetto in others
 - For the purpose of anti-paste, I unnecessarily rewrote many functions using MASM. However, doing so should not affect the actual functionality.
+- If the mapping is performed before system startup via an EFI driver or similar method, current implementation may not work.
 
 ## Build
 

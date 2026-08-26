@@ -19,8 +19,6 @@
 #include "./reimpl.h"
 #include "./imports.h"
 #include "./helpers.h"
-#include "./mouse_operation.h"
-#include "./keybd_operation.h"
 #include "./request_handler.h"
 
 #endif

@@ -3,6 +3,8 @@
 use crate::anti_capture;
 use crate::consts::*;
 use crate::ffi::*;
+use crate::keybd;
+use crate::mouse;
 use crate::reimpl_ke::query_system_time;
 use crate::reimpl_process::{
     get_dll_address, get_dll_size, get_process_id_by_name, read_vm, write_vm,
@@ -74,12 +76,12 @@ pub unsafe extern "system" fn request_handler(pstruct: *mut Requests) -> u8 {
             handled = true;
         }
         if func & USUGUMO_MOUSE != 0 {
-            HandleMouseEvent(pstruct);
+            mouse::handle_mouse_event(pstruct);
             (*pstruct).return_value = 1;
             handled = true;
         }
         if func & USUGUMO_KEYBD != 0 {
-            HandleKeybdEvent(pstruct);
+            keybd::handle_keybd_event(pstruct);
             (*pstruct).return_value = 1;
             handled = true;
         }
