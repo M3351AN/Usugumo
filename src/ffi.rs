@@ -5,7 +5,6 @@ use crate::types::{NtStatus, Requests, UnicodeString};
 unsafe extern "system" {
     pub fn InitPmemPages() -> NtStatus;
     pub fn CleanupPmemPages();
-    pub fn RandomEngineInit();
     pub fn GetBootVolumeSerial(out: *mut i8, out_len: u32) -> NtStatus;
     pub fn GenerateObfuscatedName(
         serial: *const u8,

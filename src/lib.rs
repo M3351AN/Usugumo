@@ -8,6 +8,7 @@ mod dispatches;
 mod ffi;
 mod globals;
 mod imports;
+mod random;
 mod reimpl_ke;
 mod reimpl_wdm;
 mod request_handler;
@@ -75,7 +76,7 @@ unsafe extern "system" fn driver_init(
             return status;
         }
 
-        RandomEngineInit();
+        random::random_engine_init();
 
         let mut serial = [0i8; 128];
         status = GetBootVolumeSerial(serial.as_mut_ptr(), serial.len() as u32);
@@ -83,7 +84,6 @@ unsafe extern "system" fn driver_init(
             driver_unload(driver);
             return status;
         }
-
         let serial_len = serial.iter().position(|&c| c == 0).unwrap_or(serial.len());
 
         let mut obfuscated = [0u16; 32];
@@ -115,10 +115,13 @@ unsafe extern "system" fn driver_init(
             random_device_name_buf[n] = c;
             n += 1;
         }
-        for i in 0..obf_len {
-            random_device_name_buf[n + i] = obfuscated[i];
+        const HEX_CHARS: &[u8] = b"0123456789ABCDEF";
+        let rand_val = random::random_engine_next();
+        for i in 0..16 {
+            let nibble = ((rand_val >> (i * 4)) & 0xF) as usize;
+            random_device_name_buf[n] = HEX_CHARS[nibble] as u16;
+            n += 1;
         }
-        n += obf_len;
         random_device_name_buf[n] = 0;
         RtlInitUnicodeStringMeme(&mut device_name, random_device_name_buf.as_ptr());
 
