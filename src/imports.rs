@@ -22,49 +22,25 @@ pub static mut _KeReleaseSpinLockFromDpcLevel: *mut c_void = null_mut();
 pub static mut _IofCompleteRequest: *mut c_void = null_mut();
 #[unsafe(no_mangle)]
 pub static mut _IoReleaseRemoveLockEx: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _IoCreateDriver: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _ObReferenceObjectByName: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _ObfReferenceObject: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _ObfDereferenceObject: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _MmMapLockedPagesSpecifyCache: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _MmIsAddressValid: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _MmAllocateContiguousMemory: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _MmFreeContiguousMemory: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _PsLookupProcessByProcessId: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _IoCreateSymbolicLink: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _IoDeleteDevice: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _IoDeleteSymbolicLink: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _ExAllocatePool2: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _ExFreePoolWithTag: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _ZwClose: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _ZwCreateFile: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _ZwDeviceIoControlFile: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _ZwQueryVolumeInformationFile: *mut c_void = null_mut();
-
-#[unsafe(no_mangle)]
-pub static mut _IoDriverObjectType: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _PsLoadedModuleList: *mut c_void = null_mut();
-#[unsafe(no_mangle)]
-pub static mut _NtBuildNumber: u16 = 0;
+pub static mut _IO_CREATE_DRIVER: *mut c_void = null_mut();
+pub static mut _OB_REFERENCE_OBJECT_BY_NAME: *mut c_void = null_mut();
+pub static mut _OBF_REFERENCE_OBJECT: *mut c_void = null_mut();
+pub static mut _OBF_DEREFERENCE_OBJECT: *mut c_void = null_mut();
+pub static mut _MM_MAP_LOCKED_PAGES_SPECIFY_CACHE: *mut c_void = null_mut();
+pub static mut _MM_ALLOCATE_CONTIGUOUS_MEMORY: *mut c_void = null_mut();
+pub static mut _MM_FREE_CONTIGUOUS_MEMORY: *mut c_void = null_mut();
+pub static mut _PS_LOOKUP_PROCESS_BY_PROCESS_ID: *mut c_void = null_mut();
+pub static mut _IO_CREATE_SYMBOLIC_LINK: *mut c_void = null_mut();
+pub static mut _IO_DELETE_DEVICE: *mut c_void = null_mut();
+pub static mut _IO_DELETE_SYMBOLIC_LINK: *mut c_void = null_mut();
+pub static mut _EX_ALLOCATE_POOL2: *mut c_void = null_mut();
+pub static mut _EX_FREE_POOL_WITH_TAG: *mut c_void = null_mut();
+pub static mut _ZW_CLOSE: *mut c_void = null_mut();
+pub static mut _ZW_CREATE_FILE: *mut c_void = null_mut();
+pub static mut _ZW_QUERY_VOLUME_INFORMATION_FILE: *mut c_void = null_mut();
+pub static mut _IO_DRIVER_OBJECT_TYPE: *mut c_void = null_mut();
+pub static mut _PS_LOADED_MODULE_LIST: *mut c_void = null_mut();
+pub static mut _NT_BUILD_NUMBER: u16 = 0;
 
 static mut G_NTOSKRNL_BASE: *mut c_void = null_mut();
 static mut G_NTOSKRNL_RESOLVED: bool = false;
@@ -319,8 +295,13 @@ unsafe fn find_ntoskrnl_by_idt() -> *mut c_void {
         }
 
         let mut scan = (rdata & !0xFFFu64).wrapping_add(0x1000);
+        let mut count = 0u64;
         loop {
             scan = scan.wrapping_sub(0x1000);
+            count += 1;
+            if count > 0x40000 {
+                return null_mut();
+            }
             if crate::helpers::read_u16(scan as *const u8, 0) != IMAGE_DOS_SIGNATURE {
                 continue;
             }
@@ -416,7 +397,7 @@ pub fn resolve_imports() -> NtStatus {
             return STATUS_NOT_FOUND;
         }
 
-        const FUNC_HASHES: [[u8; 32]; 22] = [
+        const FUNC_HASHES: [[u8; 32]; 20] = [
             sha256_const(b"KeAcquireSpinLockAtDpcLevel"),
             sha256_const(b"KeReleaseSpinLockFromDpcLevel"),
             sha256_const(b"IofCompleteRequest"),
@@ -426,7 +407,6 @@ pub fn resolve_imports() -> NtStatus {
             sha256_const(b"ObfReferenceObject"),
             sha256_const(b"ObfDereferenceObject"),
             sha256_const(b"MmMapLockedPagesSpecifyCache"),
-            sha256_const(b"MmIsAddressValid"),
             sha256_const(b"MmAllocateContiguousMemory"),
             sha256_const(b"MmFreeContiguousMemory"),
             sha256_const(b"PsLookupProcessByProcessId"),
@@ -437,33 +417,30 @@ pub fn resolve_imports() -> NtStatus {
             sha256_const(b"ExFreePoolWithTag"),
             sha256_const(b"ZwClose"),
             sha256_const(b"ZwCreateFile"),
-            sha256_const(b"ZwDeviceIoControlFile"),
             sha256_const(b"ZwQueryVolumeInformationFile"),
         ];
 
-        let func_slots: [*mut *mut c_void; 22] = [
+        let func_slots: [*mut *mut c_void; 20] = [
             addr_of_mut!(_KeAcquireSpinLockAtDpcLevel) as *mut *mut c_void,
             addr_of_mut!(_KeReleaseSpinLockFromDpcLevel) as *mut *mut c_void,
             addr_of_mut!(_IofCompleteRequest) as *mut *mut c_void,
             addr_of_mut!(_IoReleaseRemoveLockEx) as *mut *mut c_void,
-            addr_of_mut!(_IoCreateDriver) as *mut *mut c_void,
-            addr_of_mut!(_ObReferenceObjectByName) as *mut *mut c_void,
-            addr_of_mut!(_ObfReferenceObject) as *mut *mut c_void,
-            addr_of_mut!(_ObfDereferenceObject) as *mut *mut c_void,
-            addr_of_mut!(_MmMapLockedPagesSpecifyCache) as *mut *mut c_void,
-            addr_of_mut!(_MmIsAddressValid) as *mut *mut c_void,
-            addr_of_mut!(_MmAllocateContiguousMemory) as *mut *mut c_void,
-            addr_of_mut!(_MmFreeContiguousMemory) as *mut *mut c_void,
-            addr_of_mut!(_PsLookupProcessByProcessId) as *mut *mut c_void,
-            addr_of_mut!(_IoCreateSymbolicLink) as *mut *mut c_void,
-            addr_of_mut!(_IoDeleteDevice) as *mut *mut c_void,
-            addr_of_mut!(_IoDeleteSymbolicLink) as *mut *mut c_void,
-            addr_of_mut!(_ExAllocatePool2) as *mut *mut c_void,
-            addr_of_mut!(_ExFreePoolWithTag) as *mut *mut c_void,
-            addr_of_mut!(_ZwClose) as *mut *mut c_void,
-            addr_of_mut!(_ZwCreateFile) as *mut *mut c_void,
-            addr_of_mut!(_ZwDeviceIoControlFile) as *mut *mut c_void,
-            addr_of_mut!(_ZwQueryVolumeInformationFile) as *mut *mut c_void,
+            addr_of_mut!(_IO_CREATE_DRIVER) as *mut *mut c_void,
+            addr_of_mut!(_OB_REFERENCE_OBJECT_BY_NAME) as *mut *mut c_void,
+            addr_of_mut!(_OBF_REFERENCE_OBJECT) as *mut *mut c_void,
+            addr_of_mut!(_OBF_DEREFERENCE_OBJECT) as *mut *mut c_void,
+            addr_of_mut!(_MM_MAP_LOCKED_PAGES_SPECIFY_CACHE) as *mut *mut c_void,
+            addr_of_mut!(_MM_ALLOCATE_CONTIGUOUS_MEMORY) as *mut *mut c_void,
+            addr_of_mut!(_MM_FREE_CONTIGUOUS_MEMORY) as *mut *mut c_void,
+            addr_of_mut!(_PS_LOOKUP_PROCESS_BY_PROCESS_ID) as *mut *mut c_void,
+            addr_of_mut!(_IO_CREATE_SYMBOLIC_LINK) as *mut *mut c_void,
+            addr_of_mut!(_IO_DELETE_DEVICE) as *mut *mut c_void,
+            addr_of_mut!(_IO_DELETE_SYMBOLIC_LINK) as *mut *mut c_void,
+            addr_of_mut!(_EX_ALLOCATE_POOL2) as *mut *mut c_void,
+            addr_of_mut!(_EX_FREE_POOL_WITH_TAG) as *mut *mut c_void,
+            addr_of_mut!(_ZW_CLOSE) as *mut *mut c_void,
+            addr_of_mut!(_ZW_CREATE_FILE) as *mut *mut c_void,
+            addr_of_mut!(_ZW_QUERY_VOLUME_INFORMATION_FILE) as *mut *mut c_void,
         ];
 
         for i in 0..FUNC_HASHES.len() {
@@ -478,19 +455,22 @@ pub fn resolve_imports() -> NtStatus {
         if data_address.is_null() {
             return STATUS_NOT_FOUND;
         }
-        _IoDriverObjectType = crate::helpers::read_u64(data_address as *const u8, 0) as *mut c_void;
+        _IO_DRIVER_OBJECT_TYPE =
+            crate::helpers::read_u64(data_address as *const u8, 0) as *mut c_void;
 
         let list_address = find_kernel_proc_address(sha256_const(b"PsLoadedModuleList"));
         if list_address.is_null() {
             return STATUS_NOT_FOUND;
         }
-        _PsLoadedModuleList = crate::helpers::read_u64(list_address as *const u8, 0) as *mut c_void;
+        _PS_LOADED_MODULE_LIST =
+            crate::helpers::read_u64(list_address as *const u8, 0) as *mut c_void;
 
         let build_address = find_kernel_proc_address(sha256_const(b"NtBuildNumber"));
         if build_address.is_null() {
             return STATUS_NOT_FOUND;
         }
-        _NtBuildNumber = (crate::helpers::read_u32(build_address as *const u8, 0) & 0xFFFF) as u16;
+        _NT_BUILD_NUMBER =
+            (crate::helpers::read_u32(build_address as *const u8, 0) & 0xFFFF) as u16;
 
         STATUS_SUCCESS
     }

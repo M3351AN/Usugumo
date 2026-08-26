@@ -7,7 +7,6 @@ mod anti_capture;
 mod consts;
 mod dispatches;
 mod ffi;
-mod globals;
 mod helpers;
 mod imports;
 mod keybd;
@@ -17,6 +16,7 @@ mod process;
 mod random;
 mod reimpl;
 mod reimpl_ke;
+mod reimpl_rtl;
 mod reimpl_wdm;
 mod request_handler;
 mod sha256;
@@ -30,8 +30,6 @@ use obfstr::obfwide;
 
 use crate::consts::*;
 use crate::dispatches::*;
-use crate::ffi::*;
-use crate::globals::*;
 use crate::imports::*;
 use crate::types::*;
 use crate::util::*;
@@ -48,13 +46,13 @@ unsafe extern "system" fn driver_unload(driver: *mut DriverObject) {
         keybd::keyboard_release();
         let g = addr_of_mut!(G_SYMBOLIC_LINK_NAME);
         if !(*g).buffer.is_null() {
-            if !_IoDeleteSymbolicLink.is_null() {
-                let f: IoDeleteSymbolicLinkFn = core::mem::transmute(_IoDeleteSymbolicLink);
+            if !_IO_DELETE_SYMBOLIC_LINK.is_null() {
+                let f: IoDeleteSymbolicLinkFn = core::mem::transmute(_IO_DELETE_SYMBOLIC_LINK);
                 f(addr_of_mut!(G_SYMBOLIC_LINK_NAME));
             }
             zero_memory((*g).buffer as *mut u8, (*g).maximum_length as usize);
-            if !_ExFreePoolWithTag.is_null() {
-                let f: ExFreePoolWithTagFn = core::mem::transmute(_ExFreePoolWithTag);
+            if !_EX_FREE_POOL_WITH_TAG.is_null() {
+                let f: ExFreePoolWithTagFn = core::mem::transmute(_EX_FREE_POOL_WITH_TAG);
                 f((*g).buffer as *mut c_void, SYMLINK_TAG);
             }
             (*g).buffer = core::ptr::null_mut();
@@ -63,8 +61,8 @@ unsafe extern "system" fn driver_unload(driver: *mut DriverObject) {
         }
 
         if !(*driver).device_object.is_null() {
-            if !_IoDeleteDevice.is_null() {
-                let f: IoDeleteDeviceFn = core::mem::transmute(_IoDeleteDevice);
+            if !_IO_DELETE_DEVICE.is_null() {
+                let f: IoDeleteDeviceFn = core::mem::transmute(_IO_DELETE_DEVICE);
                 f((*driver).device_object);
             }
             (*driver).device_object = core::ptr::null_mut();
@@ -129,7 +127,10 @@ unsafe extern "system" fn driver_init(
             n += 1;
         }
         random_device_name_buf[n] = 0;
-        RtlInitUnicodeStringMeme(&mut device_name, random_device_name_buf.as_ptr());
+        crate::reimpl_rtl::rtl_init_unicode_string(
+            &mut device_name,
+            random_device_name_buf.as_ptr(),
+        );
 
         let mut sym_link_buf = [0u16; 256];
         let sym_prefix = obfwide!("\\DosDevices\\Global\\");
@@ -149,10 +150,10 @@ unsafe extern "system" fn driver_init(
         );
 
         let sym_link_bytes = (kwcslen(sym_link_buf.as_ptr()) + 1) * core::mem::size_of::<u16>();
-        let sym_link_pool = if _ExAllocatePool2.is_null() {
+        let sym_link_pool = if _EX_ALLOCATE_POOL2.is_null() {
             core::ptr::null_mut()
         } else {
-            let f: ExAllocatePool2Fn = core::mem::transmute(_ExAllocatePool2);
+            let f: ExAllocatePool2Fn = core::mem::transmute(_EX_ALLOCATE_POOL2);
             f(POOL_FLAG_NON_PAGED, sym_link_bytes, SYMLINK_TAG)
         };
         if sym_link_pool.is_null() {
@@ -164,7 +165,7 @@ unsafe extern "system" fn driver_init(
             sym_link_pool as *mut u16,
             kwcslen(sym_link_buf.as_ptr()) + 1,
         );
-        RtlInitUnicodeStringMeme(
+        crate::reimpl_rtl::rtl_init_unicode_string(
             addr_of_mut!(G_SYMBOLIC_LINK_NAME),
             sym_link_pool as *const u16,
         );
@@ -192,10 +193,10 @@ unsafe extern "system" fn driver_init(
             return status;
         }
 
-        status = if _IoCreateSymbolicLink.is_null() {
+        status = if _IO_CREATE_SYMBOLIC_LINK.is_null() {
             STATUS_UNSUCCESSFUL
         } else {
-            let f: IoCreateSymbolicLinkFn = core::mem::transmute(_IoCreateSymbolicLink);
+            let f: IoCreateSymbolicLinkFn = core::mem::transmute(_IO_CREATE_SYMBOLIC_LINK);
             f(
                 addr_of_mut!(G_SYMBOLIC_LINK_NAME),
                 addr_of_mut!(device_name),
@@ -230,10 +231,10 @@ pub extern "system" fn usugumo_entry(_driver: *mut c_void, _registry: *mut c_voi
     }
 
     unsafe {
-        if _IoCreateDriver.is_null() {
+        if _IO_CREATE_DRIVER.is_null() {
             return STATUS_UNSUCCESSFUL;
         }
-        let create: IoCreateDriverFn = core::mem::transmute(_IoCreateDriver);
+        let create: IoCreateDriverFn = core::mem::transmute(_IO_CREATE_DRIVER);
         create(core::ptr::null_mut(), driver_init)
     }
 }

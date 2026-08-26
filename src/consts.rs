@@ -1,6 +1,7 @@
 // Copyright (c) 2026 渟雲. All rights reserved.
 
 use crate::types::NtStatus;
+use crate::types::UnicodeString;
 
 pub const STATUS_SUCCESS: NtStatus = 0;
 pub const STATUS_UNSUCCESSFUL: NtStatus = 0xC000_0001u32 as i32;
@@ -60,3 +61,12 @@ pub const USUGUMO_SUPPORTED_MASK: u64 = USUGUMO_PROBE
     | USUGUMO_MODULE_SIZE
     | USUGUMO_PID
     | USUGUMO_ANTI_CAPTURE;
+
+pub static mut G_ACTIVE_PROCESS_LINKS_OFFSET: u32 = 0;
+pub static mut G_USER_DIRECTORY_TABLE_BASE_OFFSET: u32 = 0;
+
+pub static mut G_SYMBOLIC_LINK_NAME: UnicodeString = UnicodeString {
+    length: 0,
+    maximum_length: 0,
+    buffer: core::ptr::null_mut(),
+};

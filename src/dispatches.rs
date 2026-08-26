@@ -5,7 +5,7 @@ use core::mem::size_of;
 use core::ptr::null_mut;
 
 use crate::consts::*;
-use crate::imports::{_IofCompleteRequest, _MmMapLockedPagesSpecifyCache};
+use crate::imports::{_IofCompleteRequest, _MM_MAP_LOCKED_PAGES_SPECIFY_CACHE};
 use crate::request_handler::request_handler;
 use crate::types::{DeviceObject, IoStackLocation, IoStackParameters, Irp, NtStatus, Requests};
 
@@ -39,10 +39,10 @@ unsafe fn complete_request(irp: *mut Irp) {
 
 unsafe fn map_locked(mdl: *mut c_void) -> *mut c_void {
     unsafe {
-        if _MmMapLockedPagesSpecifyCache.is_null() {
+        if _MM_MAP_LOCKED_PAGES_SPECIFY_CACHE.is_null() {
             return null_mut();
         }
-        let f: FnMmMapLockedPages = core::mem::transmute(_MmMapLockedPagesSpecifyCache);
+        let f: FnMmMapLockedPages = core::mem::transmute(_MM_MAP_LOCKED_PAGES_SPECIFY_CACHE);
         f(
             mdl,
             KERNEL_MODE as u32,

@@ -4,10 +4,9 @@ use core::ffi::c_void;
 use core::ptr::null_mut;
 
 use crate::consts::*;
-use crate::ffi::*;
 use crate::imports::{
-    _ExFreePoolWithTag, _NtBuildNumber, _ObfDereferenceObject, _ObfReferenceObject,
-    _PsLookupProcessByProcessId,
+    _EX_FREE_POOL_WITH_TAG, _NT_BUILD_NUMBER, _OBF_DEREFERENCE_OBJECT, _OBF_REFERENCE_OBJECT,
+    _PS_LOOKUP_PROCESS_BY_PROCESS_ID,
 };
 use crate::pmem::{copy_virtual_memory, read_process_memory};
 use crate::reimpl::{
@@ -23,9 +22,6 @@ type FnPsLookupProcessByProcessId = unsafe extern "system" fn(usize, *mut *mut c
 type FnObfDereferenceObject = unsafe extern "system" fn(*mut c_void) -> isize;
 type FnObfReferenceObject = unsafe extern "system" fn(*mut c_void) -> isize;
 type FnExFreePoolWithTag = unsafe extern "system" fn(*mut c_void, u32);
-
-pub static mut G_ACTIVE_PROCESS_LINKS_OFFSET: u32 = 0;
-pub static mut G_USER_DIRECTORY_TABLE_BASE_OFFSET: u32 = 0;
 
 const OFF_PEB_LDR: u64 = 0x18;
 const OFF_LDR_INLOAD_ORDER: u64 = 0x10;
@@ -43,18 +39,19 @@ const _: () = assert!(OFF_ENTRY_BASENAME == 0x58);
 
 fn lookup_process(pid: u64, out: *mut *mut c_void) -> NtStatus {
     unsafe {
-        if _PsLookupProcessByProcessId.is_null() {
+        if _PS_LOOKUP_PROCESS_BY_PROCESS_ID.is_null() {
             return STATUS_UNSUCCESSFUL;
         }
-        let f: FnPsLookupProcessByProcessId = core::mem::transmute(_PsLookupProcessByProcessId);
+        let f: FnPsLookupProcessByProcessId =
+            core::mem::transmute(_PS_LOOKUP_PROCESS_BY_PROCESS_ID);
         f(pid as usize, out)
     }
 }
 
 fn deref_process(obj: *mut c_void) {
     unsafe {
-        if !_ObfDereferenceObject.is_null() {
-            let f: FnObfDereferenceObject = core::mem::transmute(_ObfDereferenceObject);
+        if !_OBF_DEREFERENCE_OBJECT.is_null() {
+            let f: FnObfDereferenceObject = core::mem::transmute(_OBF_DEREFERENCE_OBJECT);
             f(obj);
         }
     }
@@ -62,8 +59,8 @@ fn deref_process(obj: *mut c_void) {
 
 fn ref_process(obj: *mut c_void) {
     unsafe {
-        if !_ObfReferenceObject.is_null() {
-            let f: FnObfReferenceObject = core::mem::transmute(_ObfReferenceObject);
+        if !_OBF_REFERENCE_OBJECT.is_null() {
+            let f: FnObfReferenceObject = core::mem::transmute(_OBF_REFERENCE_OBJECT);
             f(obj);
         }
     }
@@ -77,8 +74,8 @@ fn free_converted_pwstr(ppw_str: *mut *mut u16) {
         let cch = kwcslen(*ppw_str) + 1;
         let byte_size = cch * core::mem::size_of::<u16>();
         core::ptr::write_bytes(*ppw_str as *mut u8, 0, byte_size);
-        if !_ExFreePoolWithTag.is_null() {
-            let f: FnExFreePoolWithTag = core::mem::transmute(_ExFreePoolWithTag);
+        if !_EX_FREE_POOL_WITH_TAG.is_null() {
+            let f: FnExFreePoolWithTag = core::mem::transmute(_EX_FREE_POOL_WITH_TAG);
             f(*ppw_str as *mut c_void, 0x7265_6355);
         }
         *ppw_str = null_mut();
@@ -87,7 +84,7 @@ fn free_converted_pwstr(ppw_str: *mut *mut u16) {
 
 pub fn read_vm(in_req: *mut Requests) -> u8 {
     unsafe {
-        if KeGetCurrentIrqlMeme() > PASSIVE_LEVEL {
+        if crate::reimpl_ke::ke_get_current_irql() > PASSIVE_LEVEL {
             return 0;
         }
         if (*in_req).request_pid == 0 || (*in_req).target_pid == 0 {
@@ -127,7 +124,7 @@ pub fn read_vm(in_req: *mut Requests) -> u8 {
 
 pub fn write_vm(in_req: *mut Requests) -> u8 {
     unsafe {
-        if KeGetCurrentIrqlMeme() > PASSIVE_LEVEL {
+        if crate::reimpl_ke::ke_get_current_irql() > PASSIVE_LEVEL {
             return 0;
         }
         if (*in_req).request_pid == 0 || (*in_req).target_pid == 0 {
@@ -166,113 +163,111 @@ pub fn write_vm(in_req: *mut Requests) -> u8 {
 }
 
 fn get_module_base(proc: *mut c_void, module_name: UnicodeString, get_size: bool) -> u64 {
-    unsafe {
-        if proc.is_null() {
-            return 0;
+    if proc.is_null() {
+        return 0;
+    }
+    if crate::reimpl_ke::ke_get_current_irql() > PASSIVE_LEVEL {
+        return 0;
+    }
+    if module_name.buffer.is_null() || module_name.length == 0 {
+        return 0;
+    }
+
+    let peb_va = ps_get_process_peb_trick(proc) as u64;
+    if peb_va == 0 {
+        return 0;
+    }
+
+    let mut result = 0u64;
+    let mut ldr_va = 0u64;
+    if read_process_memory(
+        proc,
+        peb_va + OFF_PEB_LDR,
+        (&mut ldr_va) as *mut u64 as *mut c_void,
+        8,
+    ) < 0
+    {
+        return 0;
+    }
+    if ldr_va == 0 {
+        return 0;
+    }
+
+    let head = ldr_va + OFF_LDR_INLOAD_ORDER;
+    let mut flink = 0u64;
+    if read_process_memory(proc, head, (&mut flink) as *mut u64 as *mut c_void, 8) < 0 {
+        return 0;
+    }
+
+    for _ in 0..0x1000 {
+        if flink == 0 || flink == head {
+            break;
         }
-        if KeGetCurrentIrqlMeme() > PASSIVE_LEVEL {
-            return 0;
-        }
-        if module_name.buffer.is_null() || module_name.length == 0 {
-            return 0;
+        if flink < 0x10000 || (flink & 0x7) != 0 {
+            break;
         }
 
-        let peb_va = ps_get_process_peb_trick(proc) as u64;
-        if peb_va == 0 {
-            return 0;
+        let entry_va = flink - OFF_ENTRY_INLOAD_LINKS;
+        let mut raw = [0u8; 0x68];
+        if read_process_memory(proc, entry_va, raw.as_mut_ptr() as *mut c_void, raw.len()) < 0 {
+            break;
         }
 
-        let mut result = 0u64;
-        let mut ldr_va = 0u64;
-        if read_process_memory(
-            proc,
-            peb_va + OFF_PEB_LDR,
-            (&mut ldr_va) as *mut u64 as *mut c_void,
-            8,
-        ) < 0
-        {
-            return 0;
-        }
-        if ldr_va == 0 {
-            return 0;
-        }
+        let dll_base = u64::from_le_bytes(
+            raw[OFF_ENTRY_DLLBASE as usize..OFF_ENTRY_DLLBASE as usize + 8]
+                .try_into()
+                .unwrap(),
+        );
+        let size_of_image = u64::from_le_bytes(
+            raw[OFF_ENTRY_SIZEIMAGE as usize..OFF_ENTRY_SIZEIMAGE as usize + 8]
+                .try_into()
+                .unwrap(),
+        );
+        let name_len = u16::from_le_bytes(
+            raw[OFF_ENTRY_BASENAME as usize..OFF_ENTRY_BASENAME as usize + 2]
+                .try_into()
+                .unwrap(),
+        );
+        let name_buf = u64::from_le_bytes(
+            raw[OFF_ENTRY_BASENAME as usize + 8..OFF_ENTRY_BASENAME as usize + 16]
+                .try_into()
+                .unwrap(),
+        );
 
-        let head = ldr_va + OFF_LDR_INLOAD_ORDER;
-        let mut flink = 0u64;
-        if read_process_memory(proc, head, (&mut flink) as *mut u64 as *mut c_void, 8) < 0 {
-            return 0;
-        }
-
-        for _ in 0..0x1000 {
-            if flink == 0 || flink == head {
-                break;
-            }
-            if flink < 0x10000 || (flink & 0x7) != 0 {
-                break;
-            }
-
-            let entry_va = flink - OFF_ENTRY_INLOAD_LINKS;
-            let mut raw = [0u8; 0x68];
-            if read_process_memory(proc, entry_va, raw.as_mut_ptr() as *mut c_void, raw.len()) < 0 {
-                break;
-            }
-
-            let dll_base = u64::from_le_bytes(
-                raw[OFF_ENTRY_DLLBASE as usize..OFF_ENTRY_DLLBASE as usize + 8]
-                    .try_into()
-                    .unwrap(),
-            );
-            let size_of_image = u64::from_le_bytes(
-                raw[OFF_ENTRY_SIZEIMAGE as usize..OFF_ENTRY_SIZEIMAGE as usize + 8]
-                    .try_into()
-                    .unwrap(),
-            );
-            let name_len = u16::from_le_bytes(
-                raw[OFF_ENTRY_BASENAME as usize..OFF_ENTRY_BASENAME as usize + 2]
-                    .try_into()
-                    .unwrap(),
-            );
-            let name_buf = u64::from_le_bytes(
-                raw[OFF_ENTRY_BASENAME as usize + 8..OFF_ENTRY_BASENAME as usize + 16]
-                    .try_into()
-                    .unwrap(),
-            );
-
-            if name_len > 0 && name_len <= 0x400 && name_buf != 0 {
-                let mut local_name = [0u16; 256];
-                let bytes = if (name_len as usize) < (local_name.len() * 2 - 2) {
-                    name_len as usize
-                } else {
-                    local_name.len() * 2 - 2
-                };
-                if read_process_memory(
-                    proc,
-                    name_buf,
-                    local_name.as_mut_ptr() as *mut c_void,
-                    bytes,
-                ) >= 0
-                {
-                    local_name[bytes / 2] = 0;
-                    if kwcsicmp(local_name.as_ptr(), module_name.buffer) == 0 {
-                        result = if get_size { size_of_image } else { dll_base };
-                        break;
-                    }
+        if name_len > 0 && name_len <= 0x400 && name_buf != 0 {
+            let mut local_name = [0u16; 256];
+            let bytes = if (name_len as usize) < (local_name.len() * 2 - 2) {
+                name_len as usize
+            } else {
+                local_name.len() * 2 - 2
+            };
+            if read_process_memory(
+                proc,
+                name_buf,
+                local_name.as_mut_ptr() as *mut c_void,
+                bytes,
+            ) >= 0
+            {
+                local_name[bytes / 2] = 0;
+                if kwcsicmp(local_name.as_ptr(), module_name.buffer) == 0 {
+                    result = if get_size { size_of_image } else { dll_base };
+                    break;
                 }
             }
-
-            let next = u64::from_le_bytes(
-                raw[OFF_ENTRY_INLOAD_LINKS as usize..OFF_ENTRY_INLOAD_LINKS as usize + 8]
-                    .try_into()
-                    .unwrap(),
-            );
-            if next == 0 || next == flink {
-                break;
-            }
-            flink = next;
         }
 
-        result
+        let next = u64::from_le_bytes(
+            raw[OFF_ENTRY_INLOAD_LINKS as usize..OFF_ENTRY_INLOAD_LINKS as usize + 8]
+                .try_into()
+                .unwrap(),
+        );
+        if next == 0 || next == flink {
+            break;
+        }
+        flink = next;
     }
+
+    result
 }
 
 fn get_dll_base_or_size(in_req: *mut Requests, get_size: bool) -> u64 {
@@ -280,7 +275,7 @@ fn get_dll_base_or_size(in_req: *mut Requests, get_size: bool) -> u64 {
         if (*in_req).target_pid == 0 {
             return 0;
         }
-        if KeGetCurrentIrqlMeme() > PASSIVE_LEVEL {
+        if crate::reimpl_ke::ke_get_current_irql() > PASSIVE_LEVEL {
             return 0;
         }
         if !verify_secure_key((*in_req).secure_key) {
@@ -316,7 +311,7 @@ fn get_dll_base_or_size(in_req: *mut Requests, get_size: bool) -> u64 {
             maximum_length: 0,
             buffer: null_mut(),
         };
-        RtlInitUnicodeStringMeme(&mut module_name, w_str);
+        crate::reimpl_rtl::rtl_init_unicode_string(&mut module_name, w_str);
         let result = get_module_base(source_process, module_name, get_size);
 
         free_converted_pwstr(&mut w_str);
@@ -338,23 +333,23 @@ pub fn init_offsets_by_version() -> bool {
         G_ACTIVE_PROCESS_LINKS_OFFSET = 0x448;
         G_USER_DIRECTORY_TABLE_BASE_OFFSET = 0x278;
 
-        if _NtBuildNumber >= 26000 {
+        if _NT_BUILD_NUMBER >= 26000 {
             G_ACTIVE_PROCESS_LINKS_OFFSET = 0x1d8;
             G_USER_DIRECTORY_TABLE_BASE_OFFSET = 0x388;
             return true;
-        } else if _NtBuildNumber >= 22000 {
+        } else if _NT_BUILD_NUMBER >= 22000 {
             G_ACTIVE_PROCESS_LINKS_OFFSET = 0x448;
             G_USER_DIRECTORY_TABLE_BASE_OFFSET = 0x388;
             return true;
-        } else if _NtBuildNumber >= 19041 {
+        } else if _NT_BUILD_NUMBER >= 19041 {
             G_ACTIVE_PROCESS_LINKS_OFFSET = 0x448;
             G_USER_DIRECTORY_TABLE_BASE_OFFSET = 0x388;
             return true;
-        } else if _NtBuildNumber >= 18362 {
+        } else if _NT_BUILD_NUMBER >= 18362 {
             G_ACTIVE_PROCESS_LINKS_OFFSET = 0x448;
             G_USER_DIRECTORY_TABLE_BASE_OFFSET = 0x280;
             return true;
-        } else if _NtBuildNumber >= 10240 {
+        } else if _NT_BUILD_NUMBER >= 10240 {
             G_ACTIVE_PROCESS_LINKS_OFFSET = 0x448;
             G_USER_DIRECTORY_TABLE_BASE_OFFSET = 0x278;
             return true;
@@ -371,7 +366,7 @@ pub fn get_process_id_by_name(in_req: *mut Requests) -> u64 {
         if !verify_secure_key((*in_req).secure_key) {
             return 0;
         }
-        if KeGetCurrentIrqlMeme() > PASSIVE_LEVEL {
+        if crate::reimpl_ke::ke_get_current_irql() > PASSIVE_LEVEL {
             return 0;
         }
         if G_ACTIVE_PROCESS_LINKS_OFFSET == 0 {

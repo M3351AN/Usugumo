@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 渟雲. All rights reserved.
+// Copyright (c) 2026 渟雲. All rights reserved.
 
 use std::env;
 use std::fs;
@@ -97,4 +97,8 @@ fn main() {
     println!("cargo:rustc-link-arg=/IGNORE:4257");
     println!("cargo:rustc-link-arg=/IGNORE:4216");
     println!("cargo:rustc-link-arg=/INCREMENTAL:NO");
+    println!(
+        "cargo:rustc-link-arg=/MAP:{}",
+        manifest.join("target").join("usugumo.map").display()
+    );
 }

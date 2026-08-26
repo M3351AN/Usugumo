@@ -4,11 +4,11 @@ use core::ffi::c_void;
 use core::ptr::null_mut;
 
 use crate::consts::*;
-use crate::ffi::*;
 use crate::imports::{
-    _ExAllocatePool2, _ExFreePoolWithTag, _MmAllocateContiguousMemory, _MmFreeContiguousMemory,
+    _EX_ALLOCATE_POOL2, _EX_FREE_POOL_WITH_TAG, _MM_ALLOCATE_CONTIGUOUS_MEMORY,
+    _MM_FREE_CONTIGUOUS_MEMORY,
 };
-use crate::process::{G_USER_DIRECTORY_TABLE_BASE_OFFSET, init_offsets_by_version};
+use crate::process::init_offsets_by_version;
 use crate::types::NtStatus;
 
 type FnMmAllocateContiguousMemory = unsafe extern "system" fn(usize, u64) -> *mut c_void;
@@ -191,11 +191,11 @@ fn read_physical_u64(physical_address: u64) -> u64 {
 pub fn init_pmem_pages() -> NtStatus {
     unsafe {
         for i in 0..PMEM_MAX_CPU_PAGES {
-            let va = if _MmAllocateContiguousMemory.is_null() {
+            let va = if _MM_ALLOCATE_CONTIGUOUS_MEMORY.is_null() {
                 null_mut()
             } else {
                 let f: FnMmAllocateContiguousMemory =
-                    core::mem::transmute(_MmAllocateContiguousMemory);
+                    core::mem::transmute(_MM_ALLOCATE_CONTIGUOUS_MEMORY);
                 f(PMEM_PAGE_SIZE, u64::MAX)
             };
             if va.is_null() {
@@ -204,8 +204,9 @@ pub fn init_pmem_pages() -> NtStatus {
             }
             let pte = pmem_get_pte(va as u64);
             if pte.is_null() {
-                if !_MmFreeContiguousMemory.is_null() {
-                    let f: FnMmFreeContiguousMemory = core::mem::transmute(_MmFreeContiguousMemory);
+                if !_MM_FREE_CONTIGUOUS_MEMORY.is_null() {
+                    let f: FnMmFreeContiguousMemory =
+                        core::mem::transmute(_MM_FREE_CONTIGUOUS_MEMORY);
                     f(va);
                 }
                 cleanup_pmem_pages();
@@ -222,8 +223,9 @@ pub fn cleanup_pmem_pages() {
     unsafe {
         for i in 0..PMEM_MAX_CPU_PAGES {
             if !G_PMEM_PAGES[i].virtual_address.is_null() {
-                if !_MmFreeContiguousMemory.is_null() {
-                    let f: FnMmFreeContiguousMemory = core::mem::transmute(_MmFreeContiguousMemory);
+                if !_MM_FREE_CONTIGUOUS_MEMORY.is_null() {
+                    let f: FnMmFreeContiguousMemory =
+                        core::mem::transmute(_MM_FREE_CONTIGUOUS_MEMORY);
                     f(G_PMEM_PAGES[i].virtual_address);
                 }
                 G_PMEM_PAGES[i].virtual_address = null_mut();
@@ -304,7 +306,7 @@ pub fn read_process_memory(
             return STATUS_INVALID_PARAMETER;
         }
 
-        let irql = KzRaiseIrqlMeme(DISPATCH_LEVEL);
+        let irql = crate::reimpl_ke::kz_raise_irql(DISPATCH_LEVEL);
         let dst = buffer as *mut u8;
         let mut offset = 0usize;
         let mut status = STATUS_SUCCESS;
@@ -329,7 +331,7 @@ pub fn read_process_memory(
             }
             offset += chunk;
         }
-        KzLowerIrqlMeme(irql);
+        crate::reimpl_ke::kz_lower_irql(irql);
         status
     }
 }
@@ -352,10 +354,10 @@ pub fn copy_virtual_memory(
             return STATUS_INVALID_PARAMETER;
         }
 
-        let scratch = if _ExAllocatePool2.is_null() {
+        let scratch = if _EX_ALLOCATE_POOL2.is_null() {
             null_mut()
         } else {
-            let f: FnExAllocatePool2 = core::mem::transmute(_ExAllocatePool2);
+            let f: FnExAllocatePool2 = core::mem::transmute(_EX_ALLOCATE_POOL2);
             f(
                 POOL_FLAG_NON_PAGED | POOL_FLAG_UNINITIALIZED,
                 PMEM_PAGE_SIZE,
@@ -410,8 +412,8 @@ pub fn copy_virtual_memory(
         }
 
         secure_zero(scratch as *mut u8, PMEM_PAGE_SIZE);
-        if !_ExFreePoolWithTag.is_null() {
-            let f: FnExFreePoolWithTag = core::mem::transmute(_ExFreePoolWithTag);
+        if !_EX_FREE_POOL_WITH_TAG.is_null() {
+            let f: FnExFreePoolWithTag = core::mem::transmute(_EX_FREE_POOL_WITH_TAG);
             f(scratch, POOL_TAG_COPY);
         }
 

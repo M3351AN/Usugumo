@@ -2,7 +2,6 @@
 
 use crate::anti_capture;
 use crate::consts::*;
-use crate::ffi::*;
 use crate::keybd;
 use crate::mouse;
 use crate::process::{get_dll_address, get_dll_size, get_process_id_by_name, read_vm, write_vm};
@@ -35,7 +34,7 @@ pub(crate) fn verify_secure_key(secure_key: u64) -> bool {
     let key_bytes = secure_key.to_ne_bytes();
     let mut local_checksum = [0u8; 32];
     crate::sha256::sha256(key_bytes.as_ptr(), 8, local_checksum.as_mut_ptr());
-    unsafe { RtlCompareMemoryMeme(local_checksum.as_ptr(), PUBLIC_KEY.as_ptr(), 32) == 32 }
+    crate::reimpl_rtl::rtl_compare_memory(local_checksum.as_ptr(), PUBLIC_KEY.as_ptr(), 32) == 32
 }
 
 pub unsafe extern "system" fn request_handler(pstruct: *mut Requests) -> u8 {

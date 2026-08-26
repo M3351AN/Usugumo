@@ -5,7 +5,9 @@ use core::ptr::null_mut;
 
 use crate::consts::*;
 use crate::ffi::*;
-use crate::imports::{_IoDriverObjectType, _ObReferenceObjectByName, _ObfDereferenceObject};
+use crate::imports::{
+    _IO_DRIVER_OBJECT_TYPE, _OB_REFERENCE_OBJECT_BY_NAME, _OBF_DEREFERENCE_OBJECT,
+};
 use crate::request_handler::verify_secure_key;
 use crate::types::{DeviceObject, DriverObject, NtStatus, Requests, UnicodeString};
 
@@ -74,10 +76,10 @@ fn ob_reference_object_by_name(
     object: *mut *mut c_void,
 ) -> NtStatus {
     unsafe {
-        if _ObReferenceObjectByName.is_null() {
+        if _OB_REFERENCE_OBJECT_BY_NAME.is_null() {
             return STATUS_UNSUCCESSFUL;
         }
-        let f: FnObReferenceObjectByName = core::mem::transmute(_ObReferenceObjectByName);
+        let f: FnObReferenceObjectByName = core::mem::transmute(_OB_REFERENCE_OBJECT_BY_NAME);
         f(
             name,
             attributes,
@@ -93,8 +95,8 @@ fn ob_reference_object_by_name(
 
 fn ob_deref(obj: *mut c_void) {
     unsafe {
-        if !_ObfDereferenceObject.is_null() {
-            let f: FnObfDereferenceObject = core::mem::transmute(_ObfDereferenceObject);
+        if !_OBF_DEREFERENCE_OBJECT.is_null() {
+            let f: FnObfDereferenceObject = core::mem::transmute(_OBF_DEREFERENCE_OBJECT);
             f(obj);
         }
     }
@@ -132,7 +134,7 @@ fn mouse_open() -> bool {
             let mut status = ob_reference_object_by_name(
                 &mut class_string,
                 OBJ_CASE_INSENSITIVE,
-                _IoDriverObjectType,
+                _IO_DRIVER_OBJECT_TYPE,
                 KERNEL_MODE,
                 (&mut class_driver_object as *mut *mut DriverObject) as *mut *mut c_void,
             );
@@ -146,7 +148,7 @@ fn mouse_open() -> bool {
                 status = ob_reference_object_by_name(
                     &mut mouse_driver_names[driver_idx],
                     OBJ_CASE_INSENSITIVE,
-                    _IoDriverObjectType,
+                    _IO_DRIVER_OBJECT_TYPE,
                     KERNEL_MODE,
                     (&mut hid_driver_object as *mut *mut DriverObject) as *mut *mut c_void,
                 );
@@ -253,7 +255,7 @@ fn mouse_call(x: i32, y: i32, button_flags: u16, flags: u16) {
             last_y: y,
             extra_information: 0,
         };
-        let irql = KzRaiseIrqlMeme(DISPATCH_LEVEL);
+        let irql = crate::reimpl_ke::kz_raise_irql(DISPATCH_LEVEL);
         let mut input_data = 0u32;
         let end = (core::ptr::addr_of!(mid) as *mut MouseInputData).add(1);
         MouseClassServiceCallbackMeme(
@@ -262,7 +264,7 @@ fn mouse_call(x: i32, y: i32, button_flags: u16, flags: u16) {
             end as *mut c_void,
             &mut input_data,
         );
-        KzLowerIrqlMeme(irql);
+        crate::reimpl_ke::kz_lower_irql(irql);
     }
 }
 

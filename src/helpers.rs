@@ -4,8 +4,9 @@ use core::ffi::c_void;
 use core::ptr::null_mut;
 
 use crate::consts::*;
-use crate::ffi::*;
-use crate::imports::{_ExAllocatePool2, _ZwClose, _ZwCreateFile, _ZwQueryVolumeInformationFile};
+use crate::imports::{
+    _EX_ALLOCATE_POOL2, _ZW_CLOSE, _ZW_CREATE_FILE, _ZW_QUERY_VOLUME_INFORMATION_FILE,
+};
 use crate::sha256::sha256;
 use crate::types::{FixedStr64, IoStatusBlock, NtStatus, Requests, UnicodeString};
 
@@ -82,10 +83,10 @@ pub fn convert_to_pwstr(ascii_str: *const i8) -> *mut u16 {
             len += 1;
         }
 
-        let w_str = if _ExAllocatePool2.is_null() {
+        let w_str = if _EX_ALLOCATE_POOL2.is_null() {
             null_mut()
         } else {
-            let f: FnExAllocatePool2 = core::mem::transmute(_ExAllocatePool2);
+            let f: FnExAllocatePool2 = core::mem::transmute(_EX_ALLOCATE_POOL2);
             f(POOL_FLAG_NON_PAGED, (len + 1) * 2, 0x7265_6355)
         };
         if w_str.is_null() {
@@ -108,7 +109,7 @@ pub fn search_sign_for_image(
     pattern_size: u32,
 ) -> *mut c_void {
     unsafe {
-        let nt = RtlImageNtHeaderMeme(image_base) as *const u8;
+        let nt = crate::reimpl_rtl::rtl_image_nt_header(image_base) as *const u8;
         if nt.is_null() {
             return null_mut();
         }
@@ -179,10 +180,10 @@ pub fn get_boot_volume_serial(out: *mut i8, out_len: u32) -> NtStatus {
             status: 0,
             information: 0,
         };
-        let mut status = if _ZwCreateFile.is_null() {
+        let mut status = if _ZW_CREATE_FILE.is_null() {
             STATUS_UNSUCCESSFUL
         } else {
-            let f: FnZwCreateFile = core::mem::transmute(_ZwCreateFile);
+            let f: FnZwCreateFile = core::mem::transmute(_ZW_CREATE_FILE);
             f(
                 &mut handle,
                 GENERIC_READ | SYNCHRONIZE,
@@ -211,11 +212,11 @@ pub fn get_boot_volume_serial(out: *mut i8, out_len: u32) -> NtStatus {
             supports_objects: 0,
             volume_label: [0],
         };
-        status = if _ZwQueryVolumeInformationFile.is_null() {
+        status = if _ZW_QUERY_VOLUME_INFORMATION_FILE.is_null() {
             STATUS_UNSUCCESSFUL
         } else {
             let f: FnZwQueryVolumeInformationFile =
-                core::mem::transmute(_ZwQueryVolumeInformationFile);
+                core::mem::transmute(_ZW_QUERY_VOLUME_INFORMATION_FILE);
             f(
                 handle,
                 &mut iosb,
@@ -227,8 +228,8 @@ pub fn get_boot_volume_serial(out: *mut i8, out_len: u32) -> NtStatus {
         if status >= 0 {
             status = iosb.status;
         }
-        if !_ZwClose.is_null() {
-            let f: FnZwClose = core::mem::transmute(_ZwClose);
+        if !_ZW_CLOSE.is_null() {
+            let f: FnZwClose = core::mem::transmute(_ZW_CLOSE);
             f(handle);
         }
         if status < 0 {
