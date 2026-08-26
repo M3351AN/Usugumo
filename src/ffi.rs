@@ -13,9 +13,15 @@ unsafe extern "system" {
         out_len: u32,
     ) -> NtStatus;
     pub fn RtlInitUnicodeStringMeme(dest: *mut UnicodeString, source: *const u16);
-    pub fn InitGreProtectSpriteContent() -> u8;
     pub fn MouseRelease();
     pub fn KeyboardRelease();
+    pub fn SearchSignForImage(
+        image_base: *mut c_void,
+        pattern: *const u8,
+        mask: *const i8,
+        len: u32,
+    ) -> *mut c_void;
+    pub fn ResolveRelativeAddress(base: *mut c_void, offset: u32) -> *mut u8;
     pub fn KeGetCurrentIrqlMeme() -> u8;
     pub fn PsGetProcessExitStatusTrick(proc: *mut c_void) -> i32;
     pub fn PsGetProcessPebTrick(proc: *mut c_void) -> *mut c_void;
@@ -34,5 +40,4 @@ unsafe extern "system" {
     pub fn CalculateRequestsChecksum(req: *mut Requests) -> u64;
     pub fn HandleMouseEvent(req: *mut Requests);
     pub fn HandleKeybdEvent(req: *mut Requests);
-    pub fn HandleAntiCapture(req: *mut Requests) -> u8;
 }

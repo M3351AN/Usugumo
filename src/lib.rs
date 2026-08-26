@@ -3,6 +3,7 @@
 #![no_std]
 #![allow(linker_messages)]
 
+mod anti_capture;
 mod consts;
 mod dispatches;
 mod ffi;
@@ -201,7 +202,7 @@ unsafe extern "system" fn driver_init(
             return status;
         }
 
-        let _ = InitGreProtectSpriteContent();
+        let _ = anti_capture::init_gre_protect_sprite_content();
 
         (*device_object).flags |= DO_DIRECT_IO;
         (*device_object).flags &= !DO_BUFFERED_IO;

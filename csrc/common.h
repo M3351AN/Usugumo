@@ -21,7 +21,6 @@
 #include "./helpers.h"
 #include "./mouse_operation.h"
 #include "./keybd_operation.h"
-#include "./anti_capture.h"
 #include "./request_handler.h"
 
 #endif

@@ -1,5 +1,6 @@
 // Copyright (c) 2026 渟雲. All rights reserved.
 
+use crate::anti_capture;
 use crate::consts::*;
 use crate::ffi::*;
 use crate::reimpl_ke::query_system_time;
@@ -97,7 +98,7 @@ pub unsafe extern "system" fn request_handler(pstruct: *mut Requests) -> u8 {
             handled = true;
         }
         if func & USUGUMO_ANTI_CAPTURE != 0 {
-            (*pstruct).return_value = HandleAntiCapture(pstruct) as u64;
+            (*pstruct).return_value = anti_capture::handle_anti_capture(pstruct) as u64;
             handled = true;
         }
 
