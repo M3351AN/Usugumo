@@ -17,9 +17,8 @@
 #include "./defines.h"
 
 #include "./reimpl.h"
-#include "./dispatches.h"
-#include "./helpers.h"
 #include "./imports.h"
+#include "./helpers.h"
 #include "./mouse_operation.h"
 #include "./keybd_operation.h"
 #include "./process.h"

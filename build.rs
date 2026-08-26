@@ -63,6 +63,9 @@ fn main() {
     let csrc = manifest.join("csrc");
     let includes = manifest.join("includes");
 
+    println!("cargo:rerun-if-changed={}", csrc.display());
+    println!("cargo:rerun-if-changed={}", includes.display());
+
     let mut c_srcs = Vec::new();
     let mut asm_srcs = Vec::new();
     for entry in fs::read_dir(&csrc).expect("csrc dir must exist") {
@@ -107,7 +110,7 @@ fn main() {
     println!("cargo:rustc-link-arg=/DRIVER");
     println!("cargo:rustc-link-arg=/NODEFAULTLIB");
     println!("cargo:rustc-link-arg=/SUBSYSTEM:NATIVE");
-    println!("cargo:rustc-link-arg=/ENTRY:UsugumoEntry");
+    println!("cargo:rustc-link-arg=/ENTRY:usugumo_entry");
     println!("cargo:rustc-link-arg=/MACHINE:X64");
     println!("cargo:rustc-link-arg=/IGNORE:4257");
     println!("cargo:rustc-link-arg=/IGNORE:4216");

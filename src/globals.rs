@@ -1,6 +1,8 @@
-use crate::types::unicode_string;
+// Copyright (c) 2026 渟雲. All rights reserved.
 
-pub static mut g_symbolic_link_name: unicode_string = unicode_string {
+use crate::types::UnicodeString;
+
+pub static mut G_SYMBOLIC_LINK_NAME: UnicodeString = UnicodeString {
     length: 0,
     maximum_length: 0,
     buffer: core::ptr::null_mut(),

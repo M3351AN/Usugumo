@@ -1,3 +1,5 @@
+// Copyright (c) 2026 渟雲. All rights reserved.
+
 const STRIPE_LEN: usize = 64;
 const SECRET_CONSUME_RATE: usize = 8;
 const SECRET_MERGEACCS_START: usize = 11;

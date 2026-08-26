@@ -1,8 +1,10 @@
+// Copyright (c) 2026 渟雲. All rights reserved.
+
 #![no_std]
-#![allow(non_camel_case_types)]
-#![allow(non_upper_case_globals)]
+#![allow(linker_messages)]
 
 mod consts;
+mod dispatches;
 mod ffi;
 mod globals;
 mod imports;
@@ -16,6 +18,7 @@ use core::ptr::addr_of_mut;
 use obfstr::obfwide;
 
 use crate::consts::*;
+use crate::dispatches::*;
 use crate::ffi::*;
 use crate::globals::*;
 use crate::imports::*;
@@ -27,22 +30,22 @@ pub extern "C" fn __CxxFrameHandler3() -> i32 {
     0
 }
 
-unsafe extern "system" fn driver_unload(driver: *mut driver_object) {
+unsafe extern "system" fn driver_unload(driver: *mut DriverObject) {
     unsafe {
         CleanupPmemPages();
         MouseRelease();
         KeyboardRelease();
 
-        let g = addr_of_mut!(g_symbolic_link_name);
+        let g = addr_of_mut!(G_SYMBOLIC_LINK_NAME);
         if !(*g).buffer.is_null() {
             if !_IoDeleteSymbolicLink.is_null() {
-                let f: fn_io_delete_symbolic_link = core::mem::transmute(_IoDeleteSymbolicLink);
-                f(addr_of_mut!(g_symbolic_link_name));
+                let f: IoDeleteSymbolicLinkFn = core::mem::transmute(_IoDeleteSymbolicLink);
+                f(addr_of_mut!(G_SYMBOLIC_LINK_NAME));
             }
             zero_memory((*g).buffer as *mut u8, (*g).maximum_length as usize);
             if !_ExFreePoolWithTag.is_null() {
-                let f: fn_ex_free_pool_with_tag = core::mem::transmute(_ExFreePoolWithTag);
-                f((*g).buffer as *mut c_void, symlink_tag);
+                let f: ExFreePoolWithTagFn = core::mem::transmute(_ExFreePoolWithTag);
+                f((*g).buffer as *mut c_void, SYMLINK_TAG);
             }
             (*g).buffer = core::ptr::null_mut();
             (*g).length = 0;
@@ -51,7 +54,7 @@ unsafe extern "system" fn driver_unload(driver: *mut driver_object) {
 
         if !(*driver).device_object.is_null() {
             if !_IoDeleteDevice.is_null() {
-                let f: fn_io_delete_device = core::mem::transmute(_IoDeleteDevice);
+                let f: IoDeleteDeviceFn = core::mem::transmute(_IoDeleteDevice);
                 f((*driver).device_object);
             }
             (*driver).device_object = core::ptr::null_mut();
@@ -60,9 +63,9 @@ unsafe extern "system" fn driver_unload(driver: *mut driver_object) {
 }
 
 unsafe extern "system" fn driver_init(
-    driver: *mut driver_object,
-    _registry: *mut unicode_string,
-) -> nt_status {
+    driver: *mut DriverObject,
+    _registry: *mut UnicodeString,
+) -> NtStatus {
     unsafe {
         let mut status = InitPmemPages();
         if status < 0 {
@@ -91,13 +94,13 @@ unsafe extern "system" fn driver_init(
             serial.as_mut_ptr() as *mut u8,
             core::mem::size_of::<[i8; 128]>(),
         );
-        if status != status_success {
+        if status != STATUS_SUCCESS {
             driver_unload(driver);
             return status;
         }
         let obf_len = wcslen(&obfuscated);
 
-        let mut device_name = unicode_string {
+        let mut device_name = UnicodeString {
             length: 0,
             maximum_length: 0,
             buffer: core::ptr::null_mut(),
@@ -137,12 +140,12 @@ unsafe extern "system" fn driver_init(
         let sym_link_pool = if _ExAllocatePool2.is_null() {
             core::ptr::null_mut()
         } else {
-            let f: fn_ex_allocate_pool2 = core::mem::transmute(_ExAllocatePool2);
-            f(pool_flag_non_paged, sym_link_bytes, symlink_tag)
+            let f: ExAllocatePool2Fn = core::mem::transmute(_ExAllocatePool2);
+            f(POOL_FLAG_NON_PAGED, sym_link_bytes, SYMLINK_TAG)
         };
         if sym_link_pool.is_null() {
             driver_unload(driver);
-            return status_insufficient_resources;
+            return STATUS_INSUFFICIENT_RESOURCES;
         }
         core::ptr::copy_nonoverlapping(
             sym_link_buf.as_ptr(),
@@ -150,13 +153,13 @@ unsafe extern "system" fn driver_init(
             wcslen(&sym_link_buf) + 1,
         );
         RtlInitUnicodeStringMeme(
-            addr_of_mut!(g_symbolic_link_name),
+            addr_of_mut!(G_SYMBOLIC_LINK_NAME),
             sym_link_pool as *const u16,
         );
 
-        let mut device_object: *mut device_object = core::ptr::null_mut();
+        let mut device_object: *mut DeviceObject = core::ptr::null_mut();
         let sddl = obfwide!("D:P(A;;GA;;;WD)");
-        let sddl_string = unicode_string {
+        let sddl_string = UnicodeString {
             length: (sddl.len() * 2) as u16,
             maximum_length: (sddl.len() * 2) as u16,
             buffer: sddl.as_ptr() as *mut u16,
@@ -165,50 +168,50 @@ unsafe extern "system" fn driver_init(
             driver,
             0,
             &mut device_name,
-            file_device_unknown,
-            file_device_secure_open,
+            FILE_DEVICE_UNKNOWN,
+            FILE_DEVICE_SECURE_OPEN,
             0,
             &sddl_string,
             core::ptr::null(),
             &mut device_object,
         );
-        if status != status_success {
+        if status != STATUS_SUCCESS {
             driver_unload(driver);
             return status;
         }
 
         status = if _IoCreateSymbolicLink.is_null() {
-            status_unsuccessful
+            STATUS_UNSUCCESSFUL
         } else {
-            let f: fn_io_create_symbolic_link = core::mem::transmute(_IoCreateSymbolicLink);
+            let f: IoCreateSymbolicLinkFn = core::mem::transmute(_IoCreateSymbolicLink);
             f(
-                addr_of_mut!(g_symbolic_link_name),
+                addr_of_mut!(G_SYMBOLIC_LINK_NAME),
                 addr_of_mut!(device_name),
             )
         };
-        if status != status_success {
+        if status != STATUS_SUCCESS {
             driver_unload(driver);
             return status;
         }
 
         let _ = InitGreProtectSpriteContent();
 
-        (*device_object).flags |= do_direct_io;
-        (*device_object).flags &= !do_buffered_io;
+        (*device_object).flags |= DO_DIRECT_IO;
+        (*device_object).flags &= !DO_BUFFERED_IO;
 
-        (*driver).major_function[irp_mj_create] = Some(DefaultDispatch);
-        (*driver).major_function[irp_mj_close] = Some(DefaultDispatch);
-        (*driver).major_function[irp_mj_read] = Some(ReadDispatch);
-        (*driver).major_function[irp_mj_write] = Some(WriteDispatch);
+        (*driver).major_function[IRP_MJ_CREATE] = Some(default_dispatch);
+        (*driver).major_function[IRP_MJ_CLOSE] = Some(default_dispatch);
+        (*driver).major_function[IRP_MJ_READ] = Some(read_dispatch);
+        (*driver).major_function[IRP_MJ_WRITE] = Some(write_dispatch);
         (*driver).driver_unload = Some(driver_unload);
 
-        (*device_object).flags &= !do_device_initializing;
-        status_success
+        (*device_object).flags &= !DO_DEVICE_INITIALIZING;
+        STATUS_SUCCESS
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn UsugumoEntry(_driver: *mut c_void, _registry: *mut c_void) -> nt_status {
+pub extern "system" fn usugumo_entry(_driver: *mut c_void, _registry: *mut c_void) -> NtStatus {
     let status = resolve_imports();
     if status < 0 {
         return status;
@@ -216,9 +219,9 @@ pub extern "system" fn UsugumoEntry(_driver: *mut c_void, _registry: *mut c_void
 
     unsafe {
         if _IoCreateDriver.is_null() {
-            return status_unsuccessful;
+            return STATUS_UNSUCCESSFUL;
         }
-        let create: io_create_driver_fn = core::mem::transmute(_IoCreateDriver);
+        let create: IoCreateDriverFn = core::mem::transmute(_IoCreateDriver);
         create(core::ptr::null_mut(), driver_init)
     }
 }

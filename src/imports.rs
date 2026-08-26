@@ -1,16 +1,18 @@
+// Copyright (c) 2026 渟雲. All rights reserved.
+
 use core::ffi::c_void;
 use core::ptr::{addr_of_mut, null_mut};
 
-use crate::consts::{status_not_found, status_success};
-use crate::types::{device_object, nt_status, unicode_string};
+use crate::consts::{STATUS_NOT_FOUND, STATUS_SUCCESS};
+use crate::types::{DeviceObject, NtStatus, UnicodeString};
 use crate::xxh3::xxh3_64;
 
-pub type fn_io_create_symbolic_link =
-    unsafe extern "system" fn(*mut unicode_string, *mut unicode_string) -> nt_status;
-pub type fn_io_delete_symbolic_link = unsafe extern "system" fn(*mut unicode_string) -> nt_status;
-pub type fn_ex_allocate_pool2 = unsafe extern "system" fn(u64, usize, u32) -> *mut c_void;
-pub type fn_ex_free_pool_with_tag = unsafe extern "system" fn(*mut c_void, u32);
-pub type fn_io_delete_device = unsafe extern "system" fn(*mut device_object) -> nt_status;
+pub type IoCreateSymbolicLinkFn =
+    unsafe extern "system" fn(*mut UnicodeString, *mut UnicodeString) -> NtStatus;
+pub type IoDeleteSymbolicLinkFn = unsafe extern "system" fn(*mut UnicodeString) -> NtStatus;
+pub type ExAllocatePool2Fn = unsafe extern "system" fn(u64, usize, u32) -> *mut c_void;
+pub type ExFreePoolWithTagFn = unsafe extern "system" fn(*mut c_void, u32);
+pub type IoDeleteDeviceFn = unsafe extern "system" fn(*mut DeviceObject) -> NtStatus;
 
 #[unsafe(no_mangle)]
 pub static mut _KeAcquireSpinLockAtDpcLevel: *mut c_void = null_mut();
@@ -64,15 +66,15 @@ pub static mut _PsLoadedModuleList: *mut c_void = null_mut();
 #[unsafe(no_mangle)]
 pub static mut _NtBuildNumber: u16 = 0;
 
-static mut g_ntoskrnl_base: *mut c_void = null_mut();
-static mut g_ntoskrnl_resolved: bool = false;
+static mut G_NTOSKRNL_BASE: *mut c_void = null_mut();
+static mut G_NTOSKRNL_RESOLVED: bool = false;
 
 const IMAGE_DOS_SIGNATURE: u16 = 0x5A4D;
 const IMAGE_NT_SIGNATURE: u32 = 0x0000_4550;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct image_dos_header {
+struct ImageDosHeader {
     e_magic: u16,
     e_cblp: u16,
     e_cp: u16,
@@ -96,7 +98,7 @@ struct image_dos_header {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct image_file_header {
+struct ImageFileHeader {
     machine: u16,
     number_of_sections: u16,
     time_date_stamp: u32,
@@ -108,14 +110,14 @@ struct image_file_header {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct image_data_directory {
+struct ImageDataDirectory {
     virtual_address: u32,
     size: u32,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct image_optional_header64 {
+struct ImageOptionalHeader64 {
     magic: u16,
     major_linker_version: u8,
     minor_linker_version: u8,
@@ -145,20 +147,20 @@ struct image_optional_header64 {
     size_of_heap_commit: u64,
     loader_flags: u32,
     number_of_rva_and_sizes: u32,
-    data_directory: [image_data_directory; 16],
+    data_directory: [ImageDataDirectory; 16],
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct image_nt_headers64 {
+struct ImageNtHeaders64 {
     signature: u32,
-    file_header: image_file_header,
-    optional_header: image_optional_header64,
+    file_header: ImageFileHeader,
+    optional_header: ImageOptionalHeader64,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct image_export_directory {
+struct ImageExportDirectory {
     characteristics: u32,
     time_date_stamp: u32,
     major_version: u16,
@@ -174,7 +176,7 @@ struct image_export_directory {
 
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
-struct kidtentry64 {
+struct IdtEntry64 {
     offset_low: u16,
     selector: u16,
     ist_index: u8,
@@ -240,7 +242,7 @@ unsafe fn search_in_image(start: u64, max_len: u64, pat: &[u8], wildcard: u8, di
     unsafe { search_bytes(start, max_len, pat, wildcard, dir) }
 }
 
-fn idt_handler_offset(idt: *const kidtentry64, index: usize) -> u64 {
+fn idt_handler_offset(idt: *const IdtEntry64, index: usize) -> u64 {
     let e = unsafe { idt.add(index).read_unaligned() };
     e.offset_low as u64 | ((e.offset_middle as u64) << 16) | ((e.offset_high as u64) << 32)
 }
@@ -251,7 +253,7 @@ unsafe fn find_ntoskrnl_by_idt() -> *mut c_void {
         if idt_base == 0 {
             return null_mut();
         }
-        let p_idt = idt_base as *const kidtentry64;
+        let p_idt = idt_base as *const IdtEntry64;
         if p_idt.is_null() {
             return null_mut();
         }
@@ -296,12 +298,12 @@ unsafe fn find_ntoskrnl_by_idt() -> *mut c_void {
         let mut scan = (rdata & !0xFFFu64).wrapping_add(0x1000);
         loop {
             scan = scan.wrapping_sub(0x1000);
-            let dos = (scan as *const image_dos_header).read_unaligned();
+            let dos = (scan as *const ImageDosHeader).read_unaligned();
             if dos.e_magic != IMAGE_DOS_SIGNATURE {
                 continue;
             }
             let nt_addr = scan.wrapping_add((dos.e_lfanew as u32 & 0xFFFF) as u64);
-            let nt = (nt_addr as *const image_nt_headers64).read_unaligned();
+            let nt = (nt_addr as *const ImageNtHeaders64).read_unaligned();
             if nt.signature != IMAGE_NT_SIGNATURE {
                 continue;
             }
@@ -315,14 +317,14 @@ unsafe fn find_ntoskrnl_by_idt() -> *mut c_void {
 
 unsafe fn find_ntoskrnl_base() -> *mut c_void {
     unsafe {
-        if g_ntoskrnl_resolved {
-            return g_ntoskrnl_base;
+        if G_NTOSKRNL_RESOLVED {
+            return G_NTOSKRNL_BASE;
         }
-        if g_ntoskrnl_base.is_null() {
-            g_ntoskrnl_base = find_ntoskrnl_by_idt();
+        if G_NTOSKRNL_BASE.is_null() {
+            G_NTOSKRNL_BASE = find_ntoskrnl_by_idt();
         }
-        g_ntoskrnl_resolved = true;
-        g_ntoskrnl_base
+        G_NTOSKRNL_RESOLVED = true;
+        G_NTOSKRNL_BASE
     }
 }
 
@@ -333,12 +335,12 @@ unsafe fn find_exported_symbol(image_base: *mut c_void, target_hash: u64) -> *mu
         }
         let base = image_base as usize;
 
-        let dos = (base as *const image_dos_header).read_unaligned();
+        let dos = (base as *const ImageDosHeader).read_unaligned();
         if dos.e_magic != IMAGE_DOS_SIGNATURE {
             return null_mut();
         }
         let nt_addr = base.wrapping_add(dos.e_lfanew as usize);
-        let nt = (nt_addr as *const image_nt_headers64).read_unaligned();
+        let nt = (nt_addr as *const ImageNtHeaders64).read_unaligned();
         if nt.signature != IMAGE_NT_SIGNATURE {
             return null_mut();
         }
@@ -349,7 +351,7 @@ unsafe fn find_exported_symbol(image_base: *mut c_void, target_hash: u64) -> *mu
         }
 
         let exp_addr = base.wrapping_add(exp_dir.virtual_address as usize);
-        let exp = (exp_addr as *const image_export_directory).read_unaligned();
+        let exp = (exp_addr as *const ImageExportDirectory).read_unaligned();
 
         let name_rvas = base.wrapping_add(exp.address_of_names as usize) as *const u32;
         let ordinals = base.wrapping_add(exp.address_of_name_ordinals as usize) as *const u16;
@@ -388,10 +390,10 @@ pub extern "system" fn FindKernelProcAddress(export_name: *const i8) -> *mut c_v
     }
 }
 
-pub fn resolve_imports() -> nt_status {
+pub fn resolve_imports() -> NtStatus {
     unsafe {
         if find_ntoskrnl_base().is_null() {
-            return status_not_found;
+            return STATUS_NOT_FOUND;
         }
 
         const FUNC_HASHES: [u64; 22] = [
@@ -447,29 +449,29 @@ pub fn resolve_imports() -> nt_status {
         for i in 0..FUNC_HASHES.len() {
             let address = find_kernel_proc_address(FUNC_HASHES[i]);
             if address.is_null() {
-                return status_not_found;
+                return STATUS_NOT_FOUND;
             }
             *func_slots[i] = address;
         }
 
         let data_address = find_kernel_proc_address(xxh3_64(b"IoDriverObjectType"));
         if data_address.is_null() {
-            return status_not_found;
+            return STATUS_NOT_FOUND;
         }
         _IoDriverObjectType = *(data_address as *const *mut c_void);
 
         let list_address = find_kernel_proc_address(xxh3_64(b"PsLoadedModuleList"));
         if list_address.is_null() {
-            return status_not_found;
+            return STATUS_NOT_FOUND;
         }
         _PsLoadedModuleList = *(list_address as *const *mut c_void);
 
         let build_address = find_kernel_proc_address(xxh3_64(b"NtBuildNumber"));
         if build_address.is_null() {
-            return status_not_found;
+            return STATUS_NOT_FOUND;
         }
         _NtBuildNumber = (*(build_address as *const u32) & 0xFFFF) as u16;
 
-        status_success
+        STATUS_SUCCESS
     }
 }

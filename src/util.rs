@@ -1,3 +1,5 @@
+// Copyright (c) 2026 渟雲. All rights reserved.
+
 pub fn wcslen(s: &[u16]) -> usize {
     let mut n = 0;
     while n < s.len() && s[n] != 0 {
