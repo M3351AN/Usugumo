@@ -49,9 +49,6 @@ static mut G_KEYBOARD_OBJECT: KeyboardObject = KeyboardObject {
     use_keyboard: 0,
 };
 
-const OBJ_CASE_INSENSITIVE: u32 = 0x40;
-const KERNEL_MODE: u8 = 0;
-const DISPATCH_LEVEL: u8 = 2;
 const KEY_MAKE: u16 = 0x0;
 const KEY_BREAK: u16 = 0x1;
 const KEY_E0: u16 = 0x2;
@@ -445,6 +442,7 @@ fn keyboard_open() -> bool {
                             {
                                 G_KEYBOARD_OBJECT.service_callback =
                                     *device_extension.add(i + 1) as *mut c_void;
+                                G_KEYBOARD_OBJECT.keyboard_device = class_device_object;
                                 break;
                             }
                         }

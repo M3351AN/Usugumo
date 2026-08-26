@@ -46,7 +46,6 @@ struct FileFsVolumeInformation {
     volume_label: [u8; 1],
 }
 
-const OBJ_CASE_INSENSITIVE: u32 = 0x40;
 const OBJ_KERNEL_HANDLE: u32 = 0x200;
 const GENERIC_READ: u32 = 0x8000_0000;
 const SYNCHRONIZE: u32 = 0x0010_0000;

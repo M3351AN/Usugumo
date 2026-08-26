@@ -302,8 +302,10 @@ pub fn read_process_memory(
             return STATUS_INVALID_PARAMETER;
         }
 
+        let irql = KzRaiseIrqlMeme(DISPATCH_LEVEL);
         let dst = buffer as *mut u8;
         let mut offset = 0usize;
+        let mut status = STATUS_SUCCESS;
         while offset < size {
             let remaining = size - offset;
             let va = virtual_address + offset as u64;
@@ -314,16 +316,19 @@ pub fn read_process_memory(
 
             let phys = translate_linear_address(dtb, va);
             if phys == 0 {
-                return STATUS_PARTIAL_COPY;
+                status = STATUS_PARTIAL_COPY;
+                break;
             }
 
-            let status = read_physical(phys, dst.add(offset) as *mut c_void, chunk);
-            if status < 0 {
-                return status;
+            let rstatus = read_physical(phys, dst.add(offset) as *mut c_void, chunk);
+            if rstatus < 0 {
+                status = rstatus;
+                break;
             }
             offset += chunk;
         }
-        STATUS_SUCCESS
+        KzLowerIrqlMeme(irql);
+        status
     }
 }
 

@@ -51,9 +51,6 @@ static mut G_MOUSE_OBJECT: MouseObject = MouseObject {
     use_mouse: 0,
 };
 
-const OBJ_CASE_INSENSITIVE: u32 = 0x40;
-const KERNEL_MODE: u8 = 0;
-const DISPATCH_LEVEL: u8 = 2;
 const MOUSE_MOVE_RELATIVE: u16 = 0x0000;
 const MOUSE_MOVE_ABSOLUTE: u16 = 0x0001;
 const MOUSE_VIRTUAL_DESKTOP: u16 = 0x0002;

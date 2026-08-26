@@ -21,7 +21,6 @@ const _: () = assert!(core::mem::offset_of!(Requests, request_addr) == 24);
 const _: () = assert!(core::mem::offset_of!(Requests, target_addr) == 40);
 
 const IO_NO_INCREMENT: i8 = 0;
-const KERNEL_MODE: u32 = 0;
 const MM_CACHED: u32 = 1;
 const NORMAL_PAGE_PRIORITY: u32 = 16;
 
@@ -46,7 +45,7 @@ unsafe fn map_locked(mdl: *mut c_void) -> *mut c_void {
         let f: FnMmMapLockedPages = core::mem::transmute(_MmMapLockedPagesSpecifyCache);
         f(
             mdl,
-            KERNEL_MODE,
+            KERNEL_MODE as u32,
             MM_CACHED,
             null_mut(),
             0,

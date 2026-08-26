@@ -13,6 +13,11 @@ pub const STATUS_PENDING: NtStatus = 0x103;
 pub const STATUS_PARTIAL_COPY: NtStatus = 0xC000_0204u32 as i32;
 
 pub const PASSIVE_LEVEL: u8 = 0;
+pub const DISPATCH_LEVEL: u8 = 2;
+
+pub const KERNEL_MODE: u8 = 0;
+
+pub const OBJ_CASE_INSENSITIVE: u32 = 0x40;
 
 pub const PMEM_PAGE_SIZE: usize = 0x1000;
 pub const PMEM_PMASK: u64 = 0x000F_FFFF_FFFF_F000;

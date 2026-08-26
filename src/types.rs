@@ -31,10 +31,19 @@ pub struct DeviceObject {
     pub device_extension: *mut u64,
     pub _device_type: u32,
     pub _stack_size: u8,
-    pub _queue: [u8; 16],
+    pub _pad1: [u8; 3],
+    pub _queue: [u8; 0x48],
     pub _alignment_requirement: u32,
+    pub _pad2: [u8; 4],
+    pub _device_queue: [u8; 0x28],
+    pub _dpc: [u8; 0x40],
+    pub _active_thread_count: u32,
+    pub _security_descriptor: *mut c_void,
+    pub _device_lock: [u8; 0x18],
+    pub _sector_size: u16,
+    pub _spare1: u16,
     pub device_object_extension: *mut c_void,
-    pub _reserved: u32,
+    pub _reserved: *mut c_void,
 }
 
 #[repr(C)]
