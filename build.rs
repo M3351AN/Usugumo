@@ -56,7 +56,15 @@ fn main() {
 
     let km_lib = wdk_root.join("Lib").join(&wdk_ver).join("km").join("x64");
 
-    let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let mut target_dir = env::var("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("target"));
+    if let Ok(triple) = env::var("CARGO_BUILD_TARGET") {
+        target_dir = target_dir.join(triple);
+    }
+    let profile = env::var("PROFILE").unwrap();
+    let map_path = target_dir.join(profile).join("usugumo.map");
+    std::fs::create_dir_all(map_path.parent().unwrap()).unwrap();
 
     println!("cargo:rustc-link-search=native={}", km_lib.display());
     println!("cargo:rustc-link-lib=ntoskrnl");
@@ -70,8 +78,5 @@ fn main() {
     println!("cargo:rustc-link-arg=/IGNORE:4257");
     println!("cargo:rustc-link-arg=/IGNORE:4216");
     println!("cargo:rustc-link-arg=/INCREMENTAL:NO");
-    println!(
-        "cargo:rustc-link-arg=/MAP:{}",
-        manifest.join("target").join("usugumo.map").display()
-    );
+    println!("cargo:rustc-link-arg=/MAP:{}", map_path.display());
 }

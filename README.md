@@ -33,9 +33,7 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc o
 
 ### Require
 
-- Rust x86_64-pc-windows-msvc toolchain
-- Visual Studio or Visual Studio Build Tools, with Desktop development with C++ workload.
-- Windows Driver Kit
+- Rust x86_64-pc-windows-msvc toolchain (You may have to install Visual Studio Build Tools to complete this toolchain.)
 
 ```shell
 cargo b --release

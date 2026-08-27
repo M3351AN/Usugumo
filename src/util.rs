@@ -68,19 +68,6 @@ pub(crate) unsafe extern "C" fn kmemset(dst: *mut c_void, val: i32, len: usize) 
     dst
 }
 
-pub fn kstrlen(s: *const i8) -> usize {
-    let mut len = 0;
-    while unsafe { *s.add(len) } != 0 {
-        len += 1;
-    }
-    len
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn strlen(s: *const i8) -> usize {
-    kstrlen(s)
-}
-
 pub fn kstricmp(mut a: *const i8, mut b: *const i8) -> i32 {
     unsafe {
         loop {

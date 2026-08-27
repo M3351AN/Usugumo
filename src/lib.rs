@@ -1,6 +1,7 @@
 // Copyright (c) 2026 渟雲. All rights reserved.
 
 #![no_std]
+#![no_builtins]
 #![allow(linker_messages)]
 
 mod anti_capture;
