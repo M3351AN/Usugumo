@@ -263,3 +263,11 @@ pub const fn sha256_const(input: &[u8]) -> [u8; 32] {
     }
     out
 }
+
+#[macro_export]
+macro_rules! hash {
+    ($s:literal) => {{
+        const H: [u8; 32] = $crate::sha256::sha256_const($s);
+        H
+    }};
+}

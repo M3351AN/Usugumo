@@ -4,7 +4,6 @@ use core::ffi::c_void;
 
 use crate::consts::STATUS_UNSUCCESSFUL;
 use crate::imports::resolve_kernel_export;
-use crate::sha256::sha256_const;
 use crate::types::{DeviceObject, DriverObject, NtStatus, UnicodeString};
 
 type FnIoCreateDeviceSecure = unsafe extern "system" fn(
@@ -24,7 +23,7 @@ static mut IO_CREATE_DEVICE_SECURE: Option<FnIoCreateDeviceSecure> = None;
 
 fn wdmlib_init() {
     unsafe {
-        let create_addr = resolve_kernel_export(sha256_const(b"IoCreateDeviceSecure"));
+        let create_addr = resolve_kernel_export(crate::hash!(b"IoCreateDeviceSecure"));
         IO_CREATE_DEVICE_SECURE = if create_addr.is_null() {
             None
         } else {

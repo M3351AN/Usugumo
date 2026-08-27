@@ -449,21 +449,21 @@ pub fn resolve_imports() -> NtStatus {
             *func_slots[i] = address;
         }
 
-        let data_address = find_kernel_proc_address(sha256_const(b"IoDriverObjectType"));
+        let data_address = find_kernel_proc_address(crate::hash!(b"IoDriverObjectType"));
         if data_address.is_null() {
             return STATUS_NOT_FOUND;
         }
         _IO_DRIVER_OBJECT_TYPE =
             crate::helpers::read_u64(data_address as *const u8, 0) as *mut c_void;
 
-        let list_address = find_kernel_proc_address(sha256_const(b"PsLoadedModuleList"));
+        let list_address = find_kernel_proc_address(crate::hash!(b"PsLoadedModuleList"));
         if list_address.is_null() {
             return STATUS_NOT_FOUND;
         }
         _PS_LOADED_MODULE_LIST =
             crate::helpers::read_u64(list_address as *const u8, 0) as *mut c_void;
 
-        let build_address = find_kernel_proc_address(sha256_const(b"NtBuildNumber"));
+        let build_address = find_kernel_proc_address(crate::hash!(b"NtBuildNumber"));
         if build_address.is_null() {
             return STATUS_NOT_FOUND;
         }

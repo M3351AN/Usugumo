@@ -4,7 +4,6 @@ use core::ffi::c_void;
 use core::ptr::null_mut;
 
 use crate::imports::resolve_kernel_export;
-use crate::sha256::sha256_const;
 
 static mut G_PEB_OFFSET: u32 = 0;
 
@@ -13,7 +12,7 @@ fn get_peb_offset() -> u32 {
         if G_PEB_OFFSET != 0 {
             return G_PEB_OFFSET;
         }
-        let func = resolve_kernel_export(sha256_const(b"PsGetProcessPeb"));
+        let func = resolve_kernel_export(crate::hash!(b"PsGetProcessPeb"));
         if func.is_null() {
             return 0;
         }
@@ -51,7 +50,7 @@ fn get_image_file_name_offset() -> u32 {
         if G_IMAGE_FILE_NAME_OFFSET != 0 {
             return G_IMAGE_FILE_NAME_OFFSET;
         }
-        let func = resolve_kernel_export(sha256_const(b"PsGetProcessImageFileName"));
+        let func = resolve_kernel_export(crate::hash!(b"PsGetProcessImageFileName"));
         if func.is_null() {
             return 0;
         }
@@ -91,7 +90,7 @@ fn get_process_id_offset() -> u32 {
         if G_PROCESS_ID_OFFSET != 0 {
             return G_PROCESS_ID_OFFSET;
         }
-        let func = resolve_kernel_export(sha256_const(b"PsGetProcessId"));
+        let func = resolve_kernel_export(crate::hash!(b"PsGetProcessId"));
         if func.is_null() {
             return 0;
         }
@@ -129,7 +128,7 @@ fn get_process_exit_status_offset() -> u32 {
         if G_PROCESS_EXIT_STATUS_OFFSET != 0 {
             return G_PROCESS_EXIT_STATUS_OFFSET;
         }
-        let func = resolve_kernel_export(sha256_const(b"PsGetProcessExitStatus"));
+        let func = resolve_kernel_export(crate::hash!(b"PsGetProcessExitStatus"));
         if func.is_null() {
             return 0;
         }
@@ -165,7 +164,7 @@ fn parse_bases() {
         if G_PFN_BASE != 0 && G_PTE_BASE != 0 {
             return;
         }
-        let func = resolve_kernel_export(sha256_const(b"MmGetVirtualForPhysical"));
+        let func = resolve_kernel_export(crate::hash!(b"MmGetVirtualForPhysical"));
         if func.is_null() {
             return;
         }
