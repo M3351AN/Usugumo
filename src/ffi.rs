@@ -3,12 +3,6 @@
 use core::ffi::c_void;
 
 unsafe extern "system" {
-    pub fn MouseClassServiceCallbackMeme(
-        device: *mut c_void,
-        input_start: *mut c_void,
-        input_end: *mut c_void,
-        consumed: *mut u32,
-    );
     pub fn KeyboardClassServiceCallbackMeme(
         device: *mut c_void,
         input_start: *mut c_void,

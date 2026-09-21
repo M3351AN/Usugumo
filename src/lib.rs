@@ -13,7 +13,6 @@ mod imports;
 mod keybd;
 mod keybdcallback;
 mod mouse;
-mod mousecallback;
 mod pmem;
 mod process;
 mod random;

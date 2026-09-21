@@ -15,8 +15,8 @@ pub type ExFreePoolWithTagFn = unsafe extern "system" fn(*mut c_void, u32);
 pub type IoDeleteDeviceFn = unsafe extern "system" fn(*mut DeviceObject) -> NtStatus;
 
 unsafe extern "C" {
-    static mut _KeAcquireSpinLockAtDpcLevel: *mut c_void;
-    static mut _KeReleaseSpinLockFromDpcLevel: *mut c_void;
+    pub(crate) static mut _KeAcquireSpinLockAtDpcLevel: *mut c_void;
+    pub(crate) static mut _KeReleaseSpinLockFromDpcLevel: *mut c_void;
     pub(crate) static mut _IofCompleteRequest: *mut c_void;
     static mut _IoReleaseRemoveLockEx: *mut c_void;
 }
