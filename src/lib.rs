@@ -7,11 +7,9 @@
 mod anti_capture;
 mod consts;
 mod dispatches;
-mod ffi;
 mod helpers;
 mod imports;
 mod keybd;
-mod keybdcallback;
 mod mouse;
 mod pmem;
 mod process;

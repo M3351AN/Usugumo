@@ -4,9 +4,10 @@ use core::ffi::c_void;
 use core::ptr::null_mut;
 
 use crate::consts::*;
-use crate::ffi::*;
 use crate::imports::{
-    _IO_DRIVER_OBJECT_TYPE, _OB_REFERENCE_OBJECT_BY_NAME, _OBF_DEREFERENCE_OBJECT,
+    _IO_DRIVER_OBJECT_TYPE, _IofCompleteRequest, _KeAcquireSpinLockAtDpcLevel,
+    _KeReleaseSpinLockFromDpcLevel, _MM_MAP_LOCKED_PAGES_SPECIFY_CACHE,
+    _OB_REFERENCE_OBJECT_BY_NAME, _OBF_DEREFERENCE_OBJECT,
 };
 use crate::request_handler::verify_secure_key;
 use crate::types::{DeviceObject, DriverObject, NtStatus, Requests, UnicodeString};
@@ -25,9 +26,9 @@ struct KeyboardInputData {
 #[derive(Clone, Copy)]
 struct KeyboardObject {
     keyboard_device: *mut DeviceObject,
-    service_callback: *mut c_void,
     class_driver_object: *mut DriverObject,
-    hid_driver_object: *mut DriverObject,
+    data_queue_base: usize,
+    data_queue_size: u32,
     use_keyboard: u32,
 }
 
@@ -45,11 +46,35 @@ type FnObfDereferenceObject = unsafe extern "system" fn(*mut c_void) -> isize;
 
 static mut G_KEYBOARD_OBJECT: KeyboardObject = KeyboardObject {
     keyboard_device: null_mut(),
-    service_callback: null_mut(),
     class_driver_object: null_mut(),
-    hid_driver_object: null_mut(),
+    data_queue_base: 0,
+    data_queue_size: 0,
     use_keyboard: 0,
 };
+
+const KEYB_DEVEXT_INPUT_COUNT: usize = 0x54;
+const KEYB_DEVEXT_DATA_QUEUE_BASE: usize = 0x68;
+const KEYB_DEVEXT_WRITE_POINTER: usize = 0x70;
+const KEYB_DEVEXT_QUEUE_SIZE: usize = 0x8c;
+const KEYB_DEVEXT_SPIN_LOCK: usize = 0xa0;
+const KEYB_DEVEXT_PENDING_IRP: usize = 0xa8;
+
+const IRP_MDL_ADDRESS: usize = 0x08;
+const IRP_SYSTEM_BUFFER: usize = 0x18;
+const IRP_IO_STATUS: usize = 0x30;
+const IRP_IO_STATUS_INFORMATION: usize = 0x38;
+const IRP_CANCEL_ROUTINE: usize = 0x68;
+const IRP_CURRENT_STACK_LOCATION: usize = 0xb8;
+const IRP_TAIL_LIST_ENTRY: usize = 0xa8;
+
+const LIST_ENTRY_FLINK: usize = 0x00;
+const LIST_ENTRY_BLINK: usize = 0x08;
+const IO_STACK_READ_LENGTH: usize = 0x08;
+
+const IO_KEYBOARD_INCREMENT: i8 = 6;
+const MM_KERNEL_MODE: u32 = 0;
+const MM_CACHED: u32 = 1;
+const NORMAL_PAGE_PRIORITY: u32 = 16;
 
 const KEY_MAKE: u16 = 0x0;
 const KEY_BREAK: u16 = 0x1;
@@ -352,6 +377,90 @@ fn ob_deref(obj: *mut c_void) {
     }
 }
 
+type FnKeSpinLock = unsafe extern "system" fn(*mut c_void);
+type FnIofCompleteRequest = unsafe extern "system" fn(*mut c_void, i8);
+type FnMmMapLockedPagesSpecifyCache =
+    unsafe extern "system" fn(*mut c_void, u32, u32, *mut c_void, u32, u32) -> *mut c_void;
+
+fn iof_set_cancel_routine(irp: usize) -> *mut c_void {
+    let dst = (irp + IRP_CANCEL_ROUTINE) as *mut usize;
+    let mut old: usize = 0;
+    unsafe {
+        core::arch::asm!(
+            "xchg [{0}], {1}",
+            in(reg) dst,
+            inout(reg) old,
+            options(nostack)
+        );
+    }
+    old as *mut c_void
+}
+
+fn is_list_empty(head: usize) -> bool {
+    crate::helpers::read_u64(head as *const u8, LIST_ENTRY_FLINK) as usize == head
+}
+
+fn list_remove_head(head: usize) -> usize {
+    let first = crate::helpers::read_u64(head as *const u8, LIST_ENTRY_FLINK) as usize;
+    if first == head {
+        return 0;
+    }
+    let next = crate::helpers::read_u64(first as *const u8, LIST_ENTRY_FLINK) as usize;
+    crate::helpers::write_u64(head as *mut u8, LIST_ENTRY_FLINK, next as u64);
+    crate::helpers::write_u64(next as *mut u8, LIST_ENTRY_BLINK, head as u64);
+    first
+}
+
+fn list_insert_head(head: usize, entry: usize) {
+    let flink = crate::helpers::read_u64(head as *const u8, LIST_ENTRY_FLINK) as usize;
+    crate::helpers::write_u64(entry as *mut u8, LIST_ENTRY_FLINK, flink as u64);
+    crate::helpers::write_u64(entry as *mut u8, LIST_ENTRY_BLINK, head as u64);
+    crate::helpers::write_u64(flink as *mut u8, LIST_ENTRY_BLINK, entry as u64);
+    crate::helpers::write_u64(head as *mut u8, LIST_ENTRY_FLINK, entry as u64);
+}
+
+fn map_mdl(mdl: *mut c_void) -> *mut c_void {
+    unsafe {
+        if _MM_MAP_LOCKED_PAGES_SPECIFY_CACHE.is_null() {
+            return null_mut();
+        }
+        let f: FnMmMapLockedPagesSpecifyCache =
+            core::mem::transmute(_MM_MAP_LOCKED_PAGES_SPECIFY_CACHE);
+        f(
+            mdl,
+            MM_KERNEL_MODE,
+            MM_CACHED,
+            null_mut(),
+            0,
+            NORMAL_PAGE_PRIORITY,
+        )
+    }
+}
+
+fn validate_device_extension(device_object: *mut DeviceObject) -> bool {
+    unsafe {
+        let devext = (*device_object).device_extension as *mut u8;
+        if devext.is_null() {
+            return false;
+        }
+        let base = crate::helpers::read_u64(devext, KEYB_DEVEXT_DATA_QUEUE_BASE) as usize;
+        let size = crate::helpers::read_u32(devext, KEYB_DEVEXT_QUEUE_SIZE);
+        let data_in = crate::helpers::read_u64(devext, KEYB_DEVEXT_WRITE_POINTER) as usize;
+        if base == 0
+            || size == 0
+            || size as usize % core::mem::size_of::<KeyboardInputData>() != 0
+            || data_in < base
+            || data_in > base + size as usize
+            || size as usize > 0x100000
+        {
+            return false;
+        }
+        G_KEYBOARD_OBJECT.data_queue_base = base;
+        G_KEYBOARD_OBJECT.data_queue_size = size;
+        true
+    }
+}
+
 fn keyboard_open() -> bool {
     unsafe {
         if G_KEYBOARD_OBJECT.use_keyboard == 0 {
@@ -361,27 +470,9 @@ fn keyboard_open() -> bool {
                 maximum_length: (class_wide.len() * 2) as u16,
                 buffer: class_wide.as_ptr() as *mut u16,
             };
-            let kbdhid_wide = obfstr::obfwide!("\\Driver\\kbdhid");
-            let i8042_wide = obfstr::obfwide!("\\Driver\\i8042prt");
-            let mut keyboard_driver_names = [
-                UnicodeString {
-                    length: (kbdhid_wide.len() * 2) as u16,
-                    maximum_length: (kbdhid_wide.len() * 2) as u16,
-                    buffer: kbdhid_wide.as_ptr() as *mut u16,
-                },
-                UnicodeString {
-                    length: (i8042_wide.len() * 2) as u16,
-                    maximum_length: (i8042_wide.len() * 2) as u16,
-                    buffer: i8042_wide.as_ptr() as *mut u16,
-                },
-            ];
 
             let mut class_driver_object: *mut DriverObject = null_mut();
-            let mut hid_driver_object: *mut DriverObject = null_mut();
-            let mut hid_device_object: *mut DeviceObject;
-            let mut class_device_object: *mut DeviceObject;
-
-            let mut status = ob_reference_object_by_name(
+            let status = ob_reference_object_by_name(
                 &mut class_string,
                 OBJ_CASE_INSENSITIVE,
                 _IO_DRIVER_OBJECT_TYPE,
@@ -392,95 +483,24 @@ fn keyboard_open() -> bool {
                 G_KEYBOARD_OBJECT.use_keyboard = 0;
                 return false;
             }
-
-            let mut driver_idx = 0usize;
-            while driver_idx < keyboard_driver_names.len() {
-                status = ob_reference_object_by_name(
-                    &mut keyboard_driver_names[driver_idx],
-                    OBJ_CASE_INSENSITIVE,
-                    _IO_DRIVER_OBJECT_TYPE,
-                    KERNEL_MODE,
-                    (&mut hid_driver_object as *mut *mut DriverObject) as *mut *mut c_void,
-                );
-                if status >= 0 {
-                    break;
-                }
-                driver_idx += 1;
-            }
-
-            if status < 0 || hid_driver_object.is_null() {
-                ob_deref(class_driver_object as *mut c_void);
-                G_KEYBOARD_OBJECT.use_keyboard = 0;
-                return false;
-            }
-
-            let mut port_device_object = (*hid_driver_object).device_object;
-            G_KEYBOARD_OBJECT.service_callback = null_mut();
+            G_KEYBOARD_OBJECT.class_driver_object = class_driver_object;
             G_KEYBOARD_OBJECT.keyboard_device = null_mut();
 
-            while !port_device_object.is_null() && G_KEYBOARD_OBJECT.service_callback.is_null() {
-                hid_device_object = port_device_object;
-                while !hid_device_object.is_null() && G_KEYBOARD_OBJECT.service_callback.is_null() {
-                    class_device_object = (*class_driver_object).device_object;
-                    while !class_device_object.is_null()
-                        && G_KEYBOARD_OBJECT.service_callback.is_null()
-                    {
-                        if G_KEYBOARD_OBJECT.keyboard_device.is_null()
-                            && (*class_device_object).next_device.is_null()
-                        {
-                            G_KEYBOARD_OBJECT.keyboard_device = class_device_object;
-                        }
-
-                        let device_extension = (*hid_device_object).device_extension;
-                        let device_ext_size = ((*hid_device_object).device_object_extension
-                            as usize
-                            - device_extension as usize)
-                            / 4;
-
-                        for i in 0..device_ext_size {
-                            let ext = device_extension as *const u8;
-                            if crate::helpers::read_u64(ext, i * 8) as usize
-                                == class_device_object as usize
-                                && crate::helpers::read_u64(ext, (i + 1) * 8) as usize
-                                    > class_driver_object as usize
-                            {
-                                G_KEYBOARD_OBJECT.service_callback =
-                                    crate::helpers::read_u64(ext, (i + 1) * 8) as *mut c_void;
-                                G_KEYBOARD_OBJECT.keyboard_device = class_device_object;
-                                break;
-                            }
-                        }
-                        class_device_object = (*class_device_object).next_device;
-                    }
-                    hid_device_object = (*hid_device_object).attached_device;
+            let mut found = false;
+            let mut device_object = (*class_driver_object).device_object;
+            while !device_object.is_null() {
+                if validate_device_extension(device_object) {
+                    G_KEYBOARD_OBJECT.keyboard_device = device_object;
+                    found = true;
+                    break;
                 }
-                port_device_object = (*port_device_object).next_device;
+                device_object = (*device_object).next_device;
             }
 
-            if G_KEYBOARD_OBJECT.keyboard_device.is_null() {
-                let mut target_device_object = (*class_driver_object).device_object;
-                while !target_device_object.is_null() {
-                    if (*target_device_object).next_device.is_null() {
-                        G_KEYBOARD_OBJECT.keyboard_device = target_device_object;
-                        break;
-                    }
-                    target_device_object = (*target_device_object).next_device;
-                }
-            }
-
-            G_KEYBOARD_OBJECT.class_driver_object = class_driver_object;
-            G_KEYBOARD_OBJECT.hid_driver_object = hid_driver_object;
-            G_KEYBOARD_OBJECT.use_keyboard = if !G_KEYBOARD_OBJECT.keyboard_device.is_null()
-                && !G_KEYBOARD_OBJECT.service_callback.is_null()
-            {
-                1
-            } else {
-                0
-            };
+            G_KEYBOARD_OBJECT.use_keyboard = if found { 1 } else { 0 };
         }
 
-        !G_KEYBOARD_OBJECT.keyboard_device.is_null()
-            && !G_KEYBOARD_OBJECT.service_callback.is_null()
+        G_KEYBOARD_OBJECT.use_keyboard != 0 && !G_KEYBOARD_OBJECT.keyboard_device.is_null()
     }
 }
 
@@ -490,13 +510,10 @@ pub fn keyboard_release() {
             ob_deref(G_KEYBOARD_OBJECT.class_driver_object as *mut c_void);
             G_KEYBOARD_OBJECT.class_driver_object = null_mut();
         }
-        if !G_KEYBOARD_OBJECT.hid_driver_object.is_null() {
-            ob_deref(G_KEYBOARD_OBJECT.hid_driver_object as *mut c_void);
-            G_KEYBOARD_OBJECT.hid_driver_object = null_mut();
-        }
         G_KEYBOARD_OBJECT.use_keyboard = 0;
         G_KEYBOARD_OBJECT.keyboard_device = null_mut();
-        G_KEYBOARD_OBJECT.service_callback = null_mut();
+        G_KEYBOARD_OBJECT.data_queue_base = 0;
+        G_KEYBOARD_OBJECT.data_queue_size = 0;
     }
 }
 
@@ -505,23 +522,99 @@ fn keyboard_call(make_code: u16, flags: u16, extra_info: u32) {
         if !keyboard_open() {
             return;
         }
-        let mut kbd = KeyboardInputData {
+        let devext = (*G_KEYBOARD_OBJECT.keyboard_device).device_extension as *mut u8;
+
+        let packet = KeyboardInputData {
             unit_id: 0,
             make_code,
             flags,
             reserved: 0,
             extra_information: extra_info,
         };
+
+        let acquire: FnKeSpinLock = core::mem::transmute(_KeAcquireSpinLockAtDpcLevel);
+        let release: FnKeSpinLock = core::mem::transmute(_KeReleaseSpinLockFromDpcLevel);
+
         let irql = crate::reimpl_ke::kz_raise_irql(DISPATCH_LEVEL);
-        let mut input_data = 0u32;
-        let end = (core::ptr::addr_of!(kbd) as *mut KeyboardInputData).add(1);
-        KeyboardClassServiceCallbackMeme(
-            G_KEYBOARD_OBJECT.keyboard_device as *mut c_void,
-            core::ptr::addr_of_mut!(kbd) as *mut c_void,
-            end as *mut c_void,
-            &mut input_data,
-        );
+
+        let spin_lock = devext.add(KEYB_DEVEXT_SPIN_LOCK) as *mut c_void;
+        acquire(spin_lock);
+
+        let pending_queue = devext.add(KEYB_DEVEXT_PENDING_IRP) as usize;
+        let mut pending_irp: usize = 0;
+        let mut bytes_to_copy: usize = 0;
+
+        if !is_list_empty(pending_queue) {
+            let entry = list_remove_head(pending_queue);
+            let irp = entry - IRP_TAIL_LIST_ENTRY;
+            let old_cancel = iof_set_cancel_routine(irp);
+            if old_cancel.is_null() {
+                list_insert_head(pending_queue, entry);
+                pending_irp = 0;
+            } else {
+                pending_irp = irp;
+                let irp_stack =
+                    crate::helpers::read_u64(irp as *const u8, IRP_CURRENT_STACK_LOCATION) as usize;
+                let buffer_size =
+                    crate::helpers::read_u32(irp_stack as *const u8, IO_STACK_READ_LENGTH) as usize;
+                let copied = core::cmp::min(buffer_size, core::mem::size_of::<KeyboardInputData>());
+                let mdl = crate::helpers::read_u64(irp as *const u8, IRP_MDL_ADDRESS) as usize;
+                let mut irp_buffer: usize = 0;
+                if mdl != 0 {
+                    irp_buffer = map_mdl(mdl as *mut c_void) as usize;
+                }
+                if irp_buffer == 0 {
+                    irp_buffer =
+                        crate::helpers::read_u64(irp as *const u8, IRP_SYSTEM_BUFFER) as usize;
+                }
+                if irp_buffer != 0 && copied >= core::mem::size_of::<KeyboardInputData>() {
+                    *(irp_buffer as *mut KeyboardInputData) = packet;
+                    bytes_to_copy = copied;
+                } else {
+                    bytes_to_copy = 0;
+                }
+            }
+        }
+
+        if pending_irp == 0 {
+            let base = G_KEYBOARD_OBJECT.data_queue_base;
+            let size = G_KEYBOARD_OBJECT.data_queue_size as usize;
+            let write_ptr = crate::helpers::read_u64(devext, KEYB_DEVEXT_WRITE_POINTER) as usize;
+            let input_count_addr = devext.add(KEYB_DEVEXT_INPUT_COUNT) as usize;
+            if base != 0 && write_ptr != 0 && size != 0 {
+                let current = crate::helpers::read_u32(input_count_addr as *const u8, 0) as usize;
+                let max_entries = size / core::mem::size_of::<KeyboardInputData>();
+                if current < max_entries - 1 {
+                    *(write_ptr as *mut KeyboardInputData) = packet;
+                    let mut new_write_ptr = write_ptr + core::mem::size_of::<KeyboardInputData>();
+                    let buffer_end = base + size;
+                    if new_write_ptr >= buffer_end {
+                        new_write_ptr = base;
+                    }
+                    crate::helpers::write_u64(
+                        devext,
+                        KEYB_DEVEXT_WRITE_POINTER,
+                        new_write_ptr as u64,
+                    );
+                    (input_count_addr as *mut u32)
+                        .write_unaligned((current as u32).wrapping_add(1));
+                }
+            }
+        }
+
+        release(spin_lock);
         crate::reimpl_ke::kz_lower_irql(irql);
+
+        if pending_irp != 0 {
+            ((pending_irp + IRP_IO_STATUS) as *mut u32).write_unaligned(STATUS_SUCCESS as u32);
+            crate::helpers::write_u64(
+                pending_irp as *mut u8,
+                IRP_IO_STATUS_INFORMATION,
+                bytes_to_copy as u64,
+            );
+            let complete: FnIofCompleteRequest = core::mem::transmute(_IofCompleteRequest);
+            complete(pending_irp as *mut c_void, IO_KEYBOARD_INCREMENT);
+        }
     }
 }
 
