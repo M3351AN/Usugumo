@@ -3,7 +3,6 @@
 use core::ffi::c_void;
 use core::ptr::null_mut;
 
-use crate::imports::_PS_LOADED_MODULE_LIST;
 use crate::request_handler::verify_secure_key;
 use crate::types::Requests;
 
@@ -11,53 +10,24 @@ type GreProtectSpriteContentFn = unsafe extern "system" fn(*mut c_void, usize, i
 
 static mut GRE_PROTECT_SPRITE_CONTENT: Option<GreProtectSpriteContentFn> = None;
 
-fn get_win32k_base() -> *mut c_void {
-    unsafe {
-        if _PS_LOADED_MODULE_LIST.is_null() {
-            return null_mut();
-        }
-        let target = obfstr::obfwide!("win32kfull.sys");
-        let head = _PS_LOADED_MODULE_LIST as usize;
-        let mut entry = crate::helpers::read_u64(_PS_LOADED_MODULE_LIST as *const u8, 0) as usize;
-        while entry != head {
-            let module = entry as *mut u8;
-            let base_dll_name_buffer = crate::helpers::read_u64(module, 0x60) as usize;
-            let dll_base = crate::helpers::read_u64(module, 0x30) as usize;
-            if base_dll_name_buffer != 0
-                && crate::util::kwcsicmp(base_dll_name_buffer as *const u16, target.as_ptr()) == 0
-            {
-                return dll_base as *mut c_void;
-            }
-            entry = crate::helpers::read_u64(module, 0) as usize;
-        }
-        null_mut()
-    }
-}
-
 pub fn init_gre_protect_sprite_content() -> u8 {
     unsafe {
         if core::ptr::addr_of!(GRE_PROTECT_SPRITE_CONTENT)
             .read()
             .is_none()
         {
-            let module_base = get_win32k_base();
+            let module_base =
+                crate::helpers::get_module_base(obfstr::obfwide!("win32kfull.sys").as_ptr());
             if module_base.is_null() {
                 return 0;
             }
 
-            let pattern: [u8; 11] = [
-                0xE8, 0xCC, 0xCC, 0xCC, 0xCC, 0x8B, 0xCC, 0x85, 0xC0, 0x75, 0x0E,
-            ];
-            let mask: [i8; 11] = [
-                b'x' as i8, b'?' as i8, b'?' as i8, b'?' as i8, b'?' as i8, b'x' as i8, b'?' as i8,
-                b'x' as i8, b'x' as i8, b'x' as i8, b'x' as i8,
-            ];
+            let image_end = crate::helpers::get_image_end(module_base);
 
-            let found = crate::helpers::search_sign_for_image(
-                module_base,
-                pattern.as_ptr(),
-                mask.as_ptr(),
-                pattern.len() as u32,
+            let found = crate::helpers::pattern_scan(
+                module_base as *const u8,
+                image_end as *const u8,
+                obfstr::obfbytes!(b"E8 ? ? ? ? 8B ? 85 C0 75 0E"),
             );
             if found.is_null() {
                 return 0;

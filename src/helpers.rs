@@ -5,7 +5,8 @@ use core::ptr::null_mut;
 
 use crate::consts::*;
 use crate::imports::{
-    _EX_ALLOCATE_POOL2, _ZW_CLOSE, _ZW_CREATE_FILE, _ZW_QUERY_VOLUME_INFORMATION_FILE,
+    _EX_ALLOCATE_POOL2, _PS_LOADED_MODULE_LIST, _ZW_CLOSE, _ZW_CREATE_FILE,
+    _ZW_QUERY_VOLUME_INFORMATION_FILE,
 };
 use crate::sha256::sha256;
 use crate::types::{FixedStr64, IoStatusBlock, NtStatus, Requests, UnicodeString};
@@ -56,9 +57,6 @@ const FILE_SHARE_WRITE: u32 = 2;
 const FILE_OPEN: u32 = 1;
 const FILE_SYNCHRONOUS_IO_NONALERT: u32 = 0x20;
 const FILE_FS_VOLUME_INFORMATION: u32 = 1;
-const IMAGE_SCN_CNT_CODE: u32 = 0x20;
-const IMAGE_SECTION_HEADER_SIZE: usize = 40;
-
 pub fn decode_fixed_str64(fs: *const FixedStr64, output: *mut i8, orig_len: u64) {
     unsafe {
         let mut idx = 0usize;
@@ -102,54 +100,115 @@ pub fn convert_to_pwstr(ascii_str: *const i8) -> *mut u16 {
     }
 }
 
-pub fn search_sign_for_image(
-    image_base: *mut c_void,
-    pattern: *const u8,
-    mask: *const i8,
-    pattern_size: u32,
-) -> *mut c_void {
+fn hex_val(c: u8) -> i32 {
+    match c {
+        b'0'..=b'9' => (c - b'0') as i32,
+        b'a'..=b'f' => (c - b'a' + 10) as i32,
+        b'A'..=b'F' => (c - b'A' + 10) as i32,
+        _ => -1,
+    }
+}
+
+fn is_pattern_space(c: u8) -> bool {
+    c == b' ' || c == b'\t' || c == b'\r' || c == b'\n'
+}
+
+pub fn pattern_scan(start: *const u8, end: *const u8, pattern: &[u8]) -> *mut c_void {
+    if start.is_null() || end.is_null() || start as usize >= end as usize {
+        return null_mut();
+    }
+    let mut bytes = [0u8; 64];
+    let mut mask = [0u8; 64];
+    let mut n = 0usize;
+    let mut i = 0usize;
+    let plen = pattern.len();
+    while i < plen {
+        while i < plen && is_pattern_space(pattern[i]) {
+            i += 1;
+        }
+        if i >= plen {
+            break;
+        }
+        if pattern[i] == b'?' {
+            if i + 1 < plen && pattern[i + 1] == b'?' {
+                i += 2;
+            } else {
+                i += 1;
+            }
+            mask[n] = 0;
+            bytes[n] = 0;
+            n += 1;
+            continue;
+        }
+        if i + 1 >= plen {
+            return null_mut();
+        }
+        let hi = hex_val(pattern[i]);
+        let lo = hex_val(pattern[i + 1]);
+        if hi < 0 || lo < 0 {
+            return null_mut();
+        }
+        bytes[n] = ((hi as u8) << 4) | (lo as u8);
+        mask[n] = 0xFF;
+        n += 1;
+        i += 2;
+    }
+    if n == 0 || n > bytes.len() {
+        return null_mut();
+    }
+
+    let size = end as usize - start as usize;
+    if size < n {
+        return null_mut();
+    }
+    let limit = size - n;
+    let mut o = 0usize;
+    while o <= limit {
+        let mut ok = true;
+        for k in 0..n {
+            if mask[k] != 0 && read_u8(start, o + k) != bytes[k] {
+                ok = false;
+                break;
+            }
+        }
+        if ok {
+            return (start as usize + o) as *mut c_void;
+        }
+        o += 1;
+    }
+    null_mut()
+}
+
+pub fn get_module_base(module_name: *const u16) -> *mut c_void {
+    unsafe {
+        if _PS_LOADED_MODULE_LIST.is_null() || module_name.is_null() {
+            return null_mut();
+        }
+        let head = _PS_LOADED_MODULE_LIST as usize;
+        let mut entry = read_u64(_PS_LOADED_MODULE_LIST as *const u8, 0) as usize;
+        while entry != head {
+            let module = entry as *mut u8;
+            let base_dll_name_buffer = read_u64(module, 0x60) as usize;
+            let dll_base = read_u64(module, 0x30) as usize;
+            if base_dll_name_buffer != 0
+                && crate::util::kwcsicmp(base_dll_name_buffer as *const u16, module_name) == 0
+            {
+                return dll_base as *mut c_void;
+            }
+            entry = read_u64(module, 0) as usize;
+        }
+        null_mut()
+    }
+}
+
+pub fn get_image_end(image_base: *mut c_void) -> *mut c_void {
     unsafe {
         let nt = crate::reimpl_rtl::rtl_image_nt_header(image_base) as *const u8;
         if nt.is_null() {
             return null_mut();
         }
-
-        let num_sections = read_u16(nt, 6) as usize;
-        let size_of_optional_header = read_u16(nt, 20) as usize;
-        let mut section = nt.add(24 + size_of_optional_header);
-
-        for _ in 0..num_sections {
-            let name = section as *const i8;
-            let virtual_size = read_u32(section, 8);
-            let virtual_address = read_u32(section, 12);
-            let characteristics = read_u32(section, 36);
-
-            if crate::util::kstricmp(name, obfstr::obfbytes!(b".text\0").as_ptr() as *const i8) == 0
-                || (characteristics & IMAGE_SCN_CNT_CODE) != 0
-            {
-                let start = (image_base as *const u8).add(virtual_address as usize);
-                let size = virtual_size as usize;
-                if (pattern_size as usize) <= size {
-                    for j in 0..=(size - pattern_size as usize) {
-                        let mut found = true;
-                        for k in 0..pattern_size as usize {
-                            if read_u8(mask as *const u8, k) == b'x'
-                                && read_u8(start, j + k) != *pattern.add(k)
-                            {
-                                found = false;
-                                break;
-                            }
-                        }
-                        if found {
-                            return start.add(j) as *mut c_void;
-                        }
-                    }
-                }
-            }
-            section = section.add(IMAGE_SECTION_HEADER_SIZE);
-        }
-
-        null_mut()
+        let size_of_image = read_u32(nt, 0x18 + 0x38) as usize;
+        (image_base as *const u8).add(size_of_image) as *mut c_void
     }
 }
 
