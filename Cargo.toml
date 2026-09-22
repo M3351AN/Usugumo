@@ -21,4 +21,5 @@ incremental = false
 debug = false
 
 [dependencies]
+iced-x86 = { version = "1.21", default-features = false, features = ["decoder", "no_std"] }
 obfstr = "0.4.6"

@@ -4,6 +4,43 @@
 #![no_builtins]
 #![allow(linker_messages)]
 
+extern crate alloc;
+
+use core::alloc::{GlobalAlloc, Layout};
+
+struct KernelPoolAllocator;
+
+unsafe impl GlobalAlloc for KernelPoolAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        unsafe {
+            if layout.size() == 0 {
+                return core::ptr::NonNull::<u8>::dangling().as_ptr();
+            }
+            if _EX_ALLOCATE_POOL2.is_null() {
+                return core::ptr::null_mut();
+            }
+            let f: ExAllocatePool2Fn = core::mem::transmute(_EX_ALLOCATE_POOL2);
+            f(
+                POOL_FLAG_NON_PAGED | POOL_FLAG_UNINITIALIZED,
+                layout.size(),
+                1953657665,
+            ) as *mut u8
+        }
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+        unsafe {
+            if ptr.is_null() || _EX_FREE_POOL_WITH_TAG.is_null() {
+                return;
+            }
+            let f: ExFreePoolWithTagFn = core::mem::transmute(_EX_FREE_POOL_WITH_TAG);
+            f(ptr as *mut c_void, 1953657665);
+        }
+    }
+}
+
+#[global_allocator]
+static GLOBAL_POOL_ALLOCATOR: KernelPoolAllocator = KernelPoolAllocator;
+
 mod anti_capture;
 mod consts;
 mod dispatches;
@@ -201,8 +238,6 @@ unsafe extern "system" fn driver_init(
             driver_unload(driver);
             return status;
         }
-
-        let _ = anti_capture::init_gre_protect_sprite_content();
 
         (*device_object).flags |= DO_DIRECT_IO;
         (*device_object).flags &= !DO_BUFFERED_IO;

@@ -36,6 +36,8 @@ pub static mut _EX_FREE_POOL_WITH_TAG: *mut c_void = null_mut();
 pub static mut _ZW_CLOSE: *mut c_void = null_mut();
 pub static mut _ZW_CREATE_FILE: *mut c_void = null_mut();
 pub static mut _ZW_QUERY_VOLUME_INFORMATION_FILE: *mut c_void = null_mut();
+pub static mut _KE_STACK_ATTACH_PROCESS: *mut c_void = null_mut();
+pub static mut _KE_UNSTACK_DETACH_PROCESS: *mut c_void = null_mut();
 pub static mut _IO_DRIVER_OBJECT_TYPE: *mut c_void = null_mut();
 pub static mut _PS_LOADED_MODULE_LIST: *mut c_void = null_mut();
 pub static mut _NT_BUILD_NUMBER: u16 = 0;
@@ -395,7 +397,7 @@ pub fn resolve_imports() -> NtStatus {
             return STATUS_NOT_FOUND;
         }
 
-        const FUNC_HASHES: [[u8; 32]; 20] = [
+        const FUNC_HASHES: [[u8; 32]; 22] = [
             sha256_const(b"KeAcquireSpinLockAtDpcLevel"),
             sha256_const(b"KeReleaseSpinLockFromDpcLevel"),
             sha256_const(b"IofCompleteRequest"),
@@ -416,9 +418,11 @@ pub fn resolve_imports() -> NtStatus {
             sha256_const(b"ZwClose"),
             sha256_const(b"ZwCreateFile"),
             sha256_const(b"ZwQueryVolumeInformationFile"),
+            sha256_const(b"KeStackAttachProcess"),
+            sha256_const(b"KeUnstackDetachProcess"),
         ];
 
-        let func_slots: [*mut *mut c_void; 20] = [
+        let func_slots: [*mut *mut c_void; 22] = [
             addr_of_mut!(_KeAcquireSpinLockAtDpcLevel) as *mut *mut c_void,
             addr_of_mut!(_KeReleaseSpinLockFromDpcLevel) as *mut *mut c_void,
             addr_of_mut!(_IofCompleteRequest) as *mut *mut c_void,
@@ -439,6 +443,8 @@ pub fn resolve_imports() -> NtStatus {
             addr_of_mut!(_ZW_CLOSE) as *mut *mut c_void,
             addr_of_mut!(_ZW_CREATE_FILE) as *mut *mut c_void,
             addr_of_mut!(_ZW_QUERY_VOLUME_INFORMATION_FILE) as *mut *mut c_void,
+            addr_of_mut!(_KE_STACK_ATTACH_PROCESS) as *mut *mut c_void,
+            addr_of_mut!(_KE_UNSTACK_DETACH_PROCESS) as *mut *mut c_void,
         ];
 
         for i in 0..FUNC_HASHES.len() {

@@ -201,14 +201,35 @@ pub fn get_module_base(module_name: *const u16) -> *mut c_void {
     }
 }
 
-pub fn get_image_end(image_base: *mut c_void) -> *mut c_void {
+pub fn pattern_scan_image(image_base: *mut c_void, pattern: &[u8]) -> *mut c_void {
     unsafe {
         let nt = crate::reimpl_rtl::rtl_image_nt_header(image_base) as *const u8;
         if nt.is_null() {
             return null_mut();
         }
-        let size_of_image = read_u32(nt, 0x18 + 0x38) as usize;
-        (image_base as *const u8).add(size_of_image) as *mut c_void
+        let num_sections = read_u16(nt, 6) as usize;
+        let size_of_optional_header = read_u16(nt, 20) as usize;
+        let mut section = nt.add(24 + size_of_optional_header);
+        for _ in 0..num_sections {
+            let name = section as *const i8;
+            let virtual_size = read_u32(section, 8) as usize;
+            let virtual_address = read_u32(section, 12) as usize;
+            let characteristics = read_u32(section, 36);
+            if crate::util::kstricmp(name, obfstr::obfbytes!(b".text\0").as_ptr() as *const i8) == 0
+                || (characteristics & 0x20) != 0
+            {
+                let found = pattern_scan(
+                    (image_base as *const u8).add(virtual_address),
+                    (image_base as *const u8).add(virtual_address + virtual_size),
+                    pattern,
+                );
+                if !found.is_null() {
+                    return found;
+                }
+            }
+            section = section.add(40);
+        }
+        null_mut()
     }
 }
 
