@@ -269,6 +269,7 @@ class UsugumoDriver {
   void AntiCapture(HWND window_handle, bool status = true) noexcept {
     Requests request = {};
     request.request_key = USUGUMO_ANTI_CAPTURE;
+    request.request_pid = current_process_id_;
     request.window_handle = window_handle;
     request.protect_flags = status ? 0xFFFFFFFFu : 0x00000000u;
 

@@ -1,0 +1,447 @@
+// Copyright (c) 2026 渟雲. All rights reserved.
+
+use core::ffi::c_void;
+use core::ptr::null_mut;
+
+use crate::consts::*;
+use crate::imports::{
+    _EX_FREE_POOL_WITH_TAG, _NT_BUILD_NUMBER, _OBF_DEREFERENCE_OBJECT, _OBF_REFERENCE_OBJECT,
+    _PS_LOOKUP_PROCESS_BY_PROCESS_ID,
+};
+use crate::pmem::{copy_virtual_memory, read_process_memory};
+use crate::reimpl::{
+    ps_get_process_exit_status_trick, ps_get_process_id_trick,
+    ps_get_process_image_file_name_trick, ps_get_process_peb_trick,
+};
+use crate::util::{kmemset, kstricmp, kwcsicmp, kwcslen};
+
+use crate::request_handler::verify_secure_key;
+use crate::types::{NtStatus, Requests, UnicodeString};
+
+type FnPsLookupProcessByProcessId = unsafe extern "system" fn(usize, *mut *mut c_void) -> NtStatus;
+type FnObfDereferenceObject = unsafe extern "system" fn(*mut c_void) -> isize;
+type FnObfReferenceObject = unsafe extern "system" fn(*mut c_void) -> isize;
+type FnExFreePoolWithTag = unsafe extern "system" fn(*mut c_void, u32);
+
+const OFF_PEB_LDR: u64 = 0x18;
+const OFF_LDR_INLOAD_ORDER: u64 = 0x10;
+const OFF_ENTRY_INLOAD_LINKS: u64 = 0x00;
+const OFF_ENTRY_DLLBASE: u64 = 0x30;
+const OFF_ENTRY_SIZEIMAGE: u64 = 0x40;
+const OFF_ENTRY_BASENAME: u64 = 0x58;
+
+const _: () = assert!(OFF_PEB_LDR == 0x18);
+const _: () = assert!(OFF_LDR_INLOAD_ORDER == 0x10);
+const _: () = assert!(OFF_ENTRY_INLOAD_LINKS == 0x00);
+const _: () = assert!(OFF_ENTRY_DLLBASE == 0x30);
+const _: () = assert!(OFF_ENTRY_SIZEIMAGE == 0x40);
+const _: () = assert!(OFF_ENTRY_BASENAME == 0x58);
+
+fn lookup_process(pid: u64, out: *mut *mut c_void) -> NtStatus {
+    unsafe {
+        if _PS_LOOKUP_PROCESS_BY_PROCESS_ID.is_null() {
+            return STATUS_UNSUCCESSFUL;
+        }
+        let f: FnPsLookupProcessByProcessId =
+            core::mem::transmute(_PS_LOOKUP_PROCESS_BY_PROCESS_ID);
+        f(pid as usize, out)
+    }
+}
+
+fn deref_process(obj: *mut c_void) {
+    unsafe {
+        if !_OBF_DEREFERENCE_OBJECT.is_null() {
+            let f: FnObfDereferenceObject = core::mem::transmute(_OBF_DEREFERENCE_OBJECT);
+            f(obj);
+        }
+    }
+}
+
+fn ref_process(obj: *mut c_void) {
+    unsafe {
+        if !_OBF_REFERENCE_OBJECT.is_null() {
+            let f: FnObfReferenceObject = core::mem::transmute(_OBF_REFERENCE_OBJECT);
+            f(obj);
+        }
+    }
+}
+
+fn free_converted_pwstr(ppw_str: *mut *mut u16) {
+    unsafe {
+        if ppw_str.is_null() || (*ppw_str).is_null() {
+            return;
+        }
+        let cch = kwcslen(*ppw_str) + 1;
+        let byte_size = cch * core::mem::size_of::<u16>();
+        core::ptr::write_bytes(*ppw_str as *mut u8, 0, byte_size);
+        if !_EX_FREE_POOL_WITH_TAG.is_null() {
+            let f: FnExFreePoolWithTag = core::mem::transmute(_EX_FREE_POOL_WITH_TAG);
+            f(*ppw_str as *mut c_void, 0x7265_6355);
+        }
+        *ppw_str = null_mut();
+    }
+}
+
+pub fn read_vm(in_req: *mut Requests) -> u8 {
+    unsafe {
+        if crate::reimpl_ke::ke_get_current_irql() > PASSIVE_LEVEL {
+            return 0;
+        }
+        if (*in_req).request_pid == 0 || (*in_req).target_pid == 0 {
+            return 0;
+        }
+
+        let mut to_process: *mut c_void = null_mut();
+        let mut from_process: *mut c_void = null_mut();
+
+        if lookup_process((*in_req).request_pid, &mut to_process) < 0 {
+            return 0;
+        }
+        if lookup_process((*in_req).target_pid, &mut from_process) < 0 {
+            deref_process(to_process);
+            return 0;
+        }
+
+        if ps_get_process_exit_status_trick(from_process) != STATUS_PENDING {
+            deref_process(from_process);
+            deref_process(to_process);
+            return 0;
+        }
+
+        let status = copy_virtual_memory(
+            from_process,
+            (*in_req).target_addr,
+            to_process,
+            (*in_req).request_addr,
+            (*in_req).mem_size as usize,
+        );
+
+        deref_process(from_process);
+        deref_process(to_process);
+        (status >= 0) as u8
+    }
+}
+
+pub fn write_vm(in_req: *mut Requests) -> u8 {
+    unsafe {
+        if crate::reimpl_ke::ke_get_current_irql() > PASSIVE_LEVEL {
+            return 0;
+        }
+        if (*in_req).request_pid == 0 || (*in_req).target_pid == 0 {
+            return 0;
+        }
+
+        let mut from_process: *mut c_void = null_mut();
+        let mut to_process: *mut c_void = null_mut();
+
+        if lookup_process((*in_req).request_pid, &mut from_process) < 0 {
+            return 0;
+        }
+        if lookup_process((*in_req).target_pid, &mut to_process) < 0 {
+            deref_process(from_process);
+            return 0;
+        }
+
+        if ps_get_process_exit_status_trick(to_process) != STATUS_PENDING {
+            deref_process(from_process);
+            deref_process(to_process);
+            return 0;
+        }
+
+        let status = copy_virtual_memory(
+            from_process,
+            (*in_req).request_addr,
+            to_process,
+            (*in_req).target_addr,
+            (*in_req).mem_size as usize,
+        );
+
+        deref_process(from_process);
+        deref_process(to_process);
+        (status >= 0) as u8
+    }
+}
+
+fn get_module_base(proc: *mut c_void, module_name: UnicodeString, get_size: bool) -> u64 {
+    if proc.is_null() {
+        return 0;
+    }
+    if crate::reimpl_ke::ke_get_current_irql() > PASSIVE_LEVEL {
+        return 0;
+    }
+    if module_name.buffer.is_null() || module_name.length == 0 {
+        return 0;
+    }
+
+    let peb_va = ps_get_process_peb_trick(proc) as u64;
+    if peb_va == 0 {
+        return 0;
+    }
+
+    let mut result = 0u64;
+    let mut ldr_va = 0u64;
+    if read_process_memory(
+        proc,
+        peb_va + OFF_PEB_LDR,
+        (&mut ldr_va) as *mut u64 as *mut c_void,
+        8,
+    ) < 0
+    {
+        return 0;
+    }
+    if ldr_va == 0 {
+        return 0;
+    }
+
+    let head = ldr_va + OFF_LDR_INLOAD_ORDER;
+    let mut flink = 0u64;
+    if read_process_memory(proc, head, (&mut flink) as *mut u64 as *mut c_void, 8) < 0 {
+        return 0;
+    }
+
+    for _ in 0..0x1000 {
+        if flink == 0 || flink == head {
+            break;
+        }
+        if flink < 0x10000 || (flink & 0x7) != 0 {
+            break;
+        }
+
+        let entry_va = flink - OFF_ENTRY_INLOAD_LINKS;
+        let mut raw = [0u8; 0x68];
+        if read_process_memory(proc, entry_va, raw.as_mut_ptr() as *mut c_void, raw.len()) < 0 {
+            break;
+        }
+
+        let dll_base = u64::from_le_bytes(
+            raw[OFF_ENTRY_DLLBASE as usize..OFF_ENTRY_DLLBASE as usize + 8]
+                .try_into()
+                .unwrap(),
+        );
+        let size_of_image = u64::from_le_bytes(
+            raw[OFF_ENTRY_SIZEIMAGE as usize..OFF_ENTRY_SIZEIMAGE as usize + 8]
+                .try_into()
+                .unwrap(),
+        );
+        let name_len = u16::from_le_bytes(
+            raw[OFF_ENTRY_BASENAME as usize..OFF_ENTRY_BASENAME as usize + 2]
+                .try_into()
+                .unwrap(),
+        );
+        let name_buf = u64::from_le_bytes(
+            raw[OFF_ENTRY_BASENAME as usize + 8..OFF_ENTRY_BASENAME as usize + 16]
+                .try_into()
+                .unwrap(),
+        );
+
+        if name_len > 0 && name_len <= 0x400 && name_buf != 0 {
+            let mut local_name = [0u16; 256];
+            let bytes = if (name_len as usize) < (local_name.len() * 2 - 2) {
+                name_len as usize
+            } else {
+                local_name.len() * 2 - 2
+            };
+            if read_process_memory(
+                proc,
+                name_buf,
+                local_name.as_mut_ptr() as *mut c_void,
+                bytes,
+            ) >= 0
+            {
+                local_name[bytes / 2] = 0;
+                if kwcsicmp(local_name.as_ptr(), module_name.buffer) == 0 {
+                    result = if get_size { size_of_image } else { dll_base };
+                    break;
+                }
+            }
+        }
+
+        let next = u64::from_le_bytes(
+            raw[OFF_ENTRY_INLOAD_LINKS as usize..OFF_ENTRY_INLOAD_LINKS as usize + 8]
+                .try_into()
+                .unwrap(),
+        );
+        if next == 0 || next == flink {
+            break;
+        }
+        flink = next;
+    }
+
+    result
+}
+
+fn get_dll_base_or_size(in_req: *mut Requests, get_size: bool) -> u64 {
+    unsafe {
+        if (*in_req).target_pid == 0 {
+            return 0;
+        }
+        if crate::reimpl_ke::ke_get_current_irql() > PASSIVE_LEVEL {
+            return 0;
+        }
+        if !verify_secure_key((*in_req).secure_key) {
+            return 0;
+        }
+
+        let mut source_process: *mut c_void = null_mut();
+        if lookup_process((*in_req).target_pid, &mut source_process) < 0 {
+            return 0;
+        }
+
+        if ps_get_process_exit_status_trick(source_process) != STATUS_PENDING {
+            deref_process(source_process);
+            return 0;
+        }
+
+        let mut decoded = [0i8; 65];
+        kmemset(decoded.as_mut_ptr() as *mut c_void, 0, decoded.len());
+        crate::helpers::decode_fixed_str64(
+            &(*in_req).name_str,
+            decoded.as_mut_ptr(),
+            (*in_req).name_length,
+        );
+        let mut w_str = crate::helpers::convert_to_pwstr(decoded.as_ptr());
+        if w_str.is_null() {
+            free_converted_pwstr(&mut w_str);
+            deref_process(source_process);
+            return 0;
+        }
+
+        let mut module_name = UnicodeString {
+            length: 0,
+            maximum_length: 0,
+            buffer: null_mut(),
+        };
+        crate::reimpl_rtl::rtl_init_unicode_string(&mut module_name, w_str);
+        let result = get_module_base(source_process, module_name, get_size);
+
+        free_converted_pwstr(&mut w_str);
+        deref_process(source_process);
+        result
+    }
+}
+
+pub fn get_dll_address(in_req: *mut Requests) -> u64 {
+    get_dll_base_or_size(in_req, false)
+}
+
+pub fn get_dll_size(in_req: *mut Requests) -> u64 {
+    get_dll_base_or_size(in_req, true)
+}
+
+pub fn init_offsets_by_version() -> bool {
+    unsafe {
+        G_ACTIVE_PROCESS_LINKS_OFFSET = 0x448;
+        G_USER_DIRECTORY_TABLE_BASE_OFFSET = 0x278;
+
+        if _NT_BUILD_NUMBER >= 26000 {
+            G_ACTIVE_PROCESS_LINKS_OFFSET = 0x1d8;
+            G_USER_DIRECTORY_TABLE_BASE_OFFSET = 0x388;
+            return true;
+        } else if _NT_BUILD_NUMBER >= 22000 {
+            G_ACTIVE_PROCESS_LINKS_OFFSET = 0x448;
+            G_USER_DIRECTORY_TABLE_BASE_OFFSET = 0x388;
+            return true;
+        } else if _NT_BUILD_NUMBER >= 19041 {
+            G_ACTIVE_PROCESS_LINKS_OFFSET = 0x448;
+            G_USER_DIRECTORY_TABLE_BASE_OFFSET = 0x388;
+            return true;
+        } else if _NT_BUILD_NUMBER >= 18362 {
+            G_ACTIVE_PROCESS_LINKS_OFFSET = 0x448;
+            G_USER_DIRECTORY_TABLE_BASE_OFFSET = 0x280;
+            return true;
+        } else if _NT_BUILD_NUMBER >= 10240 {
+            G_ACTIVE_PROCESS_LINKS_OFFSET = 0x448;
+            G_USER_DIRECTORY_TABLE_BASE_OFFSET = 0x278;
+            return true;
+        }
+        false
+    }
+}
+
+pub fn get_process_id_by_name(in_req: *mut Requests) -> u64 {
+    unsafe {
+        if in_req.is_null() || (*in_req).name_length == 0 || (*in_req).name_length > 64 {
+            return 0;
+        }
+        if !verify_secure_key((*in_req).secure_key) {
+            return 0;
+        }
+        if crate::reimpl_ke::ke_get_current_irql() > PASSIVE_LEVEL {
+            return 0;
+        }
+        if G_ACTIVE_PROCESS_LINKS_OFFSET == 0 {
+            if !init_offsets_by_version() {
+                return 0;
+            }
+        }
+
+        let mut target_name = [0i8; 65];
+        kmemset(
+            target_name.as_mut_ptr() as *mut c_void,
+            0,
+            target_name.len(),
+        );
+        crate::helpers::decode_fixed_str64(
+            &(*in_req).name_str,
+            target_name.as_mut_ptr(),
+            (*in_req).name_length,
+        );
+
+        let mut start_process: *mut c_void = null_mut();
+        if lookup_process(4, &mut start_process) < 0 {
+            return 0;
+        }
+
+        let mut current_process = start_process;
+        ref_process(current_process);
+        let mut found_pid = 0u64;
+        let mut process_count = 0u32;
+
+        while !current_process.is_null() && process_count < 1000 {
+            process_count += 1;
+            let current_pid = ps_get_process_id_trick(current_process);
+            let image_name = ps_get_process_image_file_name_trick(current_process);
+
+            if !image_name.is_null() && *image_name != 0 {
+                if kstricmp(target_name.as_ptr(), image_name) == 0 {
+                    found_pid = current_pid as u64;
+                    break;
+                }
+            }
+
+            let list_entry = current_process as usize + G_ACTIVE_PROCESS_LINKS_OFFSET as usize;
+            let flink = crate::helpers::read_u64(
+                current_process as *const u8,
+                G_ACTIVE_PROCESS_LINKS_OFFSET as usize,
+            ) as usize;
+            if flink == 0 || flink == list_entry {
+                break;
+            }
+
+            let next_addr = flink - G_ACTIVE_PROCESS_LINKS_OFFSET as usize;
+            let next_process = next_addr as *mut c_void;
+            let next_pid = ps_get_process_id_trick(next_process);
+
+            let mut next_safe: *mut c_void = null_mut();
+            if next_pid != 0 && lookup_process(next_pid as u64, &mut next_safe) >= 0 {
+                if next_safe == start_process {
+                    deref_process(next_safe);
+                    break;
+                }
+                deref_process(current_process);
+                current_process = next_safe;
+            } else {
+                break;
+            }
+        }
+
+        if !current_process.is_null() && current_process != start_process {
+            deref_process(current_process);
+        }
+        if !start_process.is_null() {
+            deref_process(start_process);
+        }
+
+        found_pid
+    }
+}
