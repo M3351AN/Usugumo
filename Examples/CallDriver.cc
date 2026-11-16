@@ -1,4 +1,7 @@
 // Copyright (c) 2026 渟雲. All rights reserved.
+#ifdef USING_USUGUMO
+#include <WinSock2.h>
+#endif
 #include <Windows.h>
 #include <string>
 #include <iostream>
@@ -227,6 +230,20 @@ int main() {
 #ifdef USING_USUGUMO
     if (!op.DriverProbe()) {
         printf("Driver probe failed\n");
+        printf("  derived port : %u\n", (unsigned)op.GetDerivedPort());
+        printf("  transport    : %s\n", op.DescribeLastTransportError());
+        printf("  WSA error    : %d\n", op.GetLastWsaError());
+        if (op.GetLastTransportError() ==
+            usugumo_wsk::WskConnection::LastError::kConnectRefused) {
+            printf("  hint         : the driver is not loaded, or it failed to start.\n");
+            printf("                 check DriverEntry result and whether the port is listening:\n");
+            printf("                 Get-NetTCPConnection -LocalPort %u -State Listen\n",
+                   (unsigned)op.GetDerivedPort());
+        } else if (op.GetLastTransportError() ==
+                   usugumo_wsk::WskConnection::LastError::kReceive) {
+            printf("  hint         : connected but the driver rejected the request;\n");
+            printf("                 timestamp/CRC64/secure_key validation failed.\n");
+        }
         windowData.windowRunning = false;
         DWORD threadId = GetThreadId(reinterpret_cast<HANDLE>(windowThread.get()));
         if (threadId != 0) {
@@ -253,7 +270,7 @@ int main() {
         return 1;
     }
 #ifdef USING_USUGUMO
-    printf("Driver handle created 0x%p\n", op.GetDriverHandle());
+    printf("Driver TCP link established on port %u\n", (unsigned)op.GetPort());
 #else
     printf("Process handle created 0x%p\n", op.GetTargetProcessHandle());
 #endif

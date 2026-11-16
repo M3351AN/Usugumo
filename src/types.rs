@@ -75,12 +75,14 @@ pub struct IoStatusBlock {
 pub struct Irp {
     pub _type: u16,
     pub size: u16,
+    pub _pad0: u32,
     pub mdl_address: *mut c_void,
     pub flags: u32,
+    pub _pad1: u32,
     pub associated_irp: usize,
     pub thread_list_entry: [usize; 2],
     pub io_status: IoStatusBlock,
-    _requestor_mode: u32,
+    _requestor_mode: u8,
     _pending_returned: u8,
     _stack_count: u8,
     _current_location: u8,
@@ -89,15 +91,13 @@ pub struct Irp {
     _apc_environment: u8,
     _allocation_flags: u8,
     _user_iosb: usize,
-    _user_event: usize,
+    pub _user_event: usize,
     _overlay: [usize; 2],
     _cancel_routine: usize,
     _user_buffer: usize,
-    _tail_device_queue: [usize; 4],
-    _tail_thread: usize,
-    _tail_aux_buffer: usize,
-    _tail_list_entry: [usize; 2],
+    _tail: [usize; 8],
     pub current_stack_location: *mut IoStackLocation,
+    _pad2: [usize; 2],
 }
 
 #[repr(C)]
@@ -114,7 +114,13 @@ pub struct IoStackLocation {
     pub minor_function: u8,
     pub flags: u8,
     pub control: u8,
+    pub _pad0: u32,
     pub parameters: IoStackParameters,
+    pub _pad1: usize,
+    pub device_object: *mut c_void,
+    pub file_object: *mut c_void,
+    pub completion_routine: usize,
+    pub context: *mut c_void,
 }
 
 #[repr(C, packed)]
@@ -149,6 +155,3 @@ pub struct Requests {
 
 pub type DispatchFn = unsafe extern "system" fn(*mut DeviceObject, *mut c_void) -> NtStatus;
 pub type UnloadFn = unsafe extern "system" fn(*mut DriverObject);
-pub type DriverInitFn =
-    unsafe extern "system" fn(*mut DriverObject, *mut UnicodeString) -> NtStatus;
-pub type IoCreateDriverFn = unsafe extern "system" fn(*mut UnicodeString, DriverInitFn) -> NtStatus;

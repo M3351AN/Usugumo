@@ -337,10 +337,6 @@ pub fn init_offsets_by_version() -> bool {
             G_ACTIVE_PROCESS_LINKS_OFFSET = 0x1d8;
             G_USER_DIRECTORY_TABLE_BASE_OFFSET = 0x388;
             return true;
-        } else if _NT_BUILD_NUMBER >= 22000 {
-            G_ACTIVE_PROCESS_LINKS_OFFSET = 0x448;
-            G_USER_DIRECTORY_TABLE_BASE_OFFSET = 0x388;
-            return true;
         } else if _NT_BUILD_NUMBER >= 19041 {
             G_ACTIVE_PROCESS_LINKS_OFFSET = 0x448;
             G_USER_DIRECTORY_TABLE_BASE_OFFSET = 0x388;
@@ -369,10 +365,8 @@ pub fn get_process_id_by_name(in_req: *mut Requests) -> u64 {
         if crate::reimpl_ke::ke_get_current_irql() > PASSIVE_LEVEL {
             return 0;
         }
-        if G_ACTIVE_PROCESS_LINKS_OFFSET == 0 {
-            if !init_offsets_by_version() {
-                return 0;
-            }
+        if G_ACTIVE_PROCESS_LINKS_OFFSET == 0 && !init_offsets_by_version() {
+            return 0;
         }
 
         let mut target_name = [0i8; 65];
@@ -402,11 +396,12 @@ pub fn get_process_id_by_name(in_req: *mut Requests) -> u64 {
             let current_pid = ps_get_process_id_trick(current_process);
             let image_name = ps_get_process_image_file_name_trick(current_process);
 
-            if !image_name.is_null() && *image_name != 0 {
-                if kstricmp(target_name.as_ptr(), image_name) == 0 {
-                    found_pid = current_pid as u64;
-                    break;
-                }
+            if !image_name.is_null()
+                && *image_name != 0
+                && kstricmp(target_name.as_ptr(), image_name) == 0
+            {
+                found_pid = current_pid as u64;
+                break;
             }
 
             let list_entry = current_process as usize + G_ACTIVE_PROCESS_LINKS_OFFSET as usize;

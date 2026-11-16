@@ -42,7 +42,10 @@ pub fn init_gre_protect_sprite_content() -> u8 {
             if address.is_null() {
                 return 0;
             }
-            GRE_PROTECT_SPRITE_CONTENT = Some(core::mem::transmute(address));
+            GRE_PROTECT_SPRITE_CONTENT = Some(core::mem::transmute::<
+                *mut u8,
+                GreProtectSpriteContentFn,
+            >(address));
         }
         1
     }
@@ -92,10 +95,9 @@ fn zw_protect_window(hwnd: usize, flags: u32, request_pid: u64) -> bool {
         if core::ptr::addr_of!(GRE_PROTECT_SPRITE_CONTENT)
             .read()
             .is_none()
+            && init_gre_protect_sprite_content() == 0
         {
-            if init_gre_protect_sprite_content() == 0 {
-                return false;
-            }
+            return false;
         }
         call_gre(hwnd, flags) != 0
     }

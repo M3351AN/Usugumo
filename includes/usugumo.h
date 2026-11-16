@@ -2,6 +2,7 @@
 #pragma once
 #ifndef _USUGUMO_H_
 #define _USUGUMO_H_
+#include "./wsk_client.h"
 #include <Windows.h>
 
 #include <algorithm>
@@ -127,16 +128,11 @@ inline void UsugumoSha256(const std::byte* data, size_t length,
 class UsugumoDriver {
  public:
   UsugumoDriver() noexcept
-      : driver_handle_(INVALID_HANDLE_VALUE),
-        target_process_id_(0),
+      : target_process_id_(0),
         current_process_id_(0),
         dpi_(0) {}
 
-  ~UsugumoDriver() noexcept {
-    if (driver_handle_ != INVALID_HANDLE_VALUE) {
-      CloseHandle(driver_handle_);
-    }
-  }
+  ~UsugumoDriver() noexcept { connection_.Close(); }
 
   UsugumoDriver(const UsugumoDriver&) = delete;
   UsugumoDriver& operator=(const UsugumoDriver&) = delete;
@@ -145,12 +141,10 @@ class UsugumoDriver {
 
   UsugumoDriver& operator=(UsugumoDriver&& other) noexcept {
     if (this != &other) {
-      driver_handle_ = other.driver_handle_;
       target_process_id_ = other.target_process_id_;
       current_process_id_ = other.current_process_id_;
       dpi_ = other.dpi_;
 
-      other.driver_handle_ = INVALID_HANDLE_VALUE;
       other.target_process_id_ = 0;
       other.current_process_id_ = 0;
       other.dpi_ = 0;
@@ -192,8 +186,21 @@ class UsugumoDriver {
     request.request_key = USUGUMO_PROBE;
 
     SendRequest(request);
-    return request.return_value != 0;
+    driver_protocol_version_ = static_cast<uint16_t>(
+        (request.return_value >> USUGUMO_PROTOCOL_VERSION_SHIFT) &
+        USUGUMO_PROTOCOL_VERSION_MASK);
+    supported_functions_ = static_cast<uint16_t>(
+        request.return_value & USUGUMO_FUNC_BITS);
+    return supported_functions_ != 0;
   }
+
+  bool IsProtocolMismatch() const noexcept {
+    return driver_protocol_version_ > USUGUMO_PROTOCOL_VERSION;
+  }
+  uint16_t GetDriverProtocolVersion() const noexcept {
+    return driver_protocol_version_;
+  }
+  uint16_t GetSupportedFunctions() const noexcept { return supported_functions_; }
 
   uint64_t GetDllSize(std::string_view dll_name) noexcept {
     return GetDllInfo<USUGUMO_MODULE_SIZE>(dll_name);
@@ -293,71 +300,311 @@ class UsugumoDriver {
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
   }
 
-  HANDLE GetDriverHandle() const noexcept { return driver_handle_; }
+  bool IsConnected() const noexcept { return connection_.IsConnected(); }
+  uint16_t GetPort() const noexcept { return used_port_; }
   ProcessId GetProcessId() const noexcept { return target_process_id_; }
 
+  usugumo_wsk::WskConnection::LastError GetLastTransportError() const noexcept {
+    return connection_.GetLastError();
+  }
+  int GetLastWsaError() const noexcept { return connection_.GetLastWsaError(); }
+  const char* DescribeLastTransportError() const noexcept {
+    return usugumo_wsk::WskConnection::DescribeError(connection_.GetLastError());
+  }
+  uint16_t GetDerivedPort() const noexcept { return usugumo_wsk::DerivePort(); }
+
  private:
-  HANDLE driver_handle_;
+  usugumo_wsk::WskConnection connection_;
   ProcessId target_process_id_;
   ProcessId current_process_id_;
   DpiValue dpi_;
-  wchar_t driver_device_path_[256] = {0};
+  uint16_t used_port_ = 0;
+  uint16_t driver_protocol_version_ = 0;
+  uint16_t supported_functions_ = 0;
+  uint16_t response_version_ = 0;
 
-  unsigned __int64 CalculateRequestsChecksum(Requests* pRequest) {
-    if (pRequest == NULL) {
-      return 0;
-    }
-    // CRC64-ECMA
-    const unsigned __int64 CRC64_POLYNOMIAL = 0x42F0E1EBA9EA3693ULL;
-    static unsigned __int64 crc64_table[256] = {0};
-    static BOOLEAN table_initialized = FALSE;
-
-    if (!table_initialized) {
-      for (unsigned int i = 0; i < 256; i++) {
-        unsigned __int64 crc = (unsigned __int64)i;
+  static unsigned __int64 Crc64(const std::byte* data, size_t length) noexcept {
+    constexpr unsigned __int64 kPoly = 0x85E1C3D753D46D27ULL;
+    static unsigned __int64 table[256] = {0};
+    static bool initialized = false;
+    if (!initialized) {
+      for (unsigned i = 0; i < 256; i++) {
+        unsigned __int64 c = i;
         for (int j = 0; j < 8; j++) {
-          if (crc & 1) {
-            crc = (crc >> 1) ^ CRC64_POLYNOMIAL;
-          } else {
-            crc >>= 1;
+          if (c & 1) {
+            c ^= kPoly;
           }
+          c >>= 1;
         }
-        crc64_table[i] = crc;
+        table[i] = c;
       }
-      table_initialized = TRUE;
+      initialized = true;
     }
-
-    unsigned __int64 validDataLen =
-        sizeof(Requests) - sizeof(pRequest->check_sum);
-    const unsigned char* pData = (const unsigned char*)pRequest;
-
-    unsigned __int64 crc64 = 0xFFFFFFFFFFFFFFFFULL;
-    for (unsigned __int64 i = 0; i < validDataLen; i++) {
-      crc64 = crc64_table[(crc64 ^ pData[i]) & 0xFF] ^ (crc64 >> 8);
+    unsigned __int64 crc = 0xFFFFFFFFFFFFFFFFULL;
+    for (size_t i = 0; i < length; i++) {
+      crc = table[(crc ^ static_cast<unsigned char>(data[i])) & 0xFF] ^ (crc >> 8);
     }
-    crc64 ^= 0xFFFFFFFFFFFFFFFFULL;
-    return crc64;
+    return crc ^ 0xFFFFFFFFFFFFFFFFULL;
+  }
+
+  bool EncodeRequest(const Requests& request, std::string& out) noexcept {
+    out = SerializeRequest(request, 0);
+    const unsigned __int64 sum = Crc64(reinterpret_cast<const std::byte*>(out.data()),
+                                       out.size());
+    out = SerializeRequest(request, sum);
+    return !out.empty();
+  }
+
+  static uint32_t Xxh32(std::string_view input) noexcept {
+    constexpr uint32_t kP1 = 0x9E3779B1u, kP2 = 0x85EBCA77u, kP3 = 0xC2B2AE3Du,
+                       kP4 = 0x27D4EB2Fu, kP5 = 0x165667B1u;
+    const auto rotl = [](uint32_t x, int r) {
+      return (x << r) | (x >> (32 - r));
+    };
+    const auto rd32 = [](const unsigned char* p) {
+      return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
+             (static_cast<uint32_t>(p[2]) << 16) |
+             (static_cast<uint32_t>(p[3]) << 24);
+    };
+    const auto round = [&](uint32_t acc, uint32_t v) {
+      return rotl(acc + v * kP2, 13) * kP1;
+    };
+
+    const auto* b = reinterpret_cast<const unsigned char*>(input.data());
+    const size_t len = input.size();
+    size_t i = 0;
+    uint32_t h;
+    if (len >= 16) {
+      uint32_t v1 = kP1 + kP2, v2 = kP2, v3 = 0, v4 = 0u - kP1;
+      while (i + 16 <= len) {
+        v1 = round(v1, rd32(b + i));
+        v2 = round(v2, rd32(b + i + 4));
+        v3 = round(v3, rd32(b + i + 8));
+        v4 = round(v4, rd32(b + i + 12));
+        i += 16;
+      }
+      h = rotl(v1, 1) + rotl(v2, 7) + rotl(v3, 12) + rotl(v4, 18);
+    } else {
+      h = kP5;
+    }
+    h += static_cast<uint32_t>(len);
+    while (i + 4 <= len) {
+      h = rotl(h + rd32(b + i) * kP3, 17) * kP4;
+      i += 4;
+    }
+    while (i < len) {
+      h = rotl(h + static_cast<uint32_t>(b[i]) * kP5, 11) * kP1;
+      i += 1;
+    }
+    h ^= h >> 15;
+    h *= kP2;
+    h ^= h >> 13;
+    h *= kP3;
+    h ^= h >> 16;
+    return h;
+  }
+
+  static std::string WireKey(std::string_view name) noexcept {
+    static constexpr char kHex[] = "0123456789abcdef";
+    const uint32_t tag = Xxh32(name);
+    std::string out(8, '0');
+    for (int i = 0; i < 8; i++) {
+      out[i] = kHex[(tag >> (28 - 4 * i)) & 0xF];
+    }
+    return out;
+  }
+
+  static void AppendField(std::string& s, std::string_view key,
+                          unsigned __int64 value) noexcept {
+    s.append(WireKey(key));
+    s.push_back('=');
+    s.append(std::to_string(value));
+    s.push_back('\n');
+  }
+
+  static std::string SerializeRequest(const Requests& r,
+                                      unsigned __int64 checksum) noexcept {
+    std::string s;
+    s.reserve(320);
+    AppendField(s, "v", USUGUMO_PROTOCOL_VERSION);
+    AppendField(s, "fn", r.request_key & USUGUMO_FUNC_BITS);
+    AppendField(s, "ret", r.return_value);
+    AppendField(s, "ck", checksum);
+    AppendField(s, "ts", r.time_stamp);
+    AppendField(s, "sk", r.secure_key);
+    if (r.request_pid != 0) {
+      AppendField(s, "rpid", r.request_pid);
+    }
+    if (r.request_addr != 0) {
+      AppendField(s, "raddr", r.request_addr);
+    }
+    if (r.target_pid != 0) {
+      AppendField(s, "tpid", r.target_pid);
+    }
+    if (r.target_addr != 0) {
+      AppendField(s, "taddr", r.target_addr);
+    }
+    if (r.mem_size != 0) {
+      AppendField(s, "sz", r.mem_size);
+    }
+    if (r.dwFlags != 0) {
+      AppendField(s, "fl", r.dwFlags);
+    }
+    if (r.dx != 0) {
+      AppendField(s, "dx", r.dx);
+    }
+    if (r.dy != 0) {
+      AppendField(s, "dy", r.dy);
+    }
+    if (r.dwData != 0) {
+      AppendField(s, "dd", r.dwData);
+    }
+    if (r.dwExtraInfo != 0) {
+      AppendField(s, "ex", r.dwExtraInfo);
+    }
+    if (r.bVK != 0) {
+      AppendField(s, "vk", r.bVK);
+    }
+    if (r.bScan != 0) {
+      AppendField(s, "sc", r.bScan);
+    }
+    if (r.window_handle != 0) {
+      AppendField(s, "wh", reinterpret_cast<uintptr_t>(r.window_handle));
+    }
+    if (r.protect_flags != 0) {
+      AppendField(s, "pf", r.protect_flags);
+    }
+    if (r.name_length != 0) {
+      char decoded[65] = {0};
+      const size_t n = r.name_length > 64 ? 64 : static_cast<size_t>(r.name_length);
+      for (size_t i = 0; i < n; i++) {
+        const unsigned shift = static_cast<unsigned>(8 * (7 - (i % 8)));
+        decoded[i] = static_cast<char>((r.name_str.blocks[i / 8] >> shift) & 0xFF);
+      }
+      s.append(WireKey("nm"));
+      s.push_back('=');
+      for (size_t i = 0; i < n; i++) {
+        const unsigned char c = static_cast<unsigned char>(decoded[i]);
+        if (c >= 0x20 && c != 0x7F) {
+          s.push_back(static_cast<char>(c));
+        }
+      }
+      s.push_back('\n');
+    }
+    return s;
+  }
+
+  static bool FindValue(const std::string& body, std::string_view name,
+                        std::string_view* out) noexcept {
+    const std::string prefix = WireKey(name) + "=";
+    size_t pos = 0;
+    while (pos < body.size()) {
+      size_t end = body.find('\n', pos);
+      if (end == std::string::npos) {
+        end = body.size();
+      }
+      if (end - pos >= prefix.size() &&
+          body.compare(pos, prefix.size(), prefix) == 0) {
+        *out = std::string_view(body).substr(pos + prefix.size(),
+                                             end - pos - prefix.size());
+        return true;
+      }
+      pos = end + 1;
+    }
+    return false;
+  }
+
+  static bool TryGetU64(const std::string& body, std::string_view key,
+                        unsigned __int64* out) noexcept {
+    std::string_view value;
+    if (!FindValue(body, key, &value) || value.empty()) {
+      return false;
+    }
+    unsigned __int64 n = 0;
+    for (char c : value) {
+      if (c < '0' || c > '9') {
+        return false;
+      }
+      n = n * 10 + static_cast<unsigned __int64>(c - '0');
+    }
+    *out = n;
+    return true;
+  }
+
+  void DecodeResponse(const std::string& body, Requests* out) noexcept {
+    out->return_value = 0;
+    unsigned __int64 v = 0;
+    if (TryGetU64(body, "ret", &v)) {
+      out->return_value = v;
+    }
+    if (TryGetU64(body, "v", &v)) {
+      response_version_ = static_cast<uint16_t>(v);
+    }
+    if (TryGetU64(body, "ck", &v)) {
+      out->check_sum = v;
+    }
+    if (TryGetU64(body, "ts", &v)) {
+      out->time_stamp = v;
+    }
   }
 
   void SendRequest(Requests& request) noexcept {
-    if (driver_handle_ == INVALID_HANDLE_VALUE) {
+    if (!connection_.IsConnected()) {
       return;
     }
     request.request_key |= USUGUMO_SIGNATURE_MASK;
     request.time_stamp = GetTimestamp();
     request.secure_key = kSecureKey;
-    request.check_sum = CalculateRequestsChecksum(&request);
-    
-    DWORD dwWritten = 0, dwRead = 0;
-    WriteFile(driver_handle_, &request, sizeof(Requests), &dwWritten, nullptr);
-    if (dwWritten == sizeof(Requests)) {
-      ReadFile(driver_handle_, &request, sizeof(Requests), &dwRead, nullptr);
+
+    std::string payload;
+    if (!EncodeRequest(request, payload)) {
+      connection_.Close();
+      return;
     }
+
+    std::array<std::byte, 4> prefix = {};
+    const uint32_t len = static_cast<uint32_t>(payload.size());
+    prefix[0] = static_cast<std::byte>(len & 0xFF);
+    prefix[1] = static_cast<std::byte>((len >> 8) & 0xFF);
+    prefix[2] = static_cast<std::byte>((len >> 16) & 0xFF);
+    prefix[3] = static_cast<std::byte>((len >> 24) & 0xFF);
+    if (!connection_.SendAll(prefix.data(), prefix.size())) {
+      connection_.Close();
+      return;
+    }
+    if (!connection_.SendAll(payload.data(), payload.size())) {
+      connection_.Close();
+      return;
+    }
+
+    std::array<std::byte, 4> reply_prefix = {};
+    if (!connection_.ReceiveAll(reply_prefix.data(), reply_prefix.size())) {
+      connection_.Close();
+      return;
+    }
+    const uint32_t reply_len = static_cast<uint32_t>(reply_prefix[0]) |
+                               (static_cast<uint32_t>(reply_prefix[1]) << 8) |
+                               (static_cast<uint32_t>(reply_prefix[2]) << 16) |
+                               (static_cast<uint32_t>(reply_prefix[3]) << 24);
+    if (reply_len == 0 || reply_len > 1024) {
+      connection_.Close();
+      return;
+    }
+
+    std::string reply(reply_len, '\0');
+    if (!connection_.ReceiveAll(reply.data(), reply.size())) {
+      connection_.Close();
+      return;
+    }
+
+    Requests response = {};
+    DecodeResponse(reply, &response);
+    request = response;
   }
 
   template <uint64_t RequestKey>
   uint64_t GetDllInfo(std::string_view dll_name) noexcept {
-    if (driver_handle_ == INVALID_HANDLE_VALUE) {
+    if (!connection_.IsConnected()) {
       return 0;
     }
 
@@ -432,34 +679,14 @@ class UsugumoDriver {
   }
 
   bool OpenDriverHandle() noexcept {
-    if (driver_handle_ != INVALID_HANDLE_VALUE) {
+    if (connection_.IsConnected()) {
       return true;
     }
-
-    char serial[128];
-    if (!GetBootVolumeSerial(serial, ARRAYSIZE(serial))) {
+    if (!connection_.Connect()) {
       return false;
     }
-    const size_t serial_len = strlen(serial);
-    if (serial_len == 0) return false;
-
-    wchar_t obfuscated[kObfuscatedNameLen + 1];
-    if (!GenerateObfuscatedName(serial, serial_len, obfuscated,
-                                kObfuscatedNameLen + 1)) {
-      std::memset(serial, 0, sizeof(serial));
-      return false;
-    }
-    std::memset(serial, 0, sizeof(serial));
-
-    swprintf_s(driver_device_path_, ARRAYSIZE(driver_device_path_),
-               L"\\\\.\\%s", obfuscated);
-    std::memset(obfuscated, 0, sizeof(obfuscated));
-
-    driver_handle_ = CreateFileW(
-        driver_device_path_, GENERIC_READ | GENERIC_WRITE, 0, nullptr,
-        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_NO_BUFFERING,
-        nullptr);
-    return driver_handle_ != INVALID_HANDLE_VALUE;
+    used_port_ = usugumo_wsk::DerivePort();
+    return true;
   }
 
   static DpiValue GetSystemDPI() noexcept {

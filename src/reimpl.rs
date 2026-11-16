@@ -188,11 +188,12 @@ fn parse_bases() {
                     }
                 }
             };
-            if let Some(c) = c {
-                if c != 0 && nc < caps.len() {
-                    caps[nc] = c;
-                    nc += 1;
-                }
+            if let Some(c) = c
+                && c != 0
+                && nc < caps.len()
+            {
+                caps[nc] = c;
+                nc += 1;
             }
         }
         if nc == 0 {

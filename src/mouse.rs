@@ -138,7 +138,7 @@ fn validate_device_extension(device_object: *mut DeviceObject) -> bool {
         let data_in = crate::helpers::read_u64(devext, DEVEXT_WRITE_POINTER) as usize;
         if base == 0
             || size == 0
-            || size as usize % core::mem::size_of::<MouseInputData>() != 0
+            || !size.is_multiple_of(core::mem::size_of::<MouseInputData>() as u32)
             || data_in < base
             || data_in > base + size as usize
             || size as usize > 0x100000

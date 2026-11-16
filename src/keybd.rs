@@ -448,7 +448,7 @@ fn validate_device_extension(device_object: *mut DeviceObject) -> bool {
         let data_in = crate::helpers::read_u64(devext, KEYB_DEVEXT_WRITE_POINTER) as usize;
         if base == 0
             || size == 0
-            || size as usize % core::mem::size_of::<KeyboardInputData>() != 0
+            || !size.is_multiple_of(core::mem::size_of::<KeyboardInputData>() as u32)
             || data_in < base
             || data_in > base + size as usize
             || size as usize > 0x100000

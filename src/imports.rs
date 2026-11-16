@@ -5,14 +5,10 @@ use core::ptr::{addr_of_mut, null_mut};
 
 use crate::consts::{STATUS_NOT_FOUND, STATUS_SUCCESS};
 use crate::sha256::sha256_const;
-use crate::types::{DeviceObject, NtStatus, UnicodeString};
+use crate::types::NtStatus;
 
-pub type IoCreateSymbolicLinkFn =
-    unsafe extern "system" fn(*mut UnicodeString, *mut UnicodeString) -> NtStatus;
-pub type IoDeleteSymbolicLinkFn = unsafe extern "system" fn(*mut UnicodeString) -> NtStatus;
 pub type ExAllocatePool2Fn = unsafe extern "system" fn(u64, usize, u32) -> *mut c_void;
 pub type ExFreePoolWithTagFn = unsafe extern "system" fn(*mut c_void, u32);
-pub type IoDeleteDeviceFn = unsafe extern "system" fn(*mut DeviceObject) -> NtStatus;
 
 unsafe extern "C" {
     pub(crate) static mut _KeAcquireSpinLockAtDpcLevel: *mut c_void;
@@ -20,7 +16,7 @@ unsafe extern "C" {
     pub(crate) static mut _IofCompleteRequest: *mut c_void;
     static mut _IoReleaseRemoveLockEx: *mut c_void;
 }
-pub static mut _IO_CREATE_DRIVER: *mut c_void = null_mut();
+
 pub static mut _OB_REFERENCE_OBJECT_BY_NAME: *mut c_void = null_mut();
 pub static mut _OBF_REFERENCE_OBJECT: *mut c_void = null_mut();
 pub static mut _OBF_DEREFERENCE_OBJECT: *mut c_void = null_mut();
@@ -28,9 +24,6 @@ pub static mut _MM_MAP_LOCKED_PAGES_SPECIFY_CACHE: *mut c_void = null_mut();
 pub static mut _MM_ALLOCATE_CONTIGUOUS_MEMORY: *mut c_void = null_mut();
 pub static mut _MM_FREE_CONTIGUOUS_MEMORY: *mut c_void = null_mut();
 pub static mut _PS_LOOKUP_PROCESS_BY_PROCESS_ID: *mut c_void = null_mut();
-pub static mut _IO_CREATE_SYMBOLIC_LINK: *mut c_void = null_mut();
-pub static mut _IO_DELETE_DEVICE: *mut c_void = null_mut();
-pub static mut _IO_DELETE_SYMBOLIC_LINK: *mut c_void = null_mut();
 pub static mut _EX_ALLOCATE_POOL2: *mut c_void = null_mut();
 pub static mut _EX_FREE_POOL_WITH_TAG: *mut c_void = null_mut();
 pub static mut _ZW_CLOSE: *mut c_void = null_mut();
@@ -41,6 +34,25 @@ pub static mut _KE_UNSTACK_DETACH_PROCESS: *mut c_void = null_mut();
 pub static mut _IO_DRIVER_OBJECT_TYPE: *mut c_void = null_mut();
 pub static mut _PS_LOADED_MODULE_LIST: *mut c_void = null_mut();
 pub static mut _NT_BUILD_NUMBER: u16 = 0;
+
+pub static mut _IO_ALLOCATE_IRP: *mut c_void = null_mut();
+pub static mut _IO_FREE_IRP: *mut c_void = null_mut();
+pub static mut _IO_SET_COMPLETION_ROUTINE_EX: *mut c_void = null_mut();
+pub static mut _IO_ALLOCATE_MDL: *mut c_void = null_mut();
+pub static mut _IO_FREE_MDL: *mut c_void = null_mut();
+pub static mut _MM_BUILD_MDL_FOR_NON_PAGED_POOL: *mut c_void = null_mut();
+pub static mut _KE_INITIALIZE_EVENT: *mut c_void = null_mut();
+pub static mut _KE_SET_EVENT: *mut c_void = null_mut();
+pub static mut _KE_RESET_EVENT: *mut c_void = null_mut();
+pub static mut _KE_WAIT_FOR_SINGLE_OBJECT: *mut c_void = null_mut();
+pub static mut _PS_CREATE_SYSTEM_THREAD: *mut c_void = null_mut();
+pub static mut _PS_TERMINATE_SYSTEM_THREAD: *mut c_void = null_mut();
+pub static mut _KE_DELAY_EXECUTION_THREAD: *mut c_void = null_mut();
+
+pub static mut _WSK_REGISTER: *mut c_void = null_mut();
+pub static mut _WSK_DEREGISTER: *mut c_void = null_mut();
+pub static mut _WSK_CAPTURE_PROVIDER_NPI: *mut c_void = null_mut();
+pub static mut _WSK_RELEASE_PROVIDER_NPI: *mut c_void = null_mut();
 
 static mut G_NTOSKRNL_BASE: *mut c_void = null_mut();
 static mut G_NTOSKRNL_RESOLVED: bool = false;
@@ -391,28 +403,34 @@ pub fn resolve_kernel_export(export_hash: [u8; 32]) -> *mut c_void {
     unsafe { find_kernel_proc_address(export_hash) }
 }
 
+pub fn resolve_module_export_by_name(
+    module_name: *const u16,
+    export_hash: [u8; 32],
+) -> *mut c_void {
+    let base = crate::helpers::get_module_base(module_name);
+    if base.is_null() {
+        return null_mut();
+    }
+    find_exported_symbol(base, export_hash)
+}
+
 pub fn resolve_imports() -> NtStatus {
     unsafe {
         if find_ntoskrnl_base().is_null() {
             return STATUS_NOT_FOUND;
         }
 
-        const FUNC_HASHES: [[u8; 32]; 22] = [
+        const FUNC_HASHES: [[u8; 32]; 30] = [
             sha256_const(b"KeAcquireSpinLockAtDpcLevel"),
             sha256_const(b"KeReleaseSpinLockFromDpcLevel"),
             sha256_const(b"IofCompleteRequest"),
             sha256_const(b"IoReleaseRemoveLockEx"),
-            sha256_const(b"IoCreateDriver"),
             sha256_const(b"ObReferenceObjectByName"),
             sha256_const(b"ObfReferenceObject"),
             sha256_const(b"ObfDereferenceObject"),
-            sha256_const(b"MmMapLockedPagesSpecifyCache"),
             sha256_const(b"MmAllocateContiguousMemory"),
             sha256_const(b"MmFreeContiguousMemory"),
             sha256_const(b"PsLookupProcessByProcessId"),
-            sha256_const(b"IoCreateSymbolicLink"),
-            sha256_const(b"IoDeleteDevice"),
-            sha256_const(b"IoDeleteSymbolicLink"),
             sha256_const(b"ExAllocatePool2"),
             sha256_const(b"ExFreePoolWithTag"),
             sha256_const(b"ZwClose"),
@@ -420,31 +438,52 @@ pub fn resolve_imports() -> NtStatus {
             sha256_const(b"ZwQueryVolumeInformationFile"),
             sha256_const(b"KeStackAttachProcess"),
             sha256_const(b"KeUnstackDetachProcess"),
+            sha256_const(b"IoAllocateIrp"),
+            sha256_const(b"IoFreeIrp"),
+            sha256_const(b"IoSetCompletionRoutineEx"),
+            sha256_const(b"IoAllocateMdl"),
+            sha256_const(b"IoFreeMdl"),
+            sha256_const(b"MmBuildMdlForNonPagedPool"),
+            sha256_const(b"KeInitializeEvent"),
+            sha256_const(b"KeSetEvent"),
+            sha256_const(b"KeWaitForSingleObject"),
+            sha256_const(b"KeResetEvent"),
+            sha256_const(b"KeDelayExecutionThread"),
+            sha256_const(b"PsCreateSystemThread"),
+            sha256_const(b"PsTerminateSystemThread"),
         ];
 
-        let func_slots: [*mut *mut c_void; 22] = [
-            addr_of_mut!(_KeAcquireSpinLockAtDpcLevel) as *mut *mut c_void,
-            addr_of_mut!(_KeReleaseSpinLockFromDpcLevel) as *mut *mut c_void,
-            addr_of_mut!(_IofCompleteRequest) as *mut *mut c_void,
-            addr_of_mut!(_IoReleaseRemoveLockEx) as *mut *mut c_void,
-            addr_of_mut!(_IO_CREATE_DRIVER) as *mut *mut c_void,
-            addr_of_mut!(_OB_REFERENCE_OBJECT_BY_NAME) as *mut *mut c_void,
-            addr_of_mut!(_OBF_REFERENCE_OBJECT) as *mut *mut c_void,
-            addr_of_mut!(_OBF_DEREFERENCE_OBJECT) as *mut *mut c_void,
-            addr_of_mut!(_MM_MAP_LOCKED_PAGES_SPECIFY_CACHE) as *mut *mut c_void,
-            addr_of_mut!(_MM_ALLOCATE_CONTIGUOUS_MEMORY) as *mut *mut c_void,
-            addr_of_mut!(_MM_FREE_CONTIGUOUS_MEMORY) as *mut *mut c_void,
-            addr_of_mut!(_PS_LOOKUP_PROCESS_BY_PROCESS_ID) as *mut *mut c_void,
-            addr_of_mut!(_IO_CREATE_SYMBOLIC_LINK) as *mut *mut c_void,
-            addr_of_mut!(_IO_DELETE_DEVICE) as *mut *mut c_void,
-            addr_of_mut!(_IO_DELETE_SYMBOLIC_LINK) as *mut *mut c_void,
-            addr_of_mut!(_EX_ALLOCATE_POOL2) as *mut *mut c_void,
-            addr_of_mut!(_EX_FREE_POOL_WITH_TAG) as *mut *mut c_void,
-            addr_of_mut!(_ZW_CLOSE) as *mut *mut c_void,
-            addr_of_mut!(_ZW_CREATE_FILE) as *mut *mut c_void,
-            addr_of_mut!(_ZW_QUERY_VOLUME_INFORMATION_FILE) as *mut *mut c_void,
-            addr_of_mut!(_KE_STACK_ATTACH_PROCESS) as *mut *mut c_void,
-            addr_of_mut!(_KE_UNSTACK_DETACH_PROCESS) as *mut *mut c_void,
+        let func_slots: [*mut *mut c_void; 30] = [
+            addr_of_mut!(_KeAcquireSpinLockAtDpcLevel),
+            addr_of_mut!(_KeReleaseSpinLockFromDpcLevel),
+            addr_of_mut!(_IofCompleteRequest),
+            addr_of_mut!(_IoReleaseRemoveLockEx),
+            addr_of_mut!(_OB_REFERENCE_OBJECT_BY_NAME),
+            addr_of_mut!(_OBF_REFERENCE_OBJECT),
+            addr_of_mut!(_OBF_DEREFERENCE_OBJECT),
+            addr_of_mut!(_MM_ALLOCATE_CONTIGUOUS_MEMORY),
+            addr_of_mut!(_MM_FREE_CONTIGUOUS_MEMORY),
+            addr_of_mut!(_PS_LOOKUP_PROCESS_BY_PROCESS_ID),
+            addr_of_mut!(_EX_ALLOCATE_POOL2),
+            addr_of_mut!(_EX_FREE_POOL_WITH_TAG),
+            addr_of_mut!(_ZW_CLOSE),
+            addr_of_mut!(_ZW_CREATE_FILE),
+            addr_of_mut!(_ZW_QUERY_VOLUME_INFORMATION_FILE),
+            addr_of_mut!(_KE_STACK_ATTACH_PROCESS),
+            addr_of_mut!(_KE_UNSTACK_DETACH_PROCESS),
+            addr_of_mut!(_IO_ALLOCATE_IRP),
+            addr_of_mut!(_IO_FREE_IRP),
+            addr_of_mut!(_IO_SET_COMPLETION_ROUTINE_EX),
+            addr_of_mut!(_IO_ALLOCATE_MDL),
+            addr_of_mut!(_IO_FREE_MDL),
+            addr_of_mut!(_MM_BUILD_MDL_FOR_NON_PAGED_POOL),
+            addr_of_mut!(_KE_INITIALIZE_EVENT),
+            addr_of_mut!(_KE_SET_EVENT),
+            addr_of_mut!(_KE_WAIT_FOR_SINGLE_OBJECT),
+            addr_of_mut!(_KE_RESET_EVENT),
+            addr_of_mut!(_KE_DELAY_EXECUTION_THREAD),
+            addr_of_mut!(_PS_CREATE_SYSTEM_THREAD),
+            addr_of_mut!(_PS_TERMINATE_SYSTEM_THREAD),
         ];
 
         for i in 0..FUNC_HASHES.len() {
@@ -476,6 +515,37 @@ pub fn resolve_imports() -> NtStatus {
         _NT_BUILD_NUMBER =
             (crate::helpers::read_u32(build_address as *const u8, 0) & 0xFFFF) as u16;
 
+        if !resolve_wsk_imports() {
+            return STATUS_NOT_FOUND;
+        }
+
         STATUS_SUCCESS
+    }
+}
+
+fn resolve_wsk_imports() -> bool {
+    unsafe {
+        let netio_name = obfstr::obfwide!("netio.sys");
+        let wsk_hashes: [[u8; 32]; 4] = [
+            sha256_const(b"WskRegister"),
+            sha256_const(b"WskDeregister"),
+            sha256_const(b"WskCaptureProviderNPI"),
+            sha256_const(b"WskReleaseProviderNPI"),
+        ];
+        let wsk_slots: [*mut *mut c_void; 4] = [
+            addr_of_mut!(_WSK_REGISTER),
+            addr_of_mut!(_WSK_DEREGISTER),
+            addr_of_mut!(_WSK_CAPTURE_PROVIDER_NPI),
+            addr_of_mut!(_WSK_RELEASE_PROVIDER_NPI),
+        ];
+
+        for i in 0..wsk_hashes.len() {
+            let address = resolve_module_export_by_name(netio_name.as_ptr(), wsk_hashes[i]);
+            if address.is_null() {
+                return false;
+            }
+            *wsk_slots[i] = address;
+        }
+        true
     }
 }

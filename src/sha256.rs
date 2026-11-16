@@ -17,7 +17,7 @@ const H0: [u32; 8] = [
 
 #[inline]
 const fn rotr(x: u32, n: u32) -> u32 {
-    (x >> n) | (x << (32 - n))
+    x.rotate_right(n)
 }
 
 #[inline]
@@ -33,8 +33,8 @@ fn load_be(p: *const u8) -> u32 {
 fn compress(block: *const u8, state: &mut [u32; 8]) {
     unsafe {
         let mut w = [0u32; 64];
-        for i in 0..16 {
-            w[i] = load_be(block.add(i * 4));
+        for (i, word) in w.iter_mut().take(16).enumerate() {
+            *word = load_be(block.add(i * 4));
         }
         for i in 16..64 {
             let s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >> 3);
@@ -131,11 +131,9 @@ pub fn sha256(data: *const u8, length: usize, digest: *mut u8) {
         }
         compress(last.as_ptr(), &mut state);
 
+        let out = core::slice::from_raw_parts_mut(digest, 32);
         for i in 0..8 {
-            *digest.add(i * 4 + 0) = (state[i] >> 24) as u8;
-            *digest.add(i * 4 + 1) = (state[i] >> 16) as u8;
-            *digest.add(i * 4 + 2) = (state[i] >> 8) as u8;
-            *digest.add(i * 4 + 3) = state[i] as u8;
+            out[i * 4..i * 4 + 4].copy_from_slice(&state[i].to_be_bytes());
         }
     }
 }
@@ -255,10 +253,11 @@ pub const fn sha256_const(input: &[u8]) -> [u8; 32] {
     let mut out = [0u8; 32];
     let mut oi = 0;
     while oi < 8 {
-        out[oi * 4 + 0] = (state[oi] >> 24) as u8;
-        out[oi * 4 + 1] = (state[oi] >> 16) as u8;
-        out[oi * 4 + 2] = (state[oi] >> 8) as u8;
-        out[oi * 4 + 3] = state[oi] as u8;
+        let bytes = state[oi].to_be_bytes();
+        out[oi * 4] = bytes[0];
+        out[oi * 4 + 1] = bytes[1];
+        out[oi * 4 + 2] = bytes[2];
+        out[oi * 4 + 3] = bytes[3];
         oi += 1;
     }
     out

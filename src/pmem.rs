@@ -47,12 +47,23 @@ fn invlpg(address: u64) {
     }
 }
 
+const KPCR_PRCB_OFFSET: usize = 0x20;
+const KPRCB_NUMBER_OFFSET: usize = 0xD0;
+
 fn current_processor_index() -> u32 {
-    let idx: u32;
     unsafe {
-        core::arch::asm!("mov eax, gs:[0x1C]", out("eax") idx, options(nostack));
+        let prcb: u64;
+        core::arch::asm!(
+            "mov {}, qword ptr gs:[{}]",
+            out(reg) prcb,
+            const KPCR_PRCB_OFFSET,
+            options(nostack, readonly),
+        );
+        if prcb < 0xFFFF_8000_0000_0000 {
+            return 0;
+        }
+        crate::helpers::read_u8(prcb as *const u8, KPRCB_NUMBER_OFFSET) as u32
     }
-    idx
 }
 
 fn secure_zero(ptr: *mut u8, len: usize) {
@@ -128,7 +139,13 @@ fn pmem_swap_phys(
 
         let mut idx = current_processor_index();
         if idx as usize >= PMEM_MAX_CPU_PAGES {
-            idx = (PMEM_MAX_CPU_PAGES - 1) as u32;
+            idx = 0;
+        }
+        if G_PMEM_PAGES[idx as usize].virtual_address.is_null() {
+            let status = ensure_page(idx as usize);
+            if status < 0 {
+                return status;
+            }
         }
         let page = &mut G_PMEM_PAGES[idx as usize];
         if page.virtual_address.is_null() || page.pte_long.is_null() {
@@ -166,8 +183,7 @@ fn pmem_swap_phys(
 }
 
 pub fn read_physical(physical_address: u64, buffer: *mut c_void, size: usize) -> NtStatus {
-    let status = pmem_swap_phys(physical_address, buffer, size, false);
-    status
+    pmem_swap_phys(physical_address, buffer, size, false)
 }
 
 pub fn write_physical(physical_address: u64, buffer: *const c_void, size: usize) -> NtStatus {
@@ -189,47 +205,58 @@ fn read_physical_u64(physical_address: u64) -> u64 {
 }
 
 pub fn init_pmem_pages() -> NtStatus {
+    let mut idx = current_processor_index() as usize;
+    if idx >= PMEM_MAX_CPU_PAGES {
+        idx = 0;
+    }
+    ensure_page(idx)
+}
+
+fn ensure_page(idx: usize) -> NtStatus {
     unsafe {
-        for i in 0..PMEM_MAX_CPU_PAGES {
-            let va = if _MM_ALLOCATE_CONTIGUOUS_MEMORY.is_null() {
-                null_mut()
-            } else {
-                let f: FnMmAllocateContiguousMemory =
-                    core::mem::transmute(_MM_ALLOCATE_CONTIGUOUS_MEMORY);
-                f(PMEM_PAGE_SIZE, u64::MAX)
-            };
-            if va.is_null() {
-                cleanup_pmem_pages();
-                return STATUS_INSUFFICIENT_RESOURCES;
-            }
-            let pte = pmem_get_pte(va as u64);
-            if pte.is_null() {
-                if !_MM_FREE_CONTIGUOUS_MEMORY.is_null() {
-                    let f: FnMmFreeContiguousMemory =
-                        core::mem::transmute(_MM_FREE_CONTIGUOUS_MEMORY);
-                    f(va);
-                }
-                cleanup_pmem_pages();
-                return STATUS_UNSUCCESSFUL;
-            }
-            G_PMEM_PAGES[i].virtual_address = va;
-            G_PMEM_PAGES[i].pte_long = pte;
+        if idx >= PMEM_MAX_CPU_PAGES {
+            return STATUS_UNSUCCESSFUL;
         }
+        if !G_PMEM_PAGES[idx].virtual_address.is_null() {
+            return STATUS_SUCCESS;
+        }
+        let va = if _MM_ALLOCATE_CONTIGUOUS_MEMORY.is_null() {
+            null_mut()
+        } else {
+            let f: FnMmAllocateContiguousMemory =
+                core::mem::transmute(_MM_ALLOCATE_CONTIGUOUS_MEMORY);
+            f(PMEM_PAGE_SIZE, u64::MAX)
+        };
+        if va.is_null() {
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+        let pte = pmem_get_pte(va as u64);
+        if pte.is_null() {
+            if !_MM_FREE_CONTIGUOUS_MEMORY.is_null() {
+                let f: FnMmFreeContiguousMemory = core::mem::transmute(_MM_FREE_CONTIGUOUS_MEMORY);
+                f(va);
+            }
+            return STATUS_UNSUCCESSFUL;
+        }
+        G_PMEM_PAGES[idx].virtual_address = va;
+        G_PMEM_PAGES[idx].pte_long = pte;
         STATUS_SUCCESS
     }
 }
 
 pub fn cleanup_pmem_pages() {
     unsafe {
+        let pages = core::ptr::addr_of_mut!(G_PMEM_PAGES) as *mut PMemPage;
         for i in 0..PMEM_MAX_CPU_PAGES {
-            if !G_PMEM_PAGES[i].virtual_address.is_null() {
+            let page = &mut *pages.add(i);
+            if !page.virtual_address.is_null() {
                 if !_MM_FREE_CONTIGUOUS_MEMORY.is_null() {
                     let f: FnMmFreeContiguousMemory =
                         core::mem::transmute(_MM_FREE_CONTIGUOUS_MEMORY);
-                    f(G_PMEM_PAGES[i].virtual_address);
+                    f(page.virtual_address);
                 }
-                G_PMEM_PAGES[i].virtual_address = null_mut();
-                G_PMEM_PAGES[i].pte_long = null_mut();
+                page.virtual_address = null_mut();
+                page.pte_long = null_mut();
             }
         }
     }
@@ -280,10 +307,8 @@ pub fn get_process_cr3(process: *mut c_void) -> u64 {
     if dtb != 0 {
         return dtb;
     }
-    if unsafe { G_USER_DIRECTORY_TABLE_BASE_OFFSET == 0 } {
-        if !init_offsets_by_version() {
-            return 0;
-        }
+    if unsafe { G_USER_DIRECTORY_TABLE_BASE_OFFSET == 0 } && !init_offsets_by_version() {
+        return 0;
     }
     crate::helpers::read_u64(
         process as *const u8,

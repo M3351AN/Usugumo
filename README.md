@@ -1,6 +1,6 @@
 # Usugumo
 
-A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc operations, handling user-mode process requests via DIRECT_IO IRP
+A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc operations, handling user-mode process requests via a Winsock Kernel (WSK) TCP channel
 
 > [!WARNING]
 > This project IS NOT designed to combat AC/AV/EDR or sth like that.
@@ -11,7 +11,7 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc o
 
 ## Features
 
-- Handling user-mode process requests via DIRECT_IO IRP
+- Handling user-mode process requests via WSK TCP (no driver/device object)
 - Kernel-mode RPM/WPM
 - Kernel-mode fetch module info(base, size)
 - Kernel-mode get PID via name
@@ -58,3 +58,4 @@ Even without code copy as is
 - [danielkrupinski/Osiris](https://github.com/danielkrupinski/Osiris/)
 - [oakboat/GsDriver-ring3](https://github.com/oakboat/GsDriver-ring3/)
 - [hashcat-legacy](https://github.com/hashcat/hashcat-legacy)
+

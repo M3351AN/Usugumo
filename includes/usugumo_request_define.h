@@ -5,9 +5,17 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#ifndef CTL_CODE
-#include <winioctl.h>
-#endif  // !CTL_CODE
+
+#ifdef _KERNEL_MODE
+#include <ntddk.h>
+#include <wdm.h>
+#else
+#include <windows.h>
+#endif
+
+#define USUGUMO_PROTOCOL_VERSION 2
+#define USUGUMO_PROTOCOL_VERSION_SHIFT 16
+#define USUGUMO_PROTOCOL_VERSION_MASK 0xFFFFULL
 
 #define USUGUMO_SIGNATURE 0xA5ULL
 #define USUGUMO_SIGNATURE_SHIFT 56
@@ -28,17 +36,6 @@ extern "C" {
   (USUGUMO_PROBE | USUGUMO_READ | USUGUMO_WRITE | USUGUMO_MOUSE |  \
    USUGUMO_KEYBD | USUGUMO_MODULE_BASE | USUGUMO_MODULE_SIZE |     \
    USUGUMO_PID | USUGUMO_ANTI_CAPTURE)
-
-static const unsigned long kIoctlCallDriver =
-    CTL_CODE(FILE_DEVICE_PHYSICAL_NETCARD, 0x721, METHOD_BUFFERED,
-             FILE_READ_ACCESS | FILE_WRITE_ACCESS);
-
-#ifdef _KERNEL_MODE
-#include <ntddk.h>
-#include <wdm.h>
-#else
-#include <windows.h>
-#endif
 
 #define TICKS_PER_SECOND 10000000LL  // 100NS
 
@@ -103,6 +100,7 @@ typedef struct _Requests {
 
   // anti capture
   HWND window_handle;
+  void* window_handle;
   unsigned int protect_flags;
 
   unsigned __int64 time_stamp;
@@ -110,6 +108,9 @@ typedef struct _Requests {
   unsigned __int64 check_sum;
 } Requests, *PRequests;
 #pragma pack(pop)
+
+#define USUGUMO_FRAME_SIZE 192
+#define USUGUMO_CHECKSUM_COVERED (USUGUMO_FRAME_SIZE - sizeof(unsigned __int64))
 
 #ifdef __cplusplus
 }  // extern "C"

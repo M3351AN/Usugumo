@@ -131,3 +131,29 @@ pub fn zero_memory(ptr: *mut u8, len: usize) {
         }
     }
 }
+
+pub fn kalloc(size: usize) -> *mut c_void {
+    unsafe {
+        if crate::imports::_EX_ALLOCATE_POOL2.is_null() || size == 0 {
+            return core::ptr::null_mut();
+        }
+        let f: crate::imports::ExAllocatePool2Fn =
+            core::mem::transmute(crate::imports::_EX_ALLOCATE_POOL2);
+        f(
+            crate::consts::POOL_FLAG_NON_PAGED | crate::consts::POOL_FLAG_UNINITIALIZED,
+            size,
+            crate::consts::WSK_POOL_TAG,
+        )
+    }
+}
+
+pub fn kfree(ptr: *mut c_void) {
+    unsafe {
+        if ptr.is_null() || crate::imports::_EX_FREE_POOL_WITH_TAG.is_null() {
+            return;
+        }
+        let f: crate::imports::ExFreePoolWithTagFn =
+            core::mem::transmute(crate::imports::_EX_FREE_POOL_WITH_TAG);
+        f(ptr, crate::consts::WSK_POOL_TAG);
+    }
+}

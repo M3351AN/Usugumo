@@ -8,8 +8,7 @@ use crate::imports::{
     _EX_ALLOCATE_POOL2, _PS_LOADED_MODULE_LIST, _ZW_CLOSE, _ZW_CREATE_FILE,
     _ZW_QUERY_VOLUME_INFORMATION_FILE,
 };
-use crate::sha256::sha256;
-use crate::types::{FixedStr64, IoStatusBlock, NtStatus, Requests, UnicodeString};
+use crate::types::{FixedStr64, IoStatusBlock, NtStatus, UnicodeString};
 
 type FnExAllocatePool2 = unsafe extern "system" fn(u64, usize, u32) -> *mut c_void;
 type FnZwClose = unsafe extern "system" fn(usize) -> NtStatus;
@@ -184,21 +183,59 @@ pub fn get_module_base(module_name: *const u16) -> *mut c_void {
         if _PS_LOADED_MODULE_LIST.is_null() || module_name.is_null() {
             return null_mut();
         }
+        const MAX_NAME_CHARS: usize = 64;
+
         let head = _PS_LOADED_MODULE_LIST as usize;
         let mut entry = read_u64(_PS_LOADED_MODULE_LIST as *const u8, 0) as usize;
-        while entry != head {
+        let mut guard = 0usize;
+        while entry != head && entry >= KERNEL_PTR_MIN && guard < 0x1000 {
+            guard += 1;
             let module = entry as *mut u8;
             let base_dll_name_buffer = read_u64(module, 0x60) as usize;
+            let base_dll_name_length = read_u16(module, 0x58) as usize;
             let dll_base = read_u64(module, 0x30) as usize;
-            if base_dll_name_buffer != 0
-                && crate::util::kwcsicmp(base_dll_name_buffer as *const u16, module_name) == 0
+            if dll_base != 0
+                && base_dll_name_buffer >= KERNEL_PTR_MIN
+                && (2..=MAX_NAME_CHARS * 2).contains(&base_dll_name_length)
             {
-                return dll_base as *mut c_void;
+                let chars = base_dll_name_length / 2;
+                if wide_prefix_matches(base_dll_name_buffer as *const u16, module_name, chars) {
+                    return dll_base as *mut c_void;
+                }
             }
-            entry = read_u64(module, 0) as usize;
+            let nxt = read_u64(module, 0) as usize;
+            if nxt < KERNEL_PTR_MIN || nxt == entry {
+                break;
+            }
+            entry = nxt;
         }
         null_mut()
     }
+}
+
+fn wide_prefix_matches(candidate: *const u16, wanted: *const u16, len: usize) -> bool {
+    for i in 0..len {
+        let a = unsafe { *candidate.add(i) };
+        if a == 0 {
+            return false;
+        }
+        let b = unsafe { *wanted.add(i) };
+        if b == 0 {
+            return false;
+        }
+        let mut x = a;
+        let mut y = b;
+        if (65..=90).contains(&x) {
+            x += 32;
+        }
+        if (65..=90).contains(&y) {
+            y += 32;
+        }
+        if x != y {
+            return false;
+        }
+    }
+    true
 }
 
 pub fn pattern_scan_image(image_base: *mut c_void, pattern: &[u8]) -> *mut c_void {
@@ -327,46 +364,6 @@ pub fn get_boot_volume_serial(out: *mut i8, out_len: u32) -> NtStatus {
     }
 }
 
-pub fn generate_obfuscated_name(
-    serial: *const u8,
-    serial_len: u32,
-    out: *mut u16,
-    out_len: u32,
-) -> NtStatus {
-    unsafe {
-        if out.is_null() || out_len <= 16 || serial.is_null() || serial_len == 0 {
-            return STATUS_INVALID_PARAMETER;
-        }
-
-        let k_suffix = obfstr::obfbytes!(b"Usugumo");
-        let mut input = [0u8; 8 + 7];
-        let mut slen = serial_len as usize;
-        if slen > 8 {
-            slen = 8;
-        }
-        for i in 0..slen {
-            input[i] = *serial.add(i);
-        }
-        for i in 0..k_suffix.len() {
-            input[slen + i] = k_suffix[i];
-        }
-
-        let mut digest = [0u8; 32];
-        sha256(input.as_ptr(), slen + k_suffix.len(), digest.as_mut_ptr());
-
-        let chars = obfstr::obfbytes!(b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
-        for i in 0..16 {
-            write_u16(
-                out as *mut u8,
-                i * 2,
-                chars[(digest[i] % 36) as usize] as u16,
-            );
-        }
-        write_u16(out as *mut u8, 32, 0);
-        STATUS_SUCCESS
-    }
-}
-
 static mut CRC64_INITIALIZED: bool = false;
 static mut CRC64_TABLE: [u64; 256] = [0; 256];
 
@@ -393,13 +390,9 @@ fn init_crc64_table() {
     }
 }
 
-pub fn calculate_requests_checksum(req: *mut Requests) -> u64 {
+pub fn crc64(bytes: &[u8]) -> u64 {
     unsafe {
-        if req.is_null() {
-            return 0;
-        }
         init_crc64_table();
-        let bytes = core::slice::from_raw_parts(req as *const u8, 0xB8);
         let mut rax = 0xFFFFFFFFFFFFFFFFu64;
         for &b in bytes.iter() {
             rax ^= b as u64;
@@ -409,6 +402,16 @@ pub fn calculate_requests_checksum(req: *mut Requests) -> u64 {
         }
         !rax
     }
+}
+
+pub fn encode_fixed_str64(input: &[u8], out: &mut FixedStr64) {
+    let mut blocks = [0u64; 8];
+    for (i, &c) in input.iter().take(64).enumerate() {
+        let block = i / 8;
+        let pos = i % 8;
+        blocks[block] |= (c as u64) << (8 * (7 - pos));
+    }
+    *out = FixedStr64 { blocks };
 }
 
 pub fn resolve_relative_address(base: *mut c_void, offset: u32) -> *mut u8 {
@@ -440,10 +443,6 @@ pub fn read_u64(p: *const u8, off: usize) -> u64 {
 
 pub fn write_u8(p: *mut u8, off: usize, v: u8) {
     unsafe { *p.add(off) = v }
-}
-
-pub fn write_u16(p: *mut u8, off: usize, v: u16) {
-    unsafe { (p.add(off) as *mut u16).write_unaligned(v) }
 }
 
 pub fn write_u64(p: *mut u8, off: usize, v: u64) {

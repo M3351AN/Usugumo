@@ -22,12 +22,7 @@ fn get_timestamp() -> i64 {
 fn is_timestamp_valid(ts: u64, tolerance_seconds: i64) -> bool {
     let current = get_timestamp();
     let tolerance_ticks = tolerance_seconds * TICKS_PER_SECOND;
-    let diff = if ts > current as u64 {
-        ts - current as u64
-    } else {
-        current as u64 - ts
-    };
-    diff <= tolerance_ticks as u64
+    ts.abs_diff(current as u64) <= tolerance_ticks as u64
 }
 
 pub(crate) fn verify_secure_key(secure_key: u64) -> bool {
@@ -45,9 +40,6 @@ pub unsafe extern "system" fn request_handler(pstruct: *mut Requests) -> u8 {
         if !is_timestamp_valid((*pstruct).time_stamp, 1) {
             return 0;
         }
-        if (*pstruct).check_sum != crate::helpers::calculate_requests_checksum(pstruct) {
-            return 0;
-        }
         if !verify_secure_key((*pstruct).secure_key) {
             return 0;
         }
@@ -57,7 +49,7 @@ pub unsafe extern "system" fn request_handler(pstruct: *mut Requests) -> u8 {
         let func = (*pstruct).request_key & USUGUMO_FUNC_BITS;
 
         if func & USUGUMO_PROBE != 0 {
-            (*pstruct).return_value = USUGUMO_SUPPORTED_MASK;
+            (*pstruct).return_value = probe_reply(USUGUMO_PROTOCOL_VERSION, USUGUMO_SUPPORTED_MASK);
             return 1;
         }
 

@@ -21,12 +21,12 @@ fn wdk_root_from_registry() -> Option<String> {
         let text = String::from_utf8_lossy(&out.stdout);
         for line in text.lines() {
             let line = line.trim();
-            if line.starts_with("KitsRoot10") {
-                if let Some((_, val)) = line.split_once("REG_SZ") {
-                    let p = val.trim().trim_end_matches('\\');
-                    if !p.is_empty() {
-                        return Some(p.to_string());
-                    }
+            if line.starts_with("KitsRoot10")
+                && let Some((_, val)) = line.split_once("REG_SZ")
+            {
+                let p = val.trim().trim_end_matches('\\');
+                if !p.is_empty() {
+                    return Some(p.to_string());
                 }
             }
         }
