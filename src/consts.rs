@@ -9,7 +9,6 @@ pub const STATUS_INVALID_DEVICE_STATE: NtStatus = 0xC000_0184u32 as i32;
 pub const STATUS_INSUFFICIENT_RESOURCES: NtStatus = 0xC000_009Au32 as i32;
 pub const STATUS_NOT_FOUND: NtStatus = 0xC000_0225u32 as i32;
 pub const STATUS_PENDING: NtStatus = 0x103;
-pub const STATUS_PARTIAL_COPY: NtStatus = 0xC000_0204u32 as i32;
 pub const STATUS_PENDING_VALUE: NtStatus = 0x0000_0103u32 as i32;
 
 pub const PASSIVE_LEVEL: u8 = 0;

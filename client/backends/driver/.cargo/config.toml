@@ -1,0 +1,6 @@
+# Push this DLL's own backend plus the exported-ABI marker into the core
+# sources compiled here, and keep panic=abort so no MSVC RTTI leaks in.
+[build]
+rustflags = ["-C", "panic=abort"]
+
+[features]

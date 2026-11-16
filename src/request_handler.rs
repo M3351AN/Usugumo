@@ -56,11 +56,11 @@ pub unsafe extern "system" fn request_handler(pstruct: *mut Requests) -> u8 {
         let mut handled = false;
 
         if func & USUGUMO_READ != 0 {
-            (*pstruct).return_value = read_vm(pstruct) as u64;
+            (*pstruct).return_value = read_vm(pstruct);
             handled = true;
         }
         if func & USUGUMO_WRITE != 0 {
-            (*pstruct).return_value = write_vm(pstruct) as u64;
+            (*pstruct).return_value = write_vm(pstruct);
             handled = true;
         }
         if func & USUGUMO_MOUSE != 0 {

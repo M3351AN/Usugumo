@@ -82,7 +82,7 @@ fn free_converted_pwstr(ppw_str: *mut *mut u16) {
     }
 }
 
-pub fn read_vm(in_req: *mut Requests) -> u8 {
+pub fn read_vm(in_req: *mut Requests) -> u64 {
     unsafe {
         if crate::reimpl_ke::ke_get_current_irql() > PASSIVE_LEVEL {
             return 0;
@@ -108,7 +108,7 @@ pub fn read_vm(in_req: *mut Requests) -> u8 {
             return 0;
         }
 
-        let status = copy_virtual_memory(
+        let copied = copy_virtual_memory(
             from_process,
             (*in_req).target_addr,
             to_process,
@@ -118,11 +118,11 @@ pub fn read_vm(in_req: *mut Requests) -> u8 {
 
         deref_process(from_process);
         deref_process(to_process);
-        (status >= 0) as u8
+        copied as u64
     }
 }
 
-pub fn write_vm(in_req: *mut Requests) -> u8 {
+pub fn write_vm(in_req: *mut Requests) -> u64 {
     unsafe {
         if crate::reimpl_ke::ke_get_current_irql() > PASSIVE_LEVEL {
             return 0;
@@ -148,7 +148,7 @@ pub fn write_vm(in_req: *mut Requests) -> u8 {
             return 0;
         }
 
-        let status = copy_virtual_memory(
+        let copied = copy_virtual_memory(
             from_process,
             (*in_req).request_addr,
             to_process,
@@ -158,7 +158,7 @@ pub fn write_vm(in_req: *mut Requests) -> u8 {
 
         deref_process(from_process);
         deref_process(to_process);
-        (status >= 0) as u8
+        copied as u64
     }
 }
 
@@ -185,7 +185,7 @@ fn get_module_base(proc: *mut c_void, module_name: UnicodeString, get_size: bool
         peb_va + OFF_PEB_LDR,
         (&mut ldr_va) as *mut u64 as *mut c_void,
         8,
-    ) < 0
+    ) != 8
     {
         return 0;
     }
@@ -195,7 +195,7 @@ fn get_module_base(proc: *mut c_void, module_name: UnicodeString, get_size: bool
 
     let head = ldr_va + OFF_LDR_INLOAD_ORDER;
     let mut flink = 0u64;
-    if read_process_memory(proc, head, (&mut flink) as *mut u64 as *mut c_void, 8) < 0 {
+    if read_process_memory(proc, head, (&mut flink) as *mut u64 as *mut c_void, 8) != 8 {
         return 0;
     }
 
@@ -209,7 +209,9 @@ fn get_module_base(proc: *mut c_void, module_name: UnicodeString, get_size: bool
 
         let entry_va = flink - OFF_ENTRY_INLOAD_LINKS;
         let mut raw = [0u8; 0x68];
-        if read_process_memory(proc, entry_va, raw.as_mut_ptr() as *mut c_void, raw.len()) < 0 {
+        if read_process_memory(proc, entry_va, raw.as_mut_ptr() as *mut c_void, raw.len())
+            != raw.len()
+        {
             break;
         }
 
@@ -246,7 +248,7 @@ fn get_module_base(proc: *mut c_void, module_name: UnicodeString, get_size: bool
                 name_buf,
                 local_name.as_mut_ptr() as *mut c_void,
                 bytes,
-            ) >= 0
+            ) == bytes
             {
                 local_name[bytes / 2] = 0;
                 if kwcsicmp(local_name.as_ptr(), module_name.buffer) == 0 {

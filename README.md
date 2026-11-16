@@ -45,6 +45,15 @@ See [Examples](./Examples)
 
 There‘s also an alternative example that utilizes Native API, which is not a best practice, but better than most user-mode pasta.
 
+## Client library
+
+```shell
+cd client/backends/driver && cargo b --release    # usugumo_driver.lib + .dll
+cd client/backends/native && cargo b --release    # usugumo_native.lib + .dll
+```
+
+Header `usugumo_client.h` lives in `includes/`.
+
 ## License
 
 This project is licensed under [**BSD-3-Clause**](LICENSE).

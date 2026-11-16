@@ -1,0 +1,5 @@
+# The static archive is linked by MinGW as well as MSVC, and MinGW cannot
+# resolve the MSVC RTTI symbol referenced by the unwind tables. Building with
+# panic=abort keeps those tables out of the archive.
+[build]
+rustflags = ["-C", "panic=abort"]

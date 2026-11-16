@@ -228,7 +228,7 @@ fn ensure_page(idx: usize) -> NtStatus {
             f(PMEM_PAGE_SIZE, u64::MAX)
         };
         if va.is_null() {
-            return STATUS_INSUFFICIENT_RESOURCES;
+            return 0;
         }
         let pte = pmem_get_pte(va as u64);
         if pte.is_null() {
@@ -321,20 +321,19 @@ pub fn read_process_memory(
     virtual_address: u64,
     buffer: *mut c_void,
     size: usize,
-) -> NtStatus {
+) -> usize {
     unsafe {
         if process.is_null() || buffer.is_null() {
-            return STATUS_INVALID_PARAMETER;
+            return 0;
         }
         let dtb = get_process_cr3(process);
         if dtb == 0 {
-            return STATUS_INVALID_PARAMETER;
+            return 0;
         }
 
         let irql = crate::reimpl_ke::kz_raise_irql(DISPATCH_LEVEL);
         let dst = buffer as *mut u8;
         let mut offset = 0usize;
-        let mut status = STATUS_SUCCESS;
         while offset < size {
             let remaining = size - offset;
             let va = virtual_address + offset as u64;
@@ -345,19 +344,17 @@ pub fn read_process_memory(
 
             let phys = translate_linear_address(dtb, va);
             if phys == 0 {
-                status = STATUS_PARTIAL_COPY;
                 break;
             }
 
             let rstatus = read_physical(phys, dst.add(offset) as *mut c_void, chunk);
             if rstatus < 0 {
-                status = rstatus;
                 break;
             }
             offset += chunk;
         }
         crate::reimpl_ke::kz_lower_irql(irql);
-        status
+        offset
     }
 }
 
@@ -367,16 +364,16 @@ pub fn copy_virtual_memory(
     to_process: *mut c_void,
     to_address: u64,
     size: usize,
-) -> NtStatus {
+) -> usize {
     unsafe {
         if from_process.is_null() || to_process.is_null() || size == 0 {
-            return STATUS_INVALID_PARAMETER;
+            return 0;
         }
 
         let from_dtb = get_process_cr3(from_process);
         let to_dtb = get_process_cr3(to_process);
         if from_dtb == 0 || to_dtb == 0 {
-            return STATUS_INVALID_PARAMETER;
+            return 0;
         }
 
         let scratch = if _EX_ALLOCATE_POOL2.is_null() {
@@ -390,10 +387,9 @@ pub fn copy_virtual_memory(
             )
         };
         if scratch.is_null() {
-            return STATUS_INSUFFICIENT_RESOURCES;
+            return 0;
         }
 
-        let mut status = STATUS_SUCCESS;
         let mut offset = 0usize;
         while offset < size {
             let remaining = size - offset;
@@ -411,25 +407,21 @@ pub fn copy_virtual_memory(
 
             let fphys = translate_linear_address(from_dtb, fva);
             if fphys == 0 {
-                status = STATUS_PARTIAL_COPY;
                 break;
             }
 
             let rstatus = read_physical(fphys, scratch, chunk);
             if rstatus < 0 {
-                status = rstatus;
                 break;
             }
 
             let tphys = translate_linear_address(to_dtb, tva);
             if tphys == 0 {
-                status = STATUS_PARTIAL_COPY;
                 break;
             }
 
             let wstatus = write_physical(tphys, scratch, chunk);
             if wstatus < 0 {
-                status = wstatus;
                 break;
             }
 
@@ -442,6 +434,6 @@ pub fn copy_virtual_memory(
             f(scratch, POOL_TAG_COPY);
         }
 
-        status
+        offset
     }
 }

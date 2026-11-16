@@ -1,0 +1,26 @@
+[package]
+name = "usugumo_client"
+version = "3.0.0"
+edition = "2024"
+description = "Usugumo user-mode client: wire protocol, WSK transport, NT-API path, C ABI"
+
+[lib]
+name = "usugumo_client"
+crate-type = ["rlib"]
+
+[features]
+default = ["driver", "native", "standalone-exports"]
+driver = []
+native = []
+# Only the core crate acting as its own DLL needs the exported symbols.
+standalone-exports = []
+
+[dependencies]
+
+# Build artefacts of the client library are not tracked.
+[profile.release]
+opt-level = 3
+panic = "abort"
+lto = true
+strip = true
+codegen-units = 1

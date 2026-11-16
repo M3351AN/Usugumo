@@ -54,6 +54,12 @@ pub struct Request {
     name: [u8; 64],
 }
 
+impl Default for Request {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Request {
     pub const fn new() -> Self {
         Self {

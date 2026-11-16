@@ -1,0 +1,25 @@
+[package]
+name = "usugumo_driver"
+version = "3.0.0"
+edition = "2024"
+description = "Usugumo client front-end DLL exposing only the driver backend"
+
+[lib]
+name = "usugumo_driver"
+crate-type = ["staticlib", "cdylib"]
+
+[features]
+default = ["driver", "standalone-exports"]
+driver = []
+native = []
+standalone-exports = []
+
+[dependencies]
+usugumo_client = { path = "../..", default-features = false, features = ["driver", "standalone-exports"] }
+
+[profile.release]
+opt-level = 3
+panic = "abort"
+lto = true
+strip = true
+codegen-units = 1
