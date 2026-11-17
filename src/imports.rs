@@ -540,7 +540,7 @@ pub fn resolve_imports() -> NtStatus {
 fn resolve_wsk_imports() -> bool {
     unsafe {
         let netio_name = obfstr::obfwide!("netio.sys");
-        let wsk_hashes: [[u8; 32]; 4] = [
+        const WSK_HASHES: [[u8; 32]; 4] = [
             sha256_const(b"WskRegister"),
             sha256_const(b"WskDeregister"),
             sha256_const(b"WskCaptureProviderNPI"),
@@ -553,8 +553,8 @@ fn resolve_wsk_imports() -> bool {
             addr_of_mut!(_WSK_RELEASE_PROVIDER_NPI),
         ];
 
-        for i in 0..wsk_hashes.len() {
-            let address = resolve_module_export_by_name(netio_name.as_ptr(), wsk_hashes[i]);
+        for i in 0..WSK_HASHES.len() {
+            let address = resolve_module_export_by_name(netio_name.as_ptr(), WSK_HASHES[i]);
             if address.is_null() {
                 return false;
             }

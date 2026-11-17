@@ -79,4 +79,5 @@ fn main() {
     println!("cargo:rustc-link-arg=/IGNORE:4216");
     println!("cargo:rustc-link-arg=/INCREMENTAL:NO");
     println!("cargo:rustc-link-arg=/MAP:{}", map_path.display());
+    println!("cargo:rustc-link-arg=/MAPINFO:EXPORTS");
 }
