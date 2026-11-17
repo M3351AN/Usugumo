@@ -56,6 +56,9 @@ pub const USUGUMO_SUPPORTED_MASK: u64 = USUGUMO_PROBE
 pub const USUGUMO_PROTOCOL_VERSION: u16 = 2;
 pub const USUGUMO_PROTOCOL_VERSION_SHIFT: u32 = 16;
 
+// probe return_value: bit 32 signals HVCI detected (hypervisor + registry enabled)
+pub const USUGUMO_PROBE_HVCI_MASK: u64 = 1 << 32;
+
 pub const fn probe_reply(version: u16, supported: u64) -> u64 {
     ((version as u64) << USUGUMO_PROTOCOL_VERSION_SHIFT) | (supported & 0xFFFF)
 }

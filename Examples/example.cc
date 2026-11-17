@@ -63,7 +63,7 @@ struct Api {
   const char* (*backend_name)(void) = nullptr;
 
   int (*init_name)(const char*, uint32_t) = nullptr;
-  int (*probe)(void) = nullptr;
+  uint64_t (*probe)(void) = nullptr;
   int (*is_connected)(void) = nullptr;
   uint16_t (*port)(void) = nullptr;
   int (*transport_error)(void) = nullptr;
@@ -216,7 +216,8 @@ int main() {
   }
   printf("Backend: %s\n", api.backend_name());
 
-  if (!api.probe()) {
+  const uint64_t probe_reply = api.probe();
+  if (probe_reply == 0) {
     if (want_driver) {
       printf("Driver probe failed\n");
       printf("  derived port : %u\n", static_cast<unsigned>(api.port()));
@@ -239,6 +240,10 @@ int main() {
     return 1;
   }
   printf(want_driver ? "Driver probe success\n" : "Using native api\n");
+  if (want_driver) {
+    printf("HVCI: %s\n",
+           (probe_reply & USUGUMO_PROBE_HVCI_MASK) ? "enabled" : "not detected");
+  }
 
   std::string targetProcessName(TARGET_PROCESS_NAME.begin(), TARGET_PROCESS_NAME.end());
   if (api.init_name(targetProcessName.c_str(), 0) != USUGUMO_STATUS_OK) {

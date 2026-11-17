@@ -19,14 +19,7 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc o
 - Kernel-mode keyboard input
 - Kernel-mode anti capture
 - Clean IAT
-
-## HVCI / VBS Compatibility
-
-Under HVCI/VBS (`hvci_enabled()`, via `ZwQuerySystemInformation` class 103, flag `0x400`), the page-table writable / `MmGetVirtualForPhysical` paths are blocked and CR3 is guest-physical. RPM/WPM run on the active path: switch the CPU's CR3 to the target process's DTB (`write_cr3`), range-precheck with `MmIsAddressValid`, then perform the copy with a plain `kmemmove` at `PASSIVE_LEVEL` — the pages are dereferenced directly, so a normal page fault is serviced by the MM instead of bugchecking.
-
-- Known limitation: because only the page table is swapped (no `KeAttachProcess` thread state), COW/read-only/missing user pages on the write path are not re-verified by the MM as user-space accesses. Write-past-`get_module_base` scenarios are validated against a target with resident, writable pages. AND MAY ALWAYS BSOD ON YOUR PC.
-
-~~Because I know too little about this, HVCI compatibility is minimal, may not continue working in these after.~~
+- Basic HVCI Compatibility
 
 ## KnownIssues
 
@@ -36,6 +29,24 @@ Under HVCI/VBS (`hvci_enabled()`, via `ZwQuerySystemInformation` class 103, flag
 - For the purpose of anti-paste, I unnecessarily rewrote many functions using MASM. However, doing so should not affect the actual functionality.
 - If the mapping is performed before system startup via an EFI driver or similar method, current implementation may not work.
 - Can not access swapped page.
+
+## HVCI / VBS Compatibility
+
+HVCI is detected by probing whether the page-walk path can be initialized: `hvci_status()` runs `init_pmem_pages()`, and a failure to set up the direct-mapped PML entries implies the page-table writes are blocked by HVCI. The result is cached for the process lifetime.
+
+Fallback path for HVCI: `read_process_memory` / `copy_virtual_memory` build an `MDL` over the target range, `KeStackAttachProcess` to the target, `MmProbeAndLockPages` to lock the pages, `MmMapLockedPagesSpecifyCache` to map them, transfer with `kmemmove`, then unmap and unlock.
+
+Known limitation:
+
+- Hardcoded field offsets must track the kernel `_MDL` layout(only test on 26100.9711)
+
+- `MmProbeAndLockPages` raises on a range it cannot lock
+
+- Can not access swapped pages too.
+
+- If it matters, note that this requires KeStackAttachProcess.
+
+~~Because I know too little about this, HVCI compatibility is minimal, may not continue working in these after.~~
 
 ## Build
 

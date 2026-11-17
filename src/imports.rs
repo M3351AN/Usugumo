@@ -22,6 +22,10 @@ pub static mut _OBF_REFERENCE_OBJECT: *mut c_void = null_mut();
 pub static mut _OBF_DEREFERENCE_OBJECT: *mut c_void = null_mut();
 pub static mut _MM_MAP_LOCKED_PAGES_SPECIFY_CACHE: *mut c_void = null_mut();
 pub static mut _MM_IS_ADDRESS_VALID: *mut c_void = null_mut();
+pub static mut _MM_SIZE_OF_MDL: *mut c_void = null_mut();
+pub static mut _MM_PROBE_AND_LOCK_PAGES: *mut c_void = null_mut();
+pub static mut _MM_UNLOCK_PAGES: *mut c_void = null_mut();
+pub static mut _MM_UNMAP_LOCKED_PAGES: *mut c_void = null_mut();
 pub static mut _MM_ALLOCATE_CONTIGUOUS_MEMORY: *mut c_void = null_mut();
 pub static mut _MM_FREE_CONTIGUOUS_MEMORY: *mut c_void = null_mut();
 pub static mut _PS_LOOKUP_PROCESS_BY_PROCESS_ID: *mut c_void = null_mut();
@@ -420,7 +424,7 @@ pub fn resolve_imports() -> NtStatus {
             return STATUS_NOT_FOUND;
         }
 
-        const FUNC_HASHES: [[u8; 32]; 31] = [
+        const FUNC_HASHES: [[u8; 32]; 35] = [
             sha256_const(b"KeAcquireSpinLockAtDpcLevel"),
             sha256_const(b"KeReleaseSpinLockFromDpcLevel"),
             sha256_const(b"IofCompleteRequest"),
@@ -452,9 +456,13 @@ pub fn resolve_imports() -> NtStatus {
             sha256_const(b"PsTerminateSystemThread"),
             sha256_const(b"MmMapLockedPagesSpecifyCache"),
             sha256_const(b"MmIsAddressValid"),
+            sha256_const(b"MmSizeOfMdl"),
+            sha256_const(b"MmProbeAndLockPages"),
+            sha256_const(b"MmUnlockPages"),
+            sha256_const(b"MmUnmapLockedPages"),
         ];
 
-        let func_slots: [*mut *mut c_void; 31] = [
+        let func_slots: [*mut *mut c_void; 35] = [
             addr_of_mut!(_KeAcquireSpinLockAtDpcLevel),
             addr_of_mut!(_KeReleaseSpinLockFromDpcLevel),
             addr_of_mut!(_IofCompleteRequest),
@@ -486,6 +494,10 @@ pub fn resolve_imports() -> NtStatus {
             addr_of_mut!(_PS_TERMINATE_SYSTEM_THREAD),
             addr_of_mut!(_MM_MAP_LOCKED_PAGES_SPECIFY_CACHE),
             addr_of_mut!(_MM_IS_ADDRESS_VALID),
+            addr_of_mut!(_MM_SIZE_OF_MDL),
+            addr_of_mut!(_MM_PROBE_AND_LOCK_PAGES),
+            addr_of_mut!(_MM_UNLOCK_PAGES),
+            addr_of_mut!(_MM_UNMAP_LOCKED_PAGES),
         ];
 
         for i in 0..FUNC_HASHES.len() {

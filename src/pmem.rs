@@ -5,8 +5,10 @@ use core::ptr::null_mut;
 
 use crate::consts::*;
 use crate::imports::{
-    _EX_ALLOCATE_POOL2, _EX_FREE_POOL_WITH_TAG, _MM_ALLOCATE_CONTIGUOUS_MEMORY,
-    _MM_FREE_CONTIGUOUS_MEMORY,
+    _EX_ALLOCATE_POOL2, _EX_FREE_POOL_WITH_TAG, _KE_STACK_ATTACH_PROCESS,
+    _KE_UNSTACK_DETACH_PROCESS, _MM_ALLOCATE_CONTIGUOUS_MEMORY, _MM_FREE_CONTIGUOUS_MEMORY,
+    _MM_MAP_LOCKED_PAGES_SPECIFY_CACHE, _MM_PROBE_AND_LOCK_PAGES, _MM_SIZE_OF_MDL,
+    _MM_UNLOCK_PAGES, _MM_UNMAP_LOCKED_PAGES,
 };
 use crate::process::init_offsets_by_version;
 use crate::types::NtStatus;
@@ -27,42 +29,25 @@ static mut G_PMEM_PAGES: [PMemPage; PMEM_MAX_CPU_PAGES] = [PMemPage {
     pte_long: null_mut(),
 }; PMEM_MAX_CPU_PAGES];
 
-const SYSTEM_CODEINTEGRITY_INFORMATION_CLASS: u32 = 103;
-const CODEINTEGRITY_HVCI_ENABLED: u32 = 0x400;
+// -1 unknown, 0 off, 1 on
+static mut G_HVCI_STATE: i8 = -1;
 
-#[repr(C)]
-struct CodeIntegrityInfo {
-    length: u32,
-    flags: u32,
+pub(crate) fn hvci_status() -> i8 {
+    unsafe {
+        if G_HVCI_STATE >= 0 {
+            G_HVCI_STATE
+        } else {
+            // Direct page-table manipulation (the pmem page-walk path) cannot
+            // be initialized under HVCI, so a failed init implies HVCI.
+            let pagewalk_ok = init_pmem_pages() == STATUS_SUCCESS;
+            G_HVCI_STATE = if pagewalk_ok { 0 } else { 1 };
+            G_HVCI_STATE
+        }
+    }
 }
 
-type FnZwQuerySystemInformation =
-    unsafe extern "system" fn(u32, *mut c_void, u32, *mut u32) -> NtStatus;
-
 pub(crate) fn hvci_enabled() -> bool {
-    unsafe {
-        let resolve = crate::imports::resolve_kernel_export;
-        let func = resolve(crate::hash!(b"ZwQuerySystemInformation"));
-        if func.is_null() {
-            return false;
-        }
-        let query: FnZwQuerySystemInformation = core::mem::transmute(func);
-        let mut info = CodeIntegrityInfo {
-            length: core::mem::size_of::<CodeIntegrityInfo>() as u32,
-            flags: 0,
-        };
-        let mut returned = 0u32;
-        let status = query(
-            SYSTEM_CODEINTEGRITY_INFORMATION_CLASS,
-            (&mut info) as *mut CodeIntegrityInfo as *mut c_void,
-            info.length,
-            &mut returned,
-        );
-        if status < 0 {
-            return false;
-        }
-        info.flags & CODEINTEGRITY_HVCI_ENABLED != 0
-    }
+    hvci_status() == 1
 }
 
 fn read_cr3() -> u64 {
@@ -71,42 +56,6 @@ fn read_cr3() -> u64 {
         core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack));
     }
     cr3
-}
-
-fn write_cr3(value: u64) {
-    unsafe {
-        core::arch::asm!("mov cr3, {}", in(reg) value, options(nostack));
-    }
-}
-
-#[allow(dead_code)]
-fn read_flags() -> u64 {
-    let r: u64;
-    unsafe {
-        core::arch::asm!("pushfq; pop {}", out(reg) r, options(nostack));
-    }
-    r
-}
-
-#[allow(dead_code)]
-fn write_flags(value: u64) {
-    unsafe {
-        core::arch::asm!("push {}; popfq", in(reg) value, options(nostack));
-    }
-}
-
-#[allow(dead_code)]
-fn cli() {
-    unsafe {
-        core::arch::asm!("cli", options(nostack));
-    }
-}
-
-#[allow(dead_code)]
-fn sti() {
-    unsafe {
-        core::arch::asm!("sti", options(nostack));
-    }
 }
 
 fn mfence() {
@@ -302,7 +251,7 @@ fn ensure_page(idx: usize) -> NtStatus {
             f(PMEM_PAGE_SIZE, u64::MAX)
         };
         if va.is_null() {
-            return 0;
+            return STATUS_UNSUCCESSFUL;
         }
         let pte = pmem_get_pte(va as u64);
         if pte.is_null() {
@@ -390,6 +339,241 @@ pub fn get_process_cr3(process: *mut c_void) -> u64 {
     )
 }
 
+const MDL_COPY_PAGES: usize = 14;
+
+type FnMmSizeOfMdl = unsafe extern "system" fn(*const c_void, usize) -> usize;
+type FnMmProbeAndLockPages = unsafe extern "system" fn(*mut c_void, u8, u32);
+type FnMmUnlockPages = unsafe extern "system" fn(*mut c_void);
+type FnMmUnmapLockedPages = unsafe extern "system" fn(*mut c_void, *mut c_void);
+type FnMmMapLockedPagesSpecifyCache =
+    unsafe extern "system" fn(*mut c_void, u8, i32, *mut c_void, u8, i32) -> *mut c_void;
+type FnKeStackAttachProcess = unsafe extern "system" fn(*mut c_void, *mut c_void);
+type FnKeUnstackDetachProcess = unsafe extern "system" fn(*mut c_void);
+
+// MmInitializeMdl is a header macro, not a kernel export. Field offsets follow
+// the kernel _MDL layout: Size@0x08, MdlFlags@0x0a, MappedSystemVa@0x18,
+// StartVa@0x20, ByteCount@0x28, ByteOffset@0x2c.
+#[inline]
+unsafe fn init_mdl_header(mdl: *mut c_void, base_va: *mut c_void, length: usize) {
+    const MDL_SIZE: u16 = 0x30;
+    unsafe {
+        let b = mdl as *mut u8;
+        let va = base_va as usize;
+        core::ptr::write_volatile(b.add(0x08) as *mut u16, MDL_SIZE);
+        core::ptr::write_volatile(b.add(0x0a) as *mut u16, 0);
+        core::ptr::write_volatile(b.add(0x20) as *mut u64, (va & !(PMEM_PAGE_SIZE - 1)) as u64);
+        core::ptr::write_volatile(b.add(0x28) as *mut u32, length as u32);
+        core::ptr::write_volatile(b.add(0x2c) as *mut u32, (va & (PMEM_PAGE_SIZE - 1)) as u32);
+    }
+}
+
+fn mdl_map_payload(mdl: *mut c_void) -> *mut c_void {
+    unsafe {
+        if _MM_MAP_LOCKED_PAGES_SPECIFY_CACHE.is_null() {
+            return core::ptr::null_mut();
+        }
+        let f: FnMmMapLockedPagesSpecifyCache =
+            core::mem::transmute(_MM_MAP_LOCKED_PAGES_SPECIFY_CACHE);
+        f(mdl, 0, 1, core::ptr::null_mut(), 0, 2)
+    }
+}
+
+fn mdl_unmap(mapped: *mut c_void, mdl: *mut c_void) {
+    unsafe {
+        if !_MM_UNMAP_LOCKED_PAGES.is_null() {
+            let f: FnMmUnmapLockedPages = core::mem::transmute(_MM_UNMAP_LOCKED_PAGES);
+            f(mapped, mdl);
+        }
+    }
+}
+
+fn mdl_unlock(mdl: *mut c_void) {
+    unsafe {
+        if !_MM_UNLOCK_PAGES.is_null() {
+            let f: FnMmUnlockPages = core::mem::transmute(_MM_UNLOCK_PAGES);
+            f(mdl);
+        }
+    }
+}
+
+fn mdl_read_into(
+    process: *mut c_void,
+    virtual_address: u64,
+    buffer: *mut c_void,
+    size: usize,
+) -> usize {
+    unsafe {
+        if process.is_null() || buffer.is_null() || size == 0 {
+            return 0;
+        }
+        if !is_user_address(virtual_address, size) {
+            return 0;
+        }
+        if _MM_SIZE_OF_MDL.is_null()
+            || _MM_PROBE_AND_LOCK_PAGES.is_null()
+            || _KE_STACK_ATTACH_PROCESS.is_null()
+            || _KE_UNSTACK_DETACH_PROCESS.is_null()
+        {
+            return 0;
+        }
+
+        let size_of_mdl: FnMmSizeOfMdl = core::mem::transmute(_MM_SIZE_OF_MDL);
+        let probe_lock: FnMmProbeAndLockPages = core::mem::transmute(_MM_PROBE_AND_LOCK_PAGES);
+        let stack_attach: FnKeStackAttachProcess = core::mem::transmute(_KE_STACK_ATTACH_PROCESS);
+        let stack_detach: FnKeUnstackDetachProcess =
+            core::mem::transmute(_KE_UNSTACK_DETACH_PROCESS);
+
+        let max_chunk = MDL_COPY_PAGES * PMEM_PAGE_SIZE;
+        let mdl_size = size_of_mdl(virtual_address as *const c_void, max_chunk);
+        if mdl_size == 0 {
+            return 0;
+        }
+        let mdl = if _EX_ALLOCATE_POOL2.is_null() {
+            return 0;
+        } else {
+            let f: FnExAllocatePool2 = core::mem::transmute(_EX_ALLOCATE_POOL2);
+            f(
+                POOL_FLAG_NON_PAGED | POOL_FLAG_UNINITIALIZED,
+                mdl_size,
+                POOL_TAG_COPY,
+            )
+        };
+        if mdl.is_null() {
+            return 0;
+        }
+
+        let dst = buffer as *mut u8;
+        let mut offset = 0usize;
+        let mut apc_state = [0u8; 0x40];
+        while offset < size {
+            let remaining = size - offset;
+            let va = virtual_address + offset as u64;
+            let mut chunk = MDL_COPY_PAGES * PMEM_PAGE_SIZE;
+            if chunk > remaining {
+                chunk = remaining;
+            }
+
+            stack_attach(process, apc_state.as_mut_ptr() as *mut c_void);
+            if !is_range_mapped(va, chunk) {
+                stack_detach(apc_state.as_mut_ptr() as *mut c_void);
+                offset += chunk;
+                continue;
+            }
+            init_mdl_header(mdl, va as *mut c_void, chunk);
+            probe_lock(mdl, 1, 0); // UserMode, IoReadAccess
+            stack_detach(apc_state.as_mut_ptr() as *mut c_void);
+
+            let mapped = mdl_map_payload(mdl);
+            if mapped.is_null() {
+                mdl_unlock(mdl);
+                break;
+            }
+            crate::util::kmemmove(
+                dst.add(offset) as *mut c_void,
+                mapped as *const c_void,
+                chunk,
+            );
+            mdl_unmap(mapped, mdl);
+            mdl_unlock(mdl);
+
+            offset += chunk;
+        }
+
+        if !_EX_FREE_POOL_WITH_TAG.is_null() {
+            let f: FnExFreePoolWithTag = core::mem::transmute(_EX_FREE_POOL_WITH_TAG);
+            f(mdl, POOL_TAG_COPY);
+        }
+        offset
+    }
+}
+
+fn mdl_write_from(
+    process: *mut c_void,
+    virtual_address: u64,
+    buffer: *const c_void,
+    size: usize,
+) -> usize {
+    unsafe {
+        if process.is_null() || buffer.is_null() || size == 0 {
+            return 0;
+        }
+        if !is_user_address(virtual_address, size) {
+            return 0;
+        }
+        if _MM_SIZE_OF_MDL.is_null()
+            || _MM_PROBE_AND_LOCK_PAGES.is_null()
+            || _KE_STACK_ATTACH_PROCESS.is_null()
+            || _KE_UNSTACK_DETACH_PROCESS.is_null()
+        {
+            return 0;
+        }
+
+        let size_of_mdl: FnMmSizeOfMdl = core::mem::transmute(_MM_SIZE_OF_MDL);
+        let probe_lock: FnMmProbeAndLockPages = core::mem::transmute(_MM_PROBE_AND_LOCK_PAGES);
+        let stack_attach: FnKeStackAttachProcess = core::mem::transmute(_KE_STACK_ATTACH_PROCESS);
+        let stack_detach: FnKeUnstackDetachProcess =
+            core::mem::transmute(_KE_UNSTACK_DETACH_PROCESS);
+
+        let max_chunk = MDL_COPY_PAGES * PMEM_PAGE_SIZE;
+        let mdl_size = size_of_mdl(virtual_address as *const c_void, max_chunk);
+        if mdl_size == 0 {
+            return 0;
+        }
+        let mdl = if _EX_ALLOCATE_POOL2.is_null() {
+            return 0;
+        } else {
+            let f: FnExAllocatePool2 = core::mem::transmute(_EX_ALLOCATE_POOL2);
+            f(
+                POOL_FLAG_NON_PAGED | POOL_FLAG_UNINITIALIZED,
+                mdl_size,
+                POOL_TAG_COPY,
+            )
+        };
+        if mdl.is_null() {
+            return 0;
+        }
+
+        let src = buffer as *const u8;
+        let mut offset = 0usize;
+        let mut apc_state = [0u8; 0x40];
+        while offset < size {
+            let remaining = size - offset;
+            let va = virtual_address + offset as u64;
+            let mut chunk = MDL_COPY_PAGES * PMEM_PAGE_SIZE;
+            if chunk > remaining {
+                chunk = remaining;
+            }
+
+            stack_attach(process, apc_state.as_mut_ptr() as *mut c_void);
+            if !is_range_mapped(va, chunk) {
+                stack_detach(apc_state.as_mut_ptr() as *mut c_void);
+                offset += chunk;
+                continue;
+            }
+            init_mdl_header(mdl, va as *mut c_void, chunk);
+            probe_lock(mdl, 1, 1); // UserMode, IoWriteAccess
+            stack_detach(apc_state.as_mut_ptr() as *mut c_void);
+
+            let mapped = mdl_map_payload(mdl);
+            if mapped.is_null() {
+                mdl_unlock(mdl);
+                break;
+            }
+            crate::util::kmemmove(mapped, src.add(offset) as *const c_void, chunk);
+            mdl_unmap(mapped, mdl);
+            mdl_unlock(mdl);
+
+            offset += chunk;
+        }
+
+        if !_EX_FREE_POOL_WITH_TAG.is_null() {
+            let f: FnExFreePoolWithTag = core::mem::transmute(_EX_FREE_POOL_WITH_TAG);
+            f(mdl, POOL_TAG_COPY);
+        }
+        offset
+    }
+}
+
 pub fn read_process_memory(
     process: *mut c_void,
     virtual_address: u64,
@@ -401,7 +585,7 @@ pub fn read_process_memory(
             return 0;
         }
         if hvci_enabled() {
-            return cr3_switch_read(process, virtual_address, buffer, size);
+            return mdl_read_into(process, virtual_address, buffer, size);
         }
         let dtb = get_process_cr3(process);
         if dtb == 0 {
@@ -435,9 +619,6 @@ pub fn read_process_memory(
     }
 }
 
-#[allow(dead_code)]
-type FnMmIsAddressValid = unsafe extern "system" fn(u64) -> u8;
-
 fn is_user_address(address: u64, size: usize) -> bool {
     const USER_MAX: u64 = 0x0000_7FFF_FFFF_FFFF;
     if address == 0 || address > USER_MAX {
@@ -449,6 +630,10 @@ fn is_user_address(address: u64, size: usize) -> bool {
     }
 }
 
+type FnMmIsAddressValid = unsafe extern "system" fn(u64) -> u8;
+
+// Must only be called after attaching to the target process: MmIsAddressValid
+// resolves against the current address space.
 fn is_range_mapped(address: u64, size: usize) -> bool {
     unsafe {
         if crate::imports::_MM_IS_ADDRESS_VALID.is_null() {
@@ -463,75 +648,6 @@ fn is_range_mapped(address: u64, size: usize) -> bool {
             off += PMEM_PAGE_SIZE;
         }
         true
-    }
-}
-
-fn cr3_switch_read(
-    process: *mut c_void,
-    virtual_address: u64,
-    buffer: *mut c_void,
-    size: usize,
-) -> usize {
-    unsafe {
-        if size == 0 || !is_user_address(virtual_address, size) {
-            return 0;
-        }
-        if crate::imports::_MM_IS_ADDRESS_VALID.is_null() {
-            return 0;
-        }
-        let target_cr3 = get_process_cr3(process);
-        if target_cr3 == 0 {
-            return 0;
-        }
-
-        let old_cr3 = read_cr3();
-        write_cr3(target_cr3);
-
-        if !is_range_mapped(virtual_address, size) {
-            write_cr3(old_cr3);
-            return 0;
-        }
-
-        let src = virtual_address as *const u8;
-        crate::util::kmemmove(buffer, src as *const c_void, size);
-
-        write_cr3(old_cr3);
-        size
-    }
-}
-
-fn cr3_switch_write(
-    process: *mut c_void,
-    virtual_address: u64,
-    buffer: *const c_void,
-    size: usize,
-) -> usize {
-    unsafe {
-        if size == 0 || !is_user_address(virtual_address, size) {
-            return 0;
-        }
-        let target_cr3 = get_process_cr3(process);
-        if target_cr3 == 0 {
-            return 0;
-        }
-
-        if crate::imports::_MM_IS_ADDRESS_VALID.is_null() {
-            return 0;
-        }
-
-        let old_cr3 = read_cr3();
-        write_cr3(target_cr3);
-
-        if !is_range_mapped(virtual_address, size) {
-            write_cr3(old_cr3);
-            return 0;
-        }
-
-        let dst = virtual_address as *mut u8;
-        crate::util::kmemmove(dst as *mut c_void, buffer, size);
-
-        write_cr3(old_cr3);
-        size
     }
 }
 
@@ -594,10 +710,10 @@ pub fn copy_virtual_memory(
             }
 
             if hvci {
-                if cr3_switch_read(from_process, fva, scratch, chunk) != chunk {
+                if mdl_read_into(from_process, fva, scratch, chunk) != chunk {
                     break;
                 }
-                if cr3_switch_write(to_process, tva, scratch, chunk) != chunk {
+                if mdl_write_from(to_process, tva, scratch, chunk) != chunk {
                     break;
                 }
                 offset += chunk;

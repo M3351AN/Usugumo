@@ -33,7 +33,6 @@ WPP_RECORDER_SFMeme:
     ret"
 );
 
-#[unsafe(no_mangle)]
 pub(crate) unsafe extern "C" fn kmemmove(
     dst: *mut c_void,
     src: *const c_void,

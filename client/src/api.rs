@@ -253,9 +253,9 @@ pub extern "C" fn usugumo_client_init_pid(pid: u64, access: u32) -> i32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn usugumo_client_probe() -> i32 {
+pub extern "C" fn usugumo_client_probe() -> u64 {
     match instance() {
-        Some(c) => c.backend.probe() as i32,
+        Some(c) => c.backend.probe(),
         None => 0,
     }
 }

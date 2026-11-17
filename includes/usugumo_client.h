@@ -35,7 +35,9 @@ const char* usugumo_client_backend_name(void);
 int32_t usugumo_client_init_pid(uint64_t pid, uint32_t access);
 int32_t usugumo_client_init_name(const char* name, uint32_t access);
 
-int32_t usugumo_client_probe(void);
+#define USUGUMO_PROBE_HVCI_MASK (1ull << 32)
+
+uint64_t usugumo_client_probe(void);
 uint16_t usugumo_client_driver_version(void);
 uint16_t usugumo_client_supported(void);
 int32_t usugumo_client_is_connected(void);

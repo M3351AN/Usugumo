@@ -16,6 +16,7 @@ pub(crate) struct Session {
     current_pid: u64,
     driver_version: u16,
     supported: u16,
+    hvci: bool,
     last_wire: protocol::Request,
 }
 
@@ -27,6 +28,7 @@ impl Session {
             current_pid: 0,
             driver_version: 0,
             supported: 0,
+            hvci: false,
             last_wire: protocol::Request::new(),
         }
     }
@@ -100,16 +102,17 @@ impl Session {
         }
     }
 
-    pub(crate) fn probe(&mut self) -> bool {
+    pub(crate) fn probe(&mut self) -> u64 {
         let mut request = protocol::Request::new();
         request.function = consts::USUGUMO_PROBE;
         if !self.exchange(request) {
-            return false;
+            return 0;
         }
         let reply = self.last_wire.return_value;
         self.driver_version = ((reply >> consts::USUGUMO_PROTOCOL_VERSION_SHIFT) & 0xFFFF) as u16;
         self.supported = (reply & consts::USUGUMO_FUNC_BITS) as u16;
-        self.supported != 0
+        self.hvci = reply & consts::USUGUMO_PROBE_HVCI_MASK != 0;
+        reply
     }
 
     pub(crate) fn read_memory(&mut self, target_addr: u64, local_addr: u64, size: usize) -> u32 {

@@ -49,7 +49,11 @@ pub unsafe extern "system" fn request_handler(pstruct: *mut Requests) -> u8 {
         let func = (*pstruct).request_key & USUGUMO_FUNC_BITS;
 
         if func & USUGUMO_PROBE != 0 {
-            (*pstruct).return_value = probe_reply(USUGUMO_PROTOCOL_VERSION, USUGUMO_SUPPORTED_MASK);
+            let mut reply = probe_reply(USUGUMO_PROTOCOL_VERSION, USUGUMO_SUPPORTED_MASK);
+            if crate::pmem::hvci_status() == 1 {
+                reply |= USUGUMO_PROBE_HVCI_MASK;
+            }
+            (*pstruct).return_value = reply;
             return 1;
         }
 

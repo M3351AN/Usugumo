@@ -6,7 +6,7 @@ pub(crate) trait Backend: Send {
     fn name(&self) -> &'static str;
     fn init_pid(&mut self, pid: u64, access: u32) -> bool;
     fn init_name(&mut self, name: &[u8], access: u32) -> bool;
-    fn probe(&mut self) -> bool;
+    fn probe(&mut self) -> u64;
     fn driver_version(&self) -> u16;
     fn supported(&self) -> u16;
     fn is_connected(&self) -> bool;
@@ -65,9 +65,9 @@ pub(crate) mod driver {
             true
         }
 
-        fn probe(&mut self) -> bool {
+        fn probe(&mut self) -> u64 {
             if !self.0.ensure_connected() {
-                return false;
+                return 0;
             }
             self.0.probe()
         }
@@ -166,8 +166,8 @@ pub(crate) mod native_backend {
             self.0.open_by_name(&to_wide(name), mask(access))
         }
 
-        fn probe(&mut self) -> bool {
-            true
+        fn probe(&mut self) -> u64 {
+            0
         }
         fn driver_version(&self) -> u16 {
             0
