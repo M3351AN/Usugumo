@@ -20,6 +20,14 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc o
 - Kernel-mode anti capture
 - Clean IAT
 
+## HVCI / VBS Compatibility
+
+Under HVCI/VBS (`hvci_enabled()`, via `ZwQuerySystemInformation` class 103, flag `0x400`), the page-table writable / `MmGetVirtualForPhysical` paths are blocked and CR3 is guest-physical. RPM/WPM run on the active path: switch the CPU's CR3 to the target process's DTB (`write_cr3`), range-precheck with `MmIsAddressValid`, then perform the copy with a plain `kmemmove` at `PASSIVE_LEVEL` — the pages are dereferenced directly, so a normal page fault is serviced by the MM instead of bugchecking.
+
+- Known limitation: because only the page table is swapped (no `KeAttachProcess` thread state), COW/read-only/missing user pages on the write path are not re-verified by the MM as user-space accesses. Write-past-`get_module_base` scenarios are validated against a target with resident, writable pages. AND MAY ALWAYS BSOD ON YOUR PC.
+
+~~Because I know too little about this, HVCI compatibility is minimal, may not continue working in these after.~~
+
 ## KnownIssues
 
 - Currently only works on x64 windows (other arch, no quiero)

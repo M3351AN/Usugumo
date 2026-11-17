@@ -85,12 +85,9 @@ unsafe fn driver_teardown() {
 #[inline(never)]
 unsafe fn driver_init() -> NtStatus {
     unsafe {
-        let mut status = pmem::init_pmem_pages();
-        if status < 0 {
-            return status;
-        }
+        pmem::init_pmem_pages();
 
-        status = wsk::start_server();
+        let status = wsk::start_server();
         if status < 0 {
             driver_teardown();
             return status;

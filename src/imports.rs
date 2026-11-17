@@ -21,6 +21,7 @@ pub static mut _OB_REFERENCE_OBJECT_BY_NAME: *mut c_void = null_mut();
 pub static mut _OBF_REFERENCE_OBJECT: *mut c_void = null_mut();
 pub static mut _OBF_DEREFERENCE_OBJECT: *mut c_void = null_mut();
 pub static mut _MM_MAP_LOCKED_PAGES_SPECIFY_CACHE: *mut c_void = null_mut();
+pub static mut _MM_IS_ADDRESS_VALID: *mut c_void = null_mut();
 pub static mut _MM_ALLOCATE_CONTIGUOUS_MEMORY: *mut c_void = null_mut();
 pub static mut _MM_FREE_CONTIGUOUS_MEMORY: *mut c_void = null_mut();
 pub static mut _PS_LOOKUP_PROCESS_BY_PROCESS_ID: *mut c_void = null_mut();
@@ -37,7 +38,6 @@ pub static mut _NT_BUILD_NUMBER: u16 = 0;
 
 pub static mut _IO_ALLOCATE_IRP: *mut c_void = null_mut();
 pub static mut _IO_FREE_IRP: *mut c_void = null_mut();
-pub static mut _IO_SET_COMPLETION_ROUTINE_EX: *mut c_void = null_mut();
 pub static mut _IO_ALLOCATE_MDL: *mut c_void = null_mut();
 pub static mut _IO_FREE_MDL: *mut c_void = null_mut();
 pub static mut _MM_BUILD_MDL_FOR_NON_PAGED_POOL: *mut c_void = null_mut();
@@ -420,7 +420,7 @@ pub fn resolve_imports() -> NtStatus {
             return STATUS_NOT_FOUND;
         }
 
-        const FUNC_HASHES: [[u8; 32]; 30] = [
+        const FUNC_HASHES: [[u8; 32]; 31] = [
             sha256_const(b"KeAcquireSpinLockAtDpcLevel"),
             sha256_const(b"KeReleaseSpinLockFromDpcLevel"),
             sha256_const(b"IofCompleteRequest"),
@@ -440,7 +440,6 @@ pub fn resolve_imports() -> NtStatus {
             sha256_const(b"KeUnstackDetachProcess"),
             sha256_const(b"IoAllocateIrp"),
             sha256_const(b"IoFreeIrp"),
-            sha256_const(b"IoSetCompletionRoutineEx"),
             sha256_const(b"IoAllocateMdl"),
             sha256_const(b"IoFreeMdl"),
             sha256_const(b"MmBuildMdlForNonPagedPool"),
@@ -451,9 +450,11 @@ pub fn resolve_imports() -> NtStatus {
             sha256_const(b"KeDelayExecutionThread"),
             sha256_const(b"PsCreateSystemThread"),
             sha256_const(b"PsTerminateSystemThread"),
+            sha256_const(b"MmMapLockedPagesSpecifyCache"),
+            sha256_const(b"MmIsAddressValid"),
         ];
 
-        let func_slots: [*mut *mut c_void; 30] = [
+        let func_slots: [*mut *mut c_void; 31] = [
             addr_of_mut!(_KeAcquireSpinLockAtDpcLevel),
             addr_of_mut!(_KeReleaseSpinLockFromDpcLevel),
             addr_of_mut!(_IofCompleteRequest),
@@ -473,7 +474,6 @@ pub fn resolve_imports() -> NtStatus {
             addr_of_mut!(_KE_UNSTACK_DETACH_PROCESS),
             addr_of_mut!(_IO_ALLOCATE_IRP),
             addr_of_mut!(_IO_FREE_IRP),
-            addr_of_mut!(_IO_SET_COMPLETION_ROUTINE_EX),
             addr_of_mut!(_IO_ALLOCATE_MDL),
             addr_of_mut!(_IO_FREE_MDL),
             addr_of_mut!(_MM_BUILD_MDL_FOR_NON_PAGED_POOL),
@@ -484,6 +484,8 @@ pub fn resolve_imports() -> NtStatus {
             addr_of_mut!(_KE_DELAY_EXECUTION_THREAD),
             addr_of_mut!(_PS_CREATE_SYSTEM_THREAD),
             addr_of_mut!(_PS_TERMINATE_SYSTEM_THREAD),
+            addr_of_mut!(_MM_MAP_LOCKED_PAGES_SPECIFY_CACHE),
+            addr_of_mut!(_MM_IS_ADDRESS_VALID),
         ];
 
         for i in 0..FUNC_HASHES.len() {

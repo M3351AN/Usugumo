@@ -27,12 +27,86 @@ static mut G_PMEM_PAGES: [PMemPage; PMEM_MAX_CPU_PAGES] = [PMemPage {
     pte_long: null_mut(),
 }; PMEM_MAX_CPU_PAGES];
 
+const SYSTEM_CODEINTEGRITY_INFORMATION_CLASS: u32 = 103;
+const CODEINTEGRITY_HVCI_ENABLED: u32 = 0x400;
+
+#[repr(C)]
+struct CodeIntegrityInfo {
+    length: u32,
+    flags: u32,
+}
+
+type FnZwQuerySystemInformation =
+    unsafe extern "system" fn(u32, *mut c_void, u32, *mut u32) -> NtStatus;
+
+pub(crate) fn hvci_enabled() -> bool {
+    unsafe {
+        let resolve = crate::imports::resolve_kernel_export;
+        let func = resolve(crate::hash!(b"ZwQuerySystemInformation"));
+        if func.is_null() {
+            return false;
+        }
+        let query: FnZwQuerySystemInformation = core::mem::transmute(func);
+        let mut info = CodeIntegrityInfo {
+            length: core::mem::size_of::<CodeIntegrityInfo>() as u32,
+            flags: 0,
+        };
+        let mut returned = 0u32;
+        let status = query(
+            SYSTEM_CODEINTEGRITY_INFORMATION_CLASS,
+            (&mut info) as *mut CodeIntegrityInfo as *mut c_void,
+            info.length,
+            &mut returned,
+        );
+        if status < 0 {
+            return false;
+        }
+        info.flags & CODEINTEGRITY_HVCI_ENABLED != 0
+    }
+}
+
 fn read_cr3() -> u64 {
     let cr3: u64;
     unsafe {
         core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack));
     }
     cr3
+}
+
+fn write_cr3(value: u64) {
+    unsafe {
+        core::arch::asm!("mov cr3, {}", in(reg) value, options(nostack));
+    }
+}
+
+#[allow(dead_code)]
+fn read_flags() -> u64 {
+    let r: u64;
+    unsafe {
+        core::arch::asm!("pushfq; pop {}", out(reg) r, options(nostack));
+    }
+    r
+}
+
+#[allow(dead_code)]
+fn write_flags(value: u64) {
+    unsafe {
+        core::arch::asm!("push {}; popfq", in(reg) value, options(nostack));
+    }
+}
+
+#[allow(dead_code)]
+fn cli() {
+    unsafe {
+        core::arch::asm!("cli", options(nostack));
+    }
+}
+
+#[allow(dead_code)]
+fn sti() {
+    unsafe {
+        core::arch::asm!("sti", options(nostack));
+    }
 }
 
 fn mfence() {
@@ -326,6 +400,9 @@ pub fn read_process_memory(
         if process.is_null() || buffer.is_null() {
             return 0;
         }
+        if hvci_enabled() {
+            return cr3_switch_read(process, virtual_address, buffer, size);
+        }
         let dtb = get_process_cr3(process);
         if dtb == 0 {
             return 0;
@@ -358,6 +435,106 @@ pub fn read_process_memory(
     }
 }
 
+#[allow(dead_code)]
+type FnMmIsAddressValid = unsafe extern "system" fn(u64) -> u8;
+
+fn is_user_address(address: u64, size: usize) -> bool {
+    const USER_MAX: u64 = 0x0000_7FFF_FFFF_FFFF;
+    if address == 0 || address > USER_MAX {
+        return false;
+    }
+    match address.checked_add(size as u64) {
+        Some(end) => end <= USER_MAX,
+        None => false,
+    }
+}
+
+fn is_range_mapped(address: u64, size: usize) -> bool {
+    unsafe {
+        if crate::imports::_MM_IS_ADDRESS_VALID.is_null() {
+            return false;
+        }
+        let f: FnMmIsAddressValid = core::mem::transmute(crate::imports::_MM_IS_ADDRESS_VALID);
+        let mut off = 0usize;
+        while off < size {
+            if f(address + off as u64) == 0 {
+                return false;
+            }
+            off += PMEM_PAGE_SIZE;
+        }
+        true
+    }
+}
+
+fn cr3_switch_read(
+    process: *mut c_void,
+    virtual_address: u64,
+    buffer: *mut c_void,
+    size: usize,
+) -> usize {
+    unsafe {
+        if size == 0 || !is_user_address(virtual_address, size) {
+            return 0;
+        }
+        if crate::imports::_MM_IS_ADDRESS_VALID.is_null() {
+            return 0;
+        }
+        let target_cr3 = get_process_cr3(process);
+        if target_cr3 == 0 {
+            return 0;
+        }
+
+        let old_cr3 = read_cr3();
+        write_cr3(target_cr3);
+
+        if !is_range_mapped(virtual_address, size) {
+            write_cr3(old_cr3);
+            return 0;
+        }
+
+        let src = virtual_address as *const u8;
+        crate::util::kmemmove(buffer, src as *const c_void, size);
+
+        write_cr3(old_cr3);
+        size
+    }
+}
+
+fn cr3_switch_write(
+    process: *mut c_void,
+    virtual_address: u64,
+    buffer: *const c_void,
+    size: usize,
+) -> usize {
+    unsafe {
+        if size == 0 || !is_user_address(virtual_address, size) {
+            return 0;
+        }
+        let target_cr3 = get_process_cr3(process);
+        if target_cr3 == 0 {
+            return 0;
+        }
+
+        if crate::imports::_MM_IS_ADDRESS_VALID.is_null() {
+            return 0;
+        }
+
+        let old_cr3 = read_cr3();
+        write_cr3(target_cr3);
+
+        if !is_range_mapped(virtual_address, size) {
+            write_cr3(old_cr3);
+            return 0;
+        }
+
+        let dst = virtual_address as *mut u8;
+        crate::util::kmemmove(dst as *mut c_void, buffer, size);
+
+        write_cr3(old_cr3);
+        size
+    }
+}
+
 pub fn copy_virtual_memory(
     from_process: *mut c_void,
     from_address: u64,
@@ -367,12 +544,6 @@ pub fn copy_virtual_memory(
 ) -> usize {
     unsafe {
         if from_process.is_null() || to_process.is_null() || size == 0 {
-            return 0;
-        }
-
-        let from_dtb = get_process_cr3(from_process);
-        let to_dtb = get_process_cr3(to_process);
-        if from_dtb == 0 || to_dtb == 0 {
             return 0;
         }
 
@@ -390,6 +561,23 @@ pub fn copy_virtual_memory(
             return 0;
         }
 
+        let hvci = hvci_enabled();
+        let from_dtb = if hvci {
+            0
+        } else {
+            let d = get_process_cr3(from_process);
+            if d == 0 {
+                secure_zero(scratch as *mut u8, PMEM_PAGE_SIZE);
+                if !_EX_FREE_POOL_WITH_TAG.is_null() {
+                    let f: FnExFreePoolWithTag = core::mem::transmute(_EX_FREE_POOL_WITH_TAG);
+                    f(scratch, POOL_TAG_COPY);
+                }
+                return 0;
+            }
+            d
+        };
+        let to_dtb = if hvci { 0 } else { get_process_cr3(to_process) };
+
         let mut offset = 0usize;
         while offset < size {
             let remaining = size - offset;
@@ -403,6 +591,17 @@ pub fn copy_virtual_memory(
             }
             if chunk > remaining {
                 chunk = remaining;
+            }
+
+            if hvci {
+                if cr3_switch_read(from_process, fva, scratch, chunk) != chunk {
+                    break;
+                }
+                if cr3_switch_write(to_process, tva, scratch, chunk) != chunk {
+                    break;
+                }
+                offset += chunk;
+                continue;
             }
 
             let fphys = translate_linear_address(from_dtb, fva);
