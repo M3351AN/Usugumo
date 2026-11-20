@@ -34,8 +34,8 @@ pub static mut _EX_FREE_POOL_WITH_TAG: *mut c_void = null_mut();
 pub static mut _ZW_CLOSE: *mut c_void = null_mut();
 pub static mut _ZW_CREATE_FILE: *mut c_void = null_mut();
 pub static mut _ZW_QUERY_VOLUME_INFORMATION_FILE: *mut c_void = null_mut();
-pub static mut _KE_STACK_ATTACH_PROCESS: *mut c_void = null_mut();
-pub static mut _KE_UNSTACK_DETACH_PROCESS: *mut c_void = null_mut();
+pub static mut _KE_ATTACH_PROCESS: *mut c_void = null_mut();
+pub static mut _KE_DETACH_PROCESS: *mut c_void = null_mut();
 pub static mut _IO_DRIVER_OBJECT_TYPE: *mut c_void = null_mut();
 pub static mut _PS_LOADED_MODULE_LIST: *mut c_void = null_mut();
 pub static mut _NT_BUILD_NUMBER: u16 = 0;
@@ -440,8 +440,6 @@ pub fn resolve_imports() -> NtStatus {
             sha256_const(b"ZwClose"),
             sha256_const(b"ZwCreateFile"),
             sha256_const(b"ZwQueryVolumeInformationFile"),
-            sha256_const(b"KeStackAttachProcess"),
-            sha256_const(b"KeUnstackDetachProcess"),
             sha256_const(b"IoAllocateIrp"),
             sha256_const(b"IoFreeIrp"),
             sha256_const(b"IoAllocateMdl"),
@@ -460,6 +458,8 @@ pub fn resolve_imports() -> NtStatus {
             sha256_const(b"MmProbeAndLockPages"),
             sha256_const(b"MmUnlockPages"),
             sha256_const(b"MmUnmapLockedPages"),
+            sha256_const(b"KeAttachProcess"),
+            sha256_const(b"KeDetachProcess"),
         ];
 
         let func_slots: [*mut *mut c_void; 35] = [
@@ -478,8 +478,6 @@ pub fn resolve_imports() -> NtStatus {
             addr_of_mut!(_ZW_CLOSE),
             addr_of_mut!(_ZW_CREATE_FILE),
             addr_of_mut!(_ZW_QUERY_VOLUME_INFORMATION_FILE),
-            addr_of_mut!(_KE_STACK_ATTACH_PROCESS),
-            addr_of_mut!(_KE_UNSTACK_DETACH_PROCESS),
             addr_of_mut!(_IO_ALLOCATE_IRP),
             addr_of_mut!(_IO_FREE_IRP),
             addr_of_mut!(_IO_ALLOCATE_MDL),
@@ -498,6 +496,8 @@ pub fn resolve_imports() -> NtStatus {
             addr_of_mut!(_MM_PROBE_AND_LOCK_PAGES),
             addr_of_mut!(_MM_UNLOCK_PAGES),
             addr_of_mut!(_MM_UNMAP_LOCKED_PAGES),
+            addr_of_mut!(_KE_ATTACH_PROCESS),
+            addr_of_mut!(_KE_DETACH_PROCESS),
         ];
 
         for i in 0..FUNC_HASHES.len() {

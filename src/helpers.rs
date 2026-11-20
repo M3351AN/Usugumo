@@ -448,3 +448,58 @@ pub fn write_u8(p: *mut u8, off: usize, v: u8) {
 pub fn write_u64(p: *mut u8, off: usize, v: u64) {
     unsafe { (p.add(off) as *mut u64).write_unaligned(v) }
 }
+
+pub fn read_cr3() -> u64 {
+    let cr3: u64;
+    unsafe {
+        core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack));
+    }
+    cr3
+}
+
+pub fn write_cr3(value: u64) {
+    unsafe {
+        core::arch::asm!("mov cr3, {}", in(reg) value, options(nostack));
+    }
+}
+
+pub fn current_kthread() -> *mut u8 {
+    unsafe {
+        let kthread: u64;
+        core::arch::asm!(
+            "mov {}, qword ptr gs:[{off}]",
+            out(reg) kthread,
+            off = const crate::consts::GS_KTHREAD_OFFSET,
+            options(nostack, readonly),
+        );
+        kthread as *mut u8
+    }
+}
+
+pub fn mfence() {
+    unsafe {
+        core::arch::asm!("mfence", options(nostack));
+    }
+}
+
+pub fn invlpg(address: u64) {
+    unsafe {
+        core::arch::asm!("invlpg [{0}]", in(reg) address, options(nostack));
+    }
+}
+
+pub fn current_processor_index() -> u32 {
+    unsafe {
+        let prcb: u64;
+        core::arch::asm!(
+            "mov {}, qword ptr gs:[{}]",
+            out(reg) prcb,
+            const crate::consts::GS_PRCB_OFFSET,
+            options(nostack, readonly),
+        );
+        if prcb < 0xFFFF_8000_0000_0000 {
+            return 0;
+        }
+        read_u8(prcb as *const u8, crate::consts::KPRCB_NUMBER_OFFSET) as u32
+    }
+}

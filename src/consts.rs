@@ -18,6 +18,24 @@ pub const KERNEL_MODE: u8 = 0;
 
 pub const OBJ_CASE_INSENSITIVE: u32 = 0x40;
 pub const KERNEL_PTR_MIN: usize = 0xFFFF_8000_0000_0000;
+pub const KERNEL_IMAGE_MIN: usize = 0xFFFF_F800_0000_0000;
+
+pub const KTHREAD_SAVED_APC_STATE_OFFSET: usize = 0x258;
+pub const KTHREAD_APC_PROCESS_OFFSET: usize = 0xB8;
+pub const KAPC_STATE_PROCESS_OFFSET: usize = 0x20;
+
+pub const KPROCESS_DTB_OFFSET: usize = 0x28;
+pub const KPROCESS_ADDRESS_POLICY_OFFSET: usize = 0x160;
+
+pub const KPRCB_NUMBER_OFFSET: usize = 0xD0;
+
+pub const GS_KTHREAD_OFFSET: u32 = 0x188;
+pub const GS_PRCB_OFFSET: u32 = 0x20;
+pub const GS_KVA_BASE_OFFSET: u32 = 0xB000;
+
+pub const KVA_SHADOW_SHIFT: u64 = 0x8000_0000_0000_0000;
+
+pub const KUSER_SHARED_SYSTEM_TIME: u64 = 0xFFFF_F780_0000_0014;
 
 pub const PMEM_PAGE_SIZE: usize = 0x1000;
 pub const PMEM_PMASK: u64 = 0x000F_FFFF_FFFF_F000;

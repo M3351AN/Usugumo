@@ -29,6 +29,8 @@ A Windows kernel-mode driver that proxies RPM/WPM/mouse_event/keybd_event .etc o
 - For the purpose of anti-paste, I unnecessarily rewrote many functions using MASM. However, doing so should not affect the actual functionality.
 - If the mapping is performed before system startup via an EFI driver or similar method, current implementation may not work.
 - Can not access swapped page.
+- Have not tested on KvaShadow environment.
+- Only tested on latest Windows build (current, 26300.9974)
 
 ## HVCI / VBS Compatibility
 
@@ -39,12 +41,9 @@ Fallback path for HVCI: `read_process_memory` / `copy_virtual_memory` build an `
 Known limitation:
 
 - Hardcoded field offsets must track the kernel `_MDL` layout(only test on 26100.9711)
-
 - `MmProbeAndLockPages` raises on a range it cannot lock
-
 - Can not access swapped pages too.
-
-- If it matters, note that this requires KeStackAttachProcess.
+- If it matters, note that this path requires attach to target process ctx.
 
 ~~Because I know too little about this, HVCI compatibility is minimal, may not continue working in these after.~~
 

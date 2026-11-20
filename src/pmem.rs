@@ -5,10 +5,9 @@ use core::ptr::null_mut;
 
 use crate::consts::*;
 use crate::imports::{
-    _EX_ALLOCATE_POOL2, _EX_FREE_POOL_WITH_TAG, _KE_STACK_ATTACH_PROCESS,
-    _KE_UNSTACK_DETACH_PROCESS, _MM_ALLOCATE_CONTIGUOUS_MEMORY, _MM_FREE_CONTIGUOUS_MEMORY,
-    _MM_MAP_LOCKED_PAGES_SPECIFY_CACHE, _MM_PROBE_AND_LOCK_PAGES, _MM_SIZE_OF_MDL,
-    _MM_UNLOCK_PAGES, _MM_UNMAP_LOCKED_PAGES,
+    _EX_ALLOCATE_POOL2, _EX_FREE_POOL_WITH_TAG, _MM_ALLOCATE_CONTIGUOUS_MEMORY,
+    _MM_FREE_CONTIGUOUS_MEMORY, _MM_MAP_LOCKED_PAGES_SPECIFY_CACHE, _MM_PROBE_AND_LOCK_PAGES,
+    _MM_SIZE_OF_MDL, _MM_UNLOCK_PAGES, _MM_UNMAP_LOCKED_PAGES,
 };
 use crate::process::init_offsets_by_version;
 use crate::types::NtStatus;
@@ -50,45 +49,6 @@ pub(crate) fn hvci_enabled() -> bool {
     hvci_status() == 1
 }
 
-fn read_cr3() -> u64 {
-    let cr3: u64;
-    unsafe {
-        core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack));
-    }
-    cr3
-}
-
-fn mfence() {
-    unsafe {
-        core::arch::asm!("mfence", options(nostack));
-    }
-}
-
-fn invlpg(address: u64) {
-    unsafe {
-        core::arch::asm!("invlpg [{0}]", in(reg) address, options(nostack));
-    }
-}
-
-const KPCR_PRCB_OFFSET: usize = 0x20;
-const KPRCB_NUMBER_OFFSET: usize = 0xD0;
-
-fn current_processor_index() -> u32 {
-    unsafe {
-        let prcb: u64;
-        core::arch::asm!(
-            "mov {}, qword ptr gs:[{}]",
-            out(reg) prcb,
-            const KPCR_PRCB_OFFSET,
-            options(nostack, readonly),
-        );
-        if prcb < 0xFFFF_8000_0000_0000 {
-            return 0;
-        }
-        crate::helpers::read_u8(prcb as *const u8, KPRCB_NUMBER_OFFSET) as u32
-    }
-}
-
 fn secure_zero(ptr: *mut u8, len: usize) {
     unsafe {
         core::ptr::write_bytes(ptr, 0, len);
@@ -100,7 +60,7 @@ fn pmem_phys_to_va(physical_address: u64) -> *mut c_void {
 }
 
 fn pmem_get_pte(address: u64) -> *mut u64 {
-    let cr3 = read_cr3() & !0xF;
+    let cr3 = crate::helpers::read_cr3() & !0xF;
     let pml4_index = (address >> 39) & 0x1FF;
     let pdpt_index = (address >> 30) & 0x1FF;
     let pd_index = (address >> 21) & 0x1FF;
@@ -160,7 +120,7 @@ fn pmem_swap_phys(
             return STATUS_SUCCESS;
         }
 
-        let mut idx = current_processor_index();
+        let mut idx = crate::helpers::current_processor_index();
         if idx as usize >= PMEM_MAX_CPU_PAGES {
             idx = 0;
         }
@@ -187,8 +147,8 @@ fn pmem_swap_phys(
             0,
             (old_value & !PMEM_PMASK) | page_start,
         );
-        mfence();
-        invlpg(page.virtual_address as u64);
+        crate::helpers::mfence();
+        crate::helpers::invlpg(page.virtual_address as u64);
 
         let target = (page.virtual_address as *mut u8).add(page_offset);
         if write {
@@ -198,8 +158,8 @@ fn pmem_swap_phys(
         }
 
         crate::helpers::write_u64(page.pte_long as *mut u8, 0, old_value);
-        mfence();
-        invlpg(page.virtual_address as u64);
+        crate::helpers::mfence();
+        crate::helpers::invlpg(page.virtual_address as u64);
 
         STATUS_SUCCESS
     }
@@ -228,7 +188,7 @@ fn read_physical_u64(physical_address: u64) -> u64 {
 }
 
 pub fn init_pmem_pages() -> NtStatus {
-    let mut idx = current_processor_index() as usize;
+    let mut idx = crate::helpers::current_processor_index() as usize;
     if idx >= PMEM_MAX_CPU_PAGES {
         idx = 0;
     }
@@ -347,10 +307,7 @@ type FnMmUnlockPages = unsafe extern "system" fn(*mut c_void);
 type FnMmUnmapLockedPages = unsafe extern "system" fn(*mut c_void, *mut c_void);
 type FnMmMapLockedPagesSpecifyCache =
     unsafe extern "system" fn(*mut c_void, u8, i32, *mut c_void, u8, i32) -> *mut c_void;
-type FnKeStackAttachProcess = unsafe extern "system" fn(*mut c_void, *mut c_void);
-type FnKeUnstackDetachProcess = unsafe extern "system" fn(*mut c_void);
 
-// MmInitializeMdl is a header macro, not a kernel export. Field offsets follow
 // the kernel _MDL layout: Size@0x08, MdlFlags@0x0a, MappedSystemVa@0x18,
 // StartVa@0x20, ByteCount@0x28, ByteOffset@0x2c.
 #[inline]
@@ -409,19 +366,12 @@ fn mdl_read_into(
         if !is_user_address(virtual_address, size) {
             return 0;
         }
-        if _MM_SIZE_OF_MDL.is_null()
-            || _MM_PROBE_AND_LOCK_PAGES.is_null()
-            || _KE_STACK_ATTACH_PROCESS.is_null()
-            || _KE_UNSTACK_DETACH_PROCESS.is_null()
-        {
+        if _MM_SIZE_OF_MDL.is_null() || _MM_PROBE_AND_LOCK_PAGES.is_null() {
             return 0;
         }
 
         let size_of_mdl: FnMmSizeOfMdl = core::mem::transmute(_MM_SIZE_OF_MDL);
         let probe_lock: FnMmProbeAndLockPages = core::mem::transmute(_MM_PROBE_AND_LOCK_PAGES);
-        let stack_attach: FnKeStackAttachProcess = core::mem::transmute(_KE_STACK_ATTACH_PROCESS);
-        let stack_detach: FnKeUnstackDetachProcess =
-            core::mem::transmute(_KE_UNSTACK_DETACH_PROCESS);
 
         let max_chunk = MDL_COPY_PAGES * PMEM_PAGE_SIZE;
         let mdl_size = size_of_mdl(virtual_address as *const c_void, max_chunk);
@@ -444,7 +394,13 @@ fn mdl_read_into(
 
         let dst = buffer as *mut u8;
         let mut offset = 0usize;
-        let mut apc_state = [0u8; 0x40];
+        if !crate::reimpl_ke::ke_attach_process_trick(process) {
+            if !_EX_FREE_POOL_WITH_TAG.is_null() {
+                let f: FnExFreePoolWithTag = core::mem::transmute(_EX_FREE_POOL_WITH_TAG);
+                f(mdl, POOL_TAG_COPY);
+            }
+            return 0;
+        }
         while offset < size {
             let remaining = size - offset;
             let va = virtual_address + offset as u64;
@@ -453,15 +409,12 @@ fn mdl_read_into(
                 chunk = remaining;
             }
 
-            stack_attach(process, apc_state.as_mut_ptr() as *mut c_void);
             if !is_range_mapped(va, chunk) {
-                stack_detach(apc_state.as_mut_ptr() as *mut c_void);
                 offset += chunk;
                 continue;
             }
             init_mdl_header(mdl, va as *mut c_void, chunk);
             probe_lock(mdl, 1, 0); // UserMode, IoReadAccess
-            stack_detach(apc_state.as_mut_ptr() as *mut c_void);
 
             let mapped = mdl_map_payload(mdl);
             if mapped.is_null() {
@@ -478,6 +431,7 @@ fn mdl_read_into(
 
             offset += chunk;
         }
+        crate::reimpl_ke::ke_detach_process_trick();
 
         if !_EX_FREE_POOL_WITH_TAG.is_null() {
             let f: FnExFreePoolWithTag = core::mem::transmute(_EX_FREE_POOL_WITH_TAG);
@@ -500,19 +454,12 @@ fn mdl_write_from(
         if !is_user_address(virtual_address, size) {
             return 0;
         }
-        if _MM_SIZE_OF_MDL.is_null()
-            || _MM_PROBE_AND_LOCK_PAGES.is_null()
-            || _KE_STACK_ATTACH_PROCESS.is_null()
-            || _KE_UNSTACK_DETACH_PROCESS.is_null()
-        {
+        if _MM_SIZE_OF_MDL.is_null() || _MM_PROBE_AND_LOCK_PAGES.is_null() {
             return 0;
         }
 
         let size_of_mdl: FnMmSizeOfMdl = core::mem::transmute(_MM_SIZE_OF_MDL);
         let probe_lock: FnMmProbeAndLockPages = core::mem::transmute(_MM_PROBE_AND_LOCK_PAGES);
-        let stack_attach: FnKeStackAttachProcess = core::mem::transmute(_KE_STACK_ATTACH_PROCESS);
-        let stack_detach: FnKeUnstackDetachProcess =
-            core::mem::transmute(_KE_UNSTACK_DETACH_PROCESS);
 
         let max_chunk = MDL_COPY_PAGES * PMEM_PAGE_SIZE;
         let mdl_size = size_of_mdl(virtual_address as *const c_void, max_chunk);
@@ -535,7 +482,13 @@ fn mdl_write_from(
 
         let src = buffer as *const u8;
         let mut offset = 0usize;
-        let mut apc_state = [0u8; 0x40];
+        if !crate::reimpl_ke::ke_attach_process_trick(process) {
+            if !_EX_FREE_POOL_WITH_TAG.is_null() {
+                let f: FnExFreePoolWithTag = core::mem::transmute(_EX_FREE_POOL_WITH_TAG);
+                f(mdl, POOL_TAG_COPY);
+            }
+            return 0;
+        }
         while offset < size {
             let remaining = size - offset;
             let va = virtual_address + offset as u64;
@@ -544,15 +497,12 @@ fn mdl_write_from(
                 chunk = remaining;
             }
 
-            stack_attach(process, apc_state.as_mut_ptr() as *mut c_void);
             if !is_range_mapped(va, chunk) {
-                stack_detach(apc_state.as_mut_ptr() as *mut c_void);
                 offset += chunk;
                 continue;
             }
             init_mdl_header(mdl, va as *mut c_void, chunk);
             probe_lock(mdl, 1, 1); // UserMode, IoWriteAccess
-            stack_detach(apc_state.as_mut_ptr() as *mut c_void);
 
             let mapped = mdl_map_payload(mdl);
             if mapped.is_null() {
@@ -565,6 +515,7 @@ fn mdl_write_from(
 
             offset += chunk;
         }
+        crate::reimpl_ke::ke_detach_process_trick();
 
         if !_EX_FREE_POOL_WITH_TAG.is_null() {
             let f: FnExFreePoolWithTag = core::mem::transmute(_EX_FREE_POOL_WITH_TAG);
